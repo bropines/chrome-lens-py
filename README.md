@@ -19,7 +19,7 @@ PS. Lens has a problem with the way it displays full text, which is why methods 
 
 You can install the package using `pip`:
 
-### From PyPI (SOON)
+### From PyPI
 
 ```bash
 pip install chrome-lens-py
