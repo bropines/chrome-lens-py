@@ -1,0 +1,5 @@
+requests
+Pillow
+filetype
+lxml
+json5
