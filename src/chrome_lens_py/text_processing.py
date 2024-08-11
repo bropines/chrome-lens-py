@@ -3,7 +3,7 @@
 import re
 
 def stitch_text_from_coordinates(text_with_coords):
-    """Сшивает текст из координат по строкам и позициям."""
+    """Stitches text from coordinates along lines and positions."""
     sorted_elements = sorted(text_with_coords, key=lambda x: (round(x['coordinates'][1], 2), x['coordinates'][0]))
 
     stitched_text = ""
@@ -26,7 +26,7 @@ def stitch_text_from_coordinates(text_with_coords):
     return stitched_text.strip()
 
 def stitch_text_smart(text_with_coords):
-    """Сшивает текст из координат умным методом."""
+    """Stitches text from coordinates using a smart method."""
     transformed_coords = [{'text': item['text'], 'coordinates': [item['coordinates'][1], item['coordinates'][0]]} for item in text_with_coords]
     sorted_elements = sorted(transformed_coords, key=lambda x: (round(x['coordinates'][1], 2), x['coordinates'][0]))
 
@@ -53,14 +53,14 @@ def stitch_text_smart(text_with_coords):
     return "\n".join(stitched_text).strip()
 
 def stitch_text_sequential(text_with_coords):
-    """Сшивает текст в последовательности, как он был распознан."""
+    """Stitches the text in the sequence as it was recognized."""
     stitched_text = " ".join([element['text'] for element in text_with_coords])
     stitched_text = re.sub(r'\s+([,?.!])', r'\1', stitched_text)
     
     return stitched_text.strip()
 
 def extract_text_and_coordinates(data):
-    """Извлекает текст и координаты из структуры данных."""
+    """Extracts text and coordinates from a data structure."""
     text_with_coords = []
     if isinstance(data, list):
         for item in data:
@@ -81,7 +81,7 @@ def extract_text_and_coordinates(data):
     return text_with_coords
 
 def extract_full_text(data):
-    """Извлекает полный текст из структуры данных."""
+    """Retrieves the full text from a data structure."""
     try:
         text_data = data[3][4][0][0]
         if isinstance(text_data, list):
@@ -91,7 +91,7 @@ def extract_full_text(data):
         return "Full text not found in expected structure"
 
 def simplify_output(result):
-    """Упрощает структуру данных, извлекая ключевые элементы."""
+    """Simplified the data structure by extracting key elements."""
     simplified = {}
     
     try:

@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name='chrome_lens_py',
-    version='1.0.0',
+    version='1.0.2',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
@@ -25,7 +25,7 @@ setup(
             'lens_scan=chrome_lens_py.main:main',
         ],
     },
-    description='Library to use Google Lens OCR via API used in Chromium.',
+    description='Library to use Google Lens OCR for free via API used in Chromium on python ',
     long_description=README,
     long_description_content_type='text/markdown',  # Указание типа содержимого
     author='Bropines',
