@@ -172,6 +172,11 @@ from chrome_lens_py import LensAPI
 
 Особая благодарность [dimdenGD](https://github.com/dimdenGD) за метод извлечения текста, использованный в этом проекте. Вы можете ознакомиться с их работой в репозитории [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr). Этот проект вдохновлен их подходом к использованию OCR Google Lens.
 
+## TODO
+- Перенести все методы из [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
+- Сделать все красиво, а не как 400 строк кода, попиленых чатом гпт на модули
+- Еще что-то очень, очень важное...
+
 ## Лицензия
 
 Этот проект лицензирован на условиях лицензии MIT. Подробнее см. файл [LICENSE](LICENSE).
