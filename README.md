@@ -147,6 +147,45 @@ from chrome_lens_py import LensAPI
 - **`get_stitched_text_smart(image_path)`**: Returns stitched text using the enhanced method.
 - **`get_stitched_text_sequential(image_path)`**: Returns stitched text using the basic sequential method.
 
+#### Working with Coordinates
+
+In our project, coordinates are used to define the position and size of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
+
+1. **Y Coordinate**: The first value in the coordinates array represents the vertical position of the top-left corner of the text region on the image. The value is expressed as a fraction of the image's total height, with `0.0` corresponding to the top edge and `1.0` to the bottom.
+
+2. **X Coordinate**: The second value indicates the horizontal position of the top-left corner of the text region. The value is expressed as a fraction of the image's total width, where `0.0` corresponds to the left edge and `1.0` to the right.
+
+3. **Width**: The third value represents the width of the text region as a fraction of the image's total width. This value determines how much horizontal space the text will occupy.
+
+4. **Height**: The fourth value indicates the height of the text region as a fraction of the image's total height.
+
+Coordinates are measured from the top-left corner of the image. This means that `(0.0, 0.0)` corresponds to the very top-left corner of the image, while `(1.0, 1.0)` corresponds to the very bottom-right corner.
+
+#### Example of Coordinate Usage
+
+For clarity, let's look at the following example of coordinates:
+
+```json
+{
+    "text": "Example text",
+    "coordinates": [
+        0.46690738,
+        0.27949932,
+        0.21885522,
+        0.1682243
+    ]
+}
+```
+
+In this example:
+- `0.46690738` — Y coordinate (47% of the image height).
+- `0.27949932` — X coordinate (28% of the image width).
+- `0.21885522` — width of the text region (22% of the image width).
+- `0.1682243` — height of the text region (17% of the image height).
+
+These values are used to accurately place and display the text on the image.
+
+
 ## Project Structure
 
 ```
