@@ -149,7 +149,7 @@ from chrome_lens_py import LensAPI
 
 #### Working with Coordinates
 
-In our project, coordinates are used to define the position and size of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
+In our project, coordinates are used to define the position, size, and rotation of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
 
 1. **Y Coordinate**: The first value in the coordinates array represents the vertical position of the top-left corner of the text region on the image. The value is expressed as a fraction of the image's total height, with `0.0` corresponding to the top edge and `1.0` to the bottom.
 
@@ -159,6 +159,10 @@ In our project, coordinates are used to define the position and size of text on 
 
 4. **Height**: The fourth value indicates the height of the text region as a fraction of the image's total height.
 
+5. **Fifth Parameter**: In the current data, this parameter is always zero and appears to be unused. It might be reserved for future use or specific text modifications.
+
+6. **Sixth Parameter**: Specifies the rotation angle of the text region in degrees. Positive values indicate clockwise rotation, while negative values indicate counterclockwise rotation.
+
 Coordinates are measured from the top-left corner of the image. This means that `(0.0, 0.0)` corresponds to the very top-left corner of the image, while `(1.0, 1.0)` corresponds to the very bottom-right corner.
 
 #### Example of Coordinate Usage
@@ -167,23 +171,27 @@ For clarity, let's look at the following example of coordinates:
 
 ```json
 {
-    "text": "Example text",
+    "text": "Sample text",
     "coordinates": [
-        0.46690738,
-        0.27949932,
-        0.21885522,
-        0.1682243
+        0.5,
+        0.5,
+        0.3,
+        0.1,
+        0,
+        -45
     ]
 }
 ```
 
 In this example:
-- `0.46690738` — Y coordinate (47% of the image height).
-- `0.27949932` — X coordinate (28% of the image width).
-- `0.21885522` — width of the text region (22% of the image width).
-- `0.1682243` — height of the text region (17% of the image height).
+- `0.5` — Y coordinate (50% of the image height, text centered vertically).
+- `0.5` — X coordinate (50% of the image width, text centered horizontally).
+- `0.3` — width of the text region (30% of the image width).
+- `0.1` — height of the text region (10% of the image height).
+- `0` — not used, default value(maybe, I haven't found any images yet where it differs from zero).
+- `-45` — rotation angle of the text counterclockwise by 45 degrees.
 
-These values are used to accurately place and display the text on the image.
+These values are used to accurately place, scale, and display the text on the image.
 
 
 ## Project Structure
