@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name='chrome_lens_py',
-    version='1.0.2',
+    version='1.0.5',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
@@ -19,6 +19,9 @@ setup(
         'lxml',
         'json5',
         'rich',
+        'PySocks',
+        'httpx',
+        'logging',
     ],
     entry_points={
         'console_scripts': [

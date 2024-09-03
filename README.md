@@ -1,3 +1,4 @@
+
 # Chrome Lens API for Python
 
 [English](/README.md) | [Русский](/README_RU.md)
@@ -6,12 +7,13 @@ This project provides a Python library and CLI tool for interacting with Google 
 
 ## Features
 
-- **Full Text Extraction**: Extract the complete text from an image.
-- **Coordinates Extraction**: Extract text along with its coordinates.
-- **Stitched Text**: Reconstruct text from blocks using various methods:
-  - **Default Full Text**: Basic method for stitching text blocks.
-  - **Old Method**: Sequential text stitching.
-  - **New Method**: Enhanced text stitching.
+- **Extract the full text**: Extract the full text from the image.
+- **Coordinate Extraction**: Extract the text along with its coordinates.
+- **Stitched text**: Restore text from coordinate blocks using various methods:
+- **Old method**: Sequential stitching of text.
+  - **New method**: Improved text stitching by calculating them line by line. It is not recommended on rotated texts. Use the past one.
+- **Cookie Management**: Download and manage cookies from a file in Netscape format or directly through the configuration.
+- **Proxy Support**: Supports HTTP, HTTPS and SOCKS4/5 proxies to make requests over different networks.
 
 PS. Lens has a problem with the way it displays full text, which is why methods have been added that stitch text from coordinates.
 
@@ -46,7 +48,8 @@ pip install .
 
 You can use the `lens_scan` command from the CLI to process images and extract text data, or you can use the Python API to integrate this functionality into your own projects.
 
-### CLI Usage
+<details>
+  <summary><b>CLI Usage</b></summary>
 
 ```bash
 lens_scan <image_file> <data_type>
@@ -82,7 +85,10 @@ You can use the `-h` or `--help` option to display usage information:
 lens_scan -h
 ```
 
-### Programmatic API Usage
+</details>
+
+<details>
+  <summary><b>Programmatic API Usage</b></summary>
 
 In addition to the CLI tool, this project provides a Python API that can be used in your scripts.
 
@@ -139,7 +145,95 @@ from chrome_lens_py import LensAPI
         print(result)
         ```
 
-#### Programmatic API Methods
+</details>
+
+<details>
+  <summary><b>Cookie Management</b></summary>
+
+This project supports the management of cookies through various methods:
+
+1. **Loading Cookies from a Netscape Format File**:
+    
+    * You can load cookies from a Netscape format file by specifying the file path.
+    
+    **Programmatic API**:
+    
+    ```python
+    config = {
+        'headers': {
+            'cookie': '/path/to/cookie_file.txt'
+        }
+    }
+    api = LensAPI(config=config)
+    ```
+    
+    **CLI**:
+    
+    ```bash
+    lens_scan path/to/image.jpg all -c /path/to/cookie_file.txt
+    ```
+    
+2. **Passing Cookies Directly as a String**:
+    
+    * You can also pass cookies directly as a string in the configuration or via CLI.
+    
+    **Programmatic API**:
+    
+    ```python
+    config = {
+        'headers': {
+            'cookie': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
+        }
+    }
+    api = LensAPI(config=config)
+    ```
+    or
+   
+    ```python
+    config = 
+       'headers': {
+        'cookie': {
+            '__Secure-ENID': {
+                'name': '__Secure-ENID',
+                'value': '',
+                'expires': 1756858205,
+            },
+            'NID': {
+                'name': 'NID',
+                'value': '517=4.......',
+                'expires': 1756858205,
+            }
+        }
+    }
+    api = LensAPI(config=config)
+    ```
+
+</details>
+
+<details>
+  <summary><b>Proxy Support</b></summary>
+
+You can make requests through a proxy server using the API or CLI. The library supports HTTP, HTTPS, and SOCKS4/5 proxies.
+
+* **Set Proxy in API**:
+    
+    ```python
+    config = {
+        'proxy': 'socks5://127.0.0.1:2080'
+    }
+    api = LensAPI(config=config)
+    ```
+    
+* **Set Proxy in CLI**:
+    
+    ```bash
+    lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
+    ```
+
+</details>
+
+<details>
+  <summary><b>Programmatic API Methods</b></summary>
 
 - **`get_all_data(image_path)`**: Returns all available data for the given image.
 - **`get_full_text(image_path)`**: Returns only the full text from the image.
@@ -147,7 +241,10 @@ from chrome_lens_py import LensAPI
 - **`get_stitched_text_smart(image_path)`**: Returns stitched text using the enhanced method.
 - **`get_stitched_text_sequential(image_path)`**: Returns stitched text using the basic sequential method.
 
-#### Working with Coordinates
+</details>
+
+<details>
+  <summary><b>Working with Coordinates</b></summary>
 
 In our project, coordinates are used to define the position, size, and rotation of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
 
@@ -184,19 +281,23 @@ For clarity, let's look at the following example of coordinates:
 ```
 
 In this example:
-- `0.5` — Y coordinate (50% of the image height, text centered vertically).
+- `0
+
+
+.5` — Y coordinate (50% of the image height, text centered vertically).
 - `0.5` — X coordinate (50% of the image width, text centered horizontally).
 - `0.3` — width of the text region (30% of the image width).
 - `0.1` — height of the text region (10% of the image height).
-- `0` — not used, default value(maybe, I haven't found any images yet where it differs from zero).
+- `0` — not used, default value (possibly reserved for future use).
 - `-45` — rotation angle of the text counterclockwise by 45 degrees.
 
 These values are used to accurately place, scale, and display the text on the image.
 
+</details>
 
 ## Project Structure
 
-```
+```plain text
 /chrome-lens-api-py
 │
 ├── /src
@@ -223,7 +324,6 @@ Special thanks to [dimdenGD](https://github.com/dimdenGD) for the method of text
 - Move all methods from [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
 - Do everything beautifully, and not like 400 lines of code, cut into modules by GPT chat
 - Something else very, very important...
-
 
 ## License
 

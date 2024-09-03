@@ -1,8 +1,8 @@
 import requests
+import httpx  # Используем httpx только для работы с прокси
 import io
 import os
 import time
-import http.cookiejar as cookielib
 import lxml.html
 import json5
 import filetype
@@ -11,7 +11,7 @@ from PIL import Image
 from .constants import LENS_ENDPOINT, HEADERS, MIME_TO_EXT, SUPPORTED_MIMES
 from .utils import sleep, is_supported_mime
 from .image_processing import resize_image
-
+from .cookies_manager import CookiesManager  # Импортируем CookiesManager
 
 class LensError(Exception):
     """Class for error handling."""
@@ -21,54 +21,44 @@ class LensError(Exception):
         self.headers = headers
         self.body = body
 
-
 class LensCore:
     """Base class for working with the Google Lens API."""
     def __init__(self, config=None, sleep_time=1000):
         self.config = config if config else {}
-        self.cookies = {}
+        self.cookies_manager = CookiesManager(config=self.config)  # Инициализируем CookiesManager
         self.sleep_time = sleep_time
-        self.parse_cookies()
+        self.session = requests.Session()  # Используем requests для стандартных запросов
+        self.use_httpx = False
+        self.setup_proxies()
 
-    def parse_cookies(self):
-        """Initialize cookies if they are passed in the config."""
-        if 'headers' in self.config and 'cookie' in self.config['headers']:
-            cookie_string = self.config['headers']['cookie']
-            cookie = SimpleCookie(cookie_string)
-            for key, morsel in cookie.items():
-                self.cookies[key] = {
-                    'name': key,
-                    'value': morsel.value,
-                    'expires': morsel['expires'] if morsel['expires'] else None
+    def setup_proxies(self):
+        """Sets up proxies for the session if provided in config."""
+        proxy = self.config.get('proxy')
+        if proxy:
+            # Если указан SOCKS5 прокси, используем httpx
+            if proxy.startswith('socks'):
+                self.use_httpx = True
+                self.client = httpx.Client(proxies={
+                    'http://': proxy,
+                    'https://': proxy
+                })
+            else:
+                # Для HTTP/HTTPS прокси используем requests
+                self.session.proxies = {
+                    'http': proxy,
+                    'https': proxy
                 }
 
     def generate_cookie_header(self, headers):
         """Adds cookies to request headers."""
-        if self.cookies:
-            # Filtering expired cookies
-            self.cookies = {k: v for k, v in self.cookies.items() if not v['expires'] or v['expires'] > time.time()}
-            headers['Cookie'] = '; '.join([f"{cookie['name']}={cookie['value']}" for cookie in self.cookies.values()])
-
-    def update_cookies(self, set_cookie_header):
-        """Updates the cookie from the Set-Cookie header."""
-        if set_cookie_header:
-            cookie = SimpleCookie(set_cookie_header)
-            for key, morsel in cookie.items():
-                self.cookies[key] = {
-                    'name': key,
-                    'value': morsel.value,
-                    'expires': time.mktime(time.strptime(morsel['expires'], "%a, %d-%b-%Y %H:%M:%S %Z")) if morsel['expires'] else None
-                }
+        headers['Cookie'] = self.cookies_manager.generate_cookie_header()
 
     def scan_by_data(self, data, mime, dimensions):
         """Submits an image to the Google Lens API for analysis."""
         headers = HEADERS.copy()
         self.generate_cookie_header(headers)
 
-        session = requests.Session()
-        session.cookies = cookielib.CookieJar()
-
-        print(f"Sending data to {LENS_ENDPOINT}")
+        print(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
 
         file_name = f"image.{MIME_TO_EXT[mime]}"
         files = {
@@ -77,25 +67,40 @@ class LensCore:
             'original_height': (None, str(dimensions[1])),
             'processed_image_dimensions': (None, f"{dimensions[0]},{dimensions[1]}")
         }
-        
+
         sleep(self.sleep_time)
 
-        response = session.post(LENS_ENDPOINT, headers=headers, files=files)
+        if self.use_httpx:
+            response = self.client.post(LENS_ENDPOINT, headers=headers, files=files)
+        else:
+            response = self.session.post(LENS_ENDPOINT, headers=headers, files=files)
+
         print(f"Response code: {response.status_code}")
 
         # Update cookies based on response
         if 'set-cookie' in response.headers:
-            self.update_cookies(response.headers['set-cookie'])
+            self.cookies_manager.update_cookies(response.headers['set-cookie'])  # Обновляем куки
 
         if response.status_code != 200:
             print(f"Response headers: {response.headers}")
             print(f"Response body: {response.text}")
             raise LensError("Failed to load image", response.status_code, response.headers, response.text)
 
+        # Сохраняем полный текст ответа в файл для отладки
+        response_file_path = "response_debug.txt"
+        with open(response_file_path, "w", encoding="utf-8") as f:
+            f.write(response.text)
+        print(f"Response saved to {response_file_path}")
+
         buffer_text = io.StringIO(response.text)
         tree = lxml.html.parse(buffer_text)
 
         r = tree.xpath("//script[@class='ds:1']")
+
+        if not r:  # Если список пустой, возвращаем сообщение об ошибке
+            print("Error: Expected data not found in response.")
+            raise LensError("Failed to parse expected data from response", response.status_code, response.headers, response.text)
+
         return json5.loads(r[0].text[len("AF_initDataCallback("):-2])
 
 
