@@ -153,8 +153,8 @@ from chrome_lens_py import LensAPI
 This project supports the management of cookies through various methods:
 
 To receive cookies in netscape format, you can use the following extensions
-Chrome(chromium): [Cookie Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
-Firefox: [Cookie Editor](https://addons.mozilla.org/ru/firefox/addon/cookie-editor/)
+- Chrome(chromium): [Cookie Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
+- Firefox: [Cookie Editor](https://addons.mozilla.org/ru/firefox/addon/cookie-editor/)
 
 1. **Loading Cookies from a Netscape Format File**:
     
