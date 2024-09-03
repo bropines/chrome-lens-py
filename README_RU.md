@@ -149,6 +149,10 @@ from chrome_lens_py import LensAPI
 
 #### Этот проект поддерживает управление куками через различные методы:
 
+Для получения cookie в формате netscape вы можете испотзовать следующие расширения
+- Chrome(chromium): [Cookie Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
+- Firefox: [Cookie Editor](https://addons.mozilla.org/ru/firefox/addon/cookie-editor/)
+
 1. **Загрузка куки из файла в формате Netscape**:
     
     * Вы можете загрузить куки из файла в формате Netscape, указав путь к файлу.
