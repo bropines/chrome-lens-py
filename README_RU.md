@@ -25,6 +25,11 @@ PS. У Google Lens есть проблема с отображением пол�
 ```bash
 pip install chrome-lens-py
 ```
+### Обновление через PyPI
+
+```bash
+pip install -U chrome-lens-py
+```
 
 ### Из GIT
 
