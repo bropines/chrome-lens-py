@@ -27,6 +27,12 @@ You can install the package using `pip`:
 pip install chrome-lens-py
 ```
 
+### Update from PyPI
+
+```bash
+pip install -U chrome-lens-py
+```
+
 ### From GIT
 
 ```bash
