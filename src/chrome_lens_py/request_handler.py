@@ -12,20 +12,16 @@ from .constants import LENS_ENDPOINT, HEADERS, MIME_TO_EXT, SUPPORTED_MIMES
 from .utils import sleep, is_supported_mime
 from .image_processing import resize_image
 from .cookies_manager import CookiesManager  # Импортируем CookiesManager
+from .exceptions import LensError
 
-class LensError(Exception):
-    """Class for error handling."""
-    def __init__(self, message, code=None, headers=None, body=None):
-        super().__init__(message)
-        self.code = code
-        self.headers = headers
-        self.body = body
 
 class LensCore:
     """Base class for working with the Google Lens API."""
+
     def __init__(self, config=None, sleep_time=1000):
         self.config = config if config else {}
-        self.cookies_manager = CookiesManager(config=self.config)  # Инициализируем CookiesManager
+        self.cookies_manager = CookiesManager(
+            config=self.config)  # Инициализируем CookiesManager
         self.sleep_time = sleep_time
         self.session = requests.Session()  # Используем requests для стандартных запросов
         self.use_httpx = False
@@ -58,7 +54,8 @@ class LensCore:
         headers = HEADERS.copy()
         self.generate_cookie_header(headers)
 
-        print(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
+        print(f"Sending data to {LENS_ENDPOINT} via {
+              'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
 
         file_name = f"image.{MIME_TO_EXT[mime]}"
         files = {
@@ -71,20 +68,24 @@ class LensCore:
         sleep(self.sleep_time)
 
         if self.use_httpx:
-            response = self.client.post(LENS_ENDPOINT, headers=headers, files=files)
+            response = self.client.post(
+                LENS_ENDPOINT, headers=headers, files=files)
         else:
-            response = self.session.post(LENS_ENDPOINT, headers=headers, files=files)
+            response = self.session.post(
+                LENS_ENDPOINT, headers=headers, files=files)
 
         print(f"Response code: {response.status_code}")
 
         # Update cookies based on response
         if 'set-cookie' in response.headers:
-            self.cookies_manager.update_cookies(response.headers['set-cookie'])  # Обновляем куки
+            self.cookies_manager.update_cookies(
+                response.headers['set-cookie'])  # Обновляем куки
 
         if response.status_code != 200:
             print(f"Response headers: {response.headers}")
             print(f"Response body: {response.text}")
-            raise LensError("Failed to load image", response.status_code, response.headers, response.text)
+            raise LensError("Failed to load image",
+                            response.status_code, response.headers, response.text)
 
         # Сохраняем полный текст ответа в файл для отладки
         response_file_path = "response_debug.txt"
@@ -99,13 +100,15 @@ class LensCore:
 
         if not r:  # Если список пустой, возвращаем сообщение об ошибке
             print("Error: Expected data not found in response.")
-            raise LensError("Failed to parse expected data from response", response.status_code, response.headers, response.text)
+            raise LensError("Failed to parse expected data from response",
+                            response.status_code, response.headers, response.text)
 
         return json5.loads(r[0].text[len("AF_initDataCallback("):-2])
 
 
 class Lens(LensCore):
     """A class for working with the Google Lens API, providing convenience methods."""
+
     def __init__(self, config=None, sleep_time=1000):
         super().__init__(config, sleep_time)
 
