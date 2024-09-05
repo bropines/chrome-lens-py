@@ -50,6 +50,8 @@ coverage.xml
 .pytest_cache/
 cover/
 
+response_debug.txt
+
 # Translations
 *.mo
 *.pot

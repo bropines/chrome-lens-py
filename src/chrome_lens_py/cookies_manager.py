@@ -17,8 +17,7 @@ class CookiesManager:
         self.load_cookies()
 
         if self.enable_logging:
-            logging.info(f"Initialized CookiesManager with cookie file: {
-                         self.cookie_file}")
+            logging.info(f"Initialized CookiesManager with cookie file: {self.cookie_file}")
 
     def log(self, message, level=logging.INFO):
         """Вспомогательный метод для логирования, который учитывает флаг enable_logging.
@@ -35,8 +34,7 @@ class CookiesManager:
                     self.cookies = pickle.load(f)
                     self.log(f"Loaded cookies from file: {self.cookie_file}")
             except (FileNotFoundError, pickle.PickleError) as e:
-                self.log(f"Error loading cookies from file: {
-                    e}", level=logging.WARNING)
+                self.log(f"Error loading cookies from file: {e}", level=logging.WARNING)
 
         if 'headers' in self.config and 'cookie' in self.config['headers']:
             cookie_data = self.config['headers']['cookie']
@@ -90,8 +88,7 @@ class CookiesManager:
                                     'expires': self.ensure_timestamp(expires)
                                 }
                             except IndexError as e:
-                                self.log(f"Error parsing cookie line: {
-                                         line.strip()} - {e}", logging.ERROR)
+                                self.log(f"Error parsing cookie line: {line.strip()} - {e}", logging.ERROR)
 
             self.save_cookies()
         except (FileNotFoundError, IOError) as e:
@@ -114,8 +111,7 @@ class CookiesManager:
             self.cookies = {k: v for k, v in self.cookies.items(
             ) if not v['expires'] or v['expires'] > current_time}
         except ValueError as e:
-            self.log(f"Error filtering cookies: {
-                     e}. Rewriting cookies.", logging.ERROR)
+            self.log(f"Error filtering cookies: {e}. Rewriting cookies.", logging.ERROR)
             self.rewrite_cookies()
 
     def update_cookies(self, set_cookie_header):

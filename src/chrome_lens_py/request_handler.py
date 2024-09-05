@@ -54,8 +54,7 @@ class LensCore:
         headers = HEADERS.copy()
         self.generate_cookie_header(headers)
 
-        print(f"Sending data to {LENS_ENDPOINT} via {
-              'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
+        print(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
 
         file_name = f"image.{MIME_TO_EXT[mime]}"
         files = {
