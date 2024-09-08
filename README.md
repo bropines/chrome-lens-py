@@ -291,10 +291,7 @@ For clarity, let's look at the following example of coordinates:
 ```
 
 In this example:
-- `0
-
-
-.5` — Y coordinate (50% of the image height, text centered vertically).
+- `0.5` — Y coordinate (50% of the image height, text centered vertically).
 - `0.5` — X coordinate (50% of the image width, text centered horizontally).
 - `0.3` — width of the text region (30% of the image width).
 - `0.1` — height of the text region (10% of the image height).
