@@ -10,10 +10,9 @@ from http.cookies import SimpleCookie
 from PIL import Image
 from .constants import LENS_ENDPOINT, HEADERS, MIME_TO_EXT, SUPPORTED_MIMES
 from .utils import sleep, is_supported_mime
-from .image_processing import resize_image
-from .cookies_manager import CookiesManager  # Импортируем CookiesManager
+from .image_processing import resize_image, resize_image_from_buffer  # Import the new function
+from .cookies_manager import CookiesManager
 from .exceptions import LensError
-
 
 class LensCore:
     """Base class for working with the Google Lens API."""
@@ -120,16 +119,21 @@ class Lens(LensCore):
         img_data, dimensions = resize_image(file_path)
         return self.scan_by_data(img_data, 'image/jpeg', dimensions)
 
+    def scan_by_url(self, url):
+        """Scans an image from a URL and returns the results."""
+        try:
+            response = self.session.get(url, stream=True)
+            if response.status_code != 200:
+                raise LensError(f"Failed to download image from URL: {url}")
+            buffer = response.content  # Get image bytes
+            return self.scan_by_buffer(buffer)
+        except Exception as e:
+            raise LensError(f"Error downloading or processing image from URL: {e}") from e
+
     def scan_by_buffer(self, buffer):
         """Scans an image from the buffer and returns the results."""
-        kind = filetype.guess(buffer)
-        if not kind or kind.mime not in SUPPORTED_MIMES:
-            raise ValueError("Unsupported file type")
-        img = Image.open(io.BytesIO(buffer))
-        img.thumbnail((1000, 1000))
-        if img.mode == 'RGBA':
-            img = img.convert('RGB')
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="JPEG")
-        img_data = img_buffer.getvalue()
-        return self.scan_by_data(img_data, 'image/jpeg', img.size)
+        try:
+            img_data, dimensions = resize_image_from_buffer(buffer)
+            return self.scan_by_data(img_data, 'image/jpeg', dimensions)
+        except Exception as e:
+            raise LensError(f"Error processing image from buffer: {e}") from e
