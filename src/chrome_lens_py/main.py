@@ -1,9 +1,9 @@
 import sys
 import argparse
+import logging
 from .lens_api import LensAPI
 from rich.console import Console
 from .exceptions import LensAPIError, LensParsingError, LensCookieError
-from .utils import is_url  # Import the is_url function
 
 console = Console()
 
@@ -13,6 +13,7 @@ def print_help():
     console.print("[b]-h, --help[/b]                Show this help message and exit")
     console.print("[b]-c, --cookie-file[/b]         Path to the Netscape cookie file")
     console.print("[b]-p, --proxy[/b]               Specify proxy server (e.g., socks5://user:pass@host:port)")
+    console.print("[b]--debug=(info|debug)[/b]      Enable logging at the specified level")
     console.print("\n[b]<data_type>[/b] options:")
     console.print("[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
     console.print("[b]full_text_default[/b]         Get only the default full text")
@@ -32,6 +33,8 @@ def main():
                         help="Path to the Netscape cookie file")
     parser.add_argument(
         '-p', '--proxy', help="Proxy server (e.g., socks5://user:pass@host:port)")
+    parser.add_argument('--debug', choices=['info', 'debug'],
+                        help="Enable logging at the specified level")
 
     args = parser.parse_args()
 
@@ -39,13 +42,24 @@ def main():
         print_help()
         sys.exit(1)
 
+    # Настраиваем уровень логирования на основе параметра debug
+    if args.debug == 'debug':
+        logging_level = logging.DEBUG
+    elif args.debug == 'info':
+        logging_level = logging.INFO
+    else:
+        logging_level = logging.WARNING
+
+    logging.basicConfig(level=logging_level)
+
     config = {}
     if args.cookie_file:
         config['headers'] = {'cookie': args.cookie_file}
     if args.proxy:
         config['proxy'] = args.proxy
 
-    api = LensAPI(config=config)
+    # Передаем уровень логирования в LensAPI
+    api = LensAPI(config=config, logging_level=logging_level)
 
     image_source = args.image_source
     data_type = args.data_type
@@ -65,7 +79,7 @@ def main():
             console.print("[red]Invalid data type specified.[/red]")
             sys.exit(1)
 
-        # Output the result
+        # Выводим результат
         console.print(result)
 
     except (LensAPIError, LensParsingError, LensCookieError) as e:

@@ -5,4 +5,3 @@ lxml
 json5
 PySocks
 httpx
-logging

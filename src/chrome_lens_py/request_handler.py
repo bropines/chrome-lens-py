@@ -1,28 +1,29 @@
 import requests
-import httpx  # Используем httpx только для работы с прокси
+import httpx
 import io
 import os
 import time
 import lxml.html
 import json5
-import filetype
-from http.cookies import SimpleCookie
-from PIL import Image
-from .constants import LENS_ENDPOINT, HEADERS, MIME_TO_EXT, SUPPORTED_MIMES
+import logging
+from datetime import datetime
+from .constants import LENS_ENDPOINT, HEADERS, MIME_TO_EXT
 from .utils import sleep, is_supported_mime
-from .image_processing import resize_image, resize_image_from_buffer  # Import the new function
+from .image_processing import resize_image, resize_image_from_buffer
 from .cookies_manager import CookiesManager
 from .exceptions import LensError
 
 class LensCore:
     """Base class for working with the Google Lens API."""
 
-    def __init__(self, config=None, sleep_time=1000):
+    def __init__(self, config=None, sleep_time=1000, logging_level=logging.WARNING):
         self.config = config if config else {}
+        self.logging_level = logging_level
+        logging.getLogger().setLevel(self.logging_level)
         self.cookies_manager = CookiesManager(
-            config=self.config)  # Инициализируем CookiesManager
+            config=self.config, logging_level=logging_level)
         self.sleep_time = sleep_time
-        self.session = requests.Session()  # Используем requests для стандартных запросов
+        self.session = requests.Session()
         self.use_httpx = False
         self.setup_proxies()
 
@@ -30,7 +31,6 @@ class LensCore:
         """Sets up proxies for the session if provided in config."""
         proxy = self.config.get('proxy')
         if proxy:
-            # Если указан SOCKS5 прокси, используем httpx
             if proxy.startswith('socks'):
                 self.use_httpx = True
                 self.client = httpx.Client(proxies={
@@ -38,7 +38,6 @@ class LensCore:
                     'https://': proxy
                 })
             else:
-                # Для HTTP/HTTPS прокси используем requests
                 self.session.proxies = {
                     'http': proxy,
                     'https': proxy
@@ -53,7 +52,7 @@ class LensCore:
         headers = HEADERS.copy()
         self.generate_cookie_header(headers)
 
-        print(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
+        logging.info(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
 
         file_name = f"image.{MIME_TO_EXT[mime]}"
         files = {
@@ -72,43 +71,44 @@ class LensCore:
             response = self.session.post(
                 LENS_ENDPOINT, headers=headers, files=files)
 
-        print(f"Response code: {response.status_code}")
+        logging.info(f"Response code: {response.status_code}")
 
-        # Update cookies based on response
+        # Обновляем куки на основе ответа
         if 'set-cookie' in response.headers:
             self.cookies_manager.update_cookies(
-                response.headers['set-cookie'])  # Обновляем куки
+                response.headers['set-cookie'])
 
         if response.status_code != 200:
-            print(f"Response headers: {response.headers}")
-            print(f"Response body: {response.text}")
+            logging.error(f"Failed to load image. Response code: {response.status_code}")
+            logging.debug(f"Response headers: {response.headers}")
+            logging.debug(f"Response body: {response.text}")
             raise LensError("Failed to load image",
                             response.status_code, response.headers, response.text)
 
-        # Сохраняем полный текст ответа в файл для отладки
-        response_file_path = "response_debug.txt"
-        with open(response_file_path, "w", encoding="utf-8") as f:
-            f.write(response.text)
-        print(f"Response saved to {response_file_path}")
+        # Сохраняем полный текст ответа в файл для отладки, только если уровень логирования DEBUG
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            response_file_path = os.path.join(os.getcwd(), "response_debug.txt")
+            with open(response_file_path, "w", encoding="utf-8") as f:
+                f.write(response.text)
+            logging.debug(f"Response saved to {response_file_path}")
 
         buffer_text = io.StringIO(response.text)
         tree = lxml.html.parse(buffer_text)
 
         r = tree.xpath("//script[@class='ds:1']")
 
-        if not r:  # Если список пустой, возвращаем сообщение об ошибке
-            print("Error: Expected data not found in response.")
+        if not r:
+            logging.error("Error: Expected data not found in response.")
             raise LensError("Failed to parse expected data from response",
                             response.status_code, response.headers, response.text)
 
         return json5.loads(r[0].text[len("AF_initDataCallback("):-2])
 
-
 class Lens(LensCore):
     """A class for working with the Google Lens API, providing convenience methods."""
 
-    def __init__(self, config=None, sleep_time=1000):
-        super().__init__(config, sleep_time)
+    def __init__(self, config=None, sleep_time=1000, logging_level=logging.WARNING):
+        super().__init__(config, sleep_time, logging_level)
 
     def scan_by_file(self, file_path):
         """Scans an image at the specified path and returns the results."""

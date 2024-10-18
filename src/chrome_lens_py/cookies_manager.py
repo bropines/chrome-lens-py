@@ -1,30 +1,21 @@
 import time
-import logging  # Импортируем модуль логирования
+import logging
 from http.cookies import SimpleCookie
 import os
 import pickle
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 from .exceptions import LensCookieError
 
 
 class CookiesManager:
-    def __init__(self, config=None, cookie_file='cookies.pkl', enable_logging=False):
+    def __init__(self, config=None, cookie_file='cookies.pkl', logging_level=logging.WARNING):
         self.cookies = {}
         self.config = config or {}
         self.cookie_file = os.path.join(os.path.dirname(__file__), cookie_file)
-        # Получаем информацию о том, нужно ли логировать
-        self.enable_logging = enable_logging
+        self.logging_level = logging_level
+        logging.getLogger().setLevel(self.logging_level)
+        logging.debug(f"Initialized CookiesManager with cookie file: {self.cookie_file}")
         self.load_cookies()
-
-        if self.enable_logging:
-            logging.info(f"Initialized CookiesManager with cookie file: {self.cookie_file}")
-
-    def log(self, message, level=logging.INFO):
-        """Вспомогательный метод для логирования, который учитывает флаг enable_logging.
-            Logs a message if logging is enabled.
-        """
-        if self.enable_logging:
-            logging.log(level, message)
 
     def load_cookies(self):
         """Loads cookies from a file or from config."""
@@ -32,9 +23,9 @@ class CookiesManager:
             try:
                 with open(self.cookie_file, 'rb') as f:
                     self.cookies = pickle.load(f)
-                    self.log(f"Loaded cookies from file: {self.cookie_file}")
+                    logging.debug(f"Loaded cookies from file: {self.cookie_file}")
             except (FileNotFoundError, pickle.PickleError) as e:
-                self.log(f"Error loading cookies from file: {e}", level=logging.WARNING)
+                logging.warning(f"Error loading cookies from file: {e}")
 
         if 'headers' in self.config and 'cookie' in self.config['headers']:
             cookie_data = self.config['headers']['cookie']
@@ -46,13 +37,12 @@ class CookiesManager:
             elif isinstance(cookie_data, dict):
                 self.parse_cookie_dict(cookie_data)
             else:
-                self.log(f"Unexpected cookie data type in config: {type(cookie_data)}",
-                         level=logging.WARNING)
+                logging.warning(f"Unexpected cookie data type in config: {type(cookie_data)}")
             self.save_cookies()
 
     def parse_cookie_string(self, cookie_string):
         """Parses cookie string and stores it."""
-        self.log(f"Parsing cookie string: {cookie_string}", logging.DEBUG)
+        logging.debug(f"Parsing cookie string: {cookie_string}")
         cookie = SimpleCookie(cookie_string)
         for key, morsel in cookie.items():
             self.cookies[key] = {
@@ -63,7 +53,7 @@ class CookiesManager:
 
     def parse_cookie_dict(self, cookie_dict):
         """Parses cookie dict and stores it."""
-        self.log("Parsing cookie dictionary.", logging.DEBUG)
+        logging.debug("Parsing cookie dictionary.")
         for key, cookie_data in cookie_dict.items():
             self.cookies[key] = {
                 'name': cookie_data.get('name', key),
@@ -73,51 +63,48 @@ class CookiesManager:
 
     def parse_netscape_cookie_file(self, file_path):
         """Parses a Netscape format cookie file and imports all cookies."""
-        self.log(f"Parsing Netscape cookie file: {file_path}")
+        logging.debug(f"Parsing Netscape cookie file: {file_path}")
         try:
             with open(file_path, 'r') as file:
                 for line in file:
                     if not line.startswith('#') and line.strip():
-                        parts = line.split('\t')
+                        parts = line.strip().split('\t')
                         if len(parts) >= 7:
                             try:
-                                domain, _, _, _, expires, name, value = parts
+                                domain, flag, path, secure, expires, name, value = parts
                                 self.cookies[name] = {
                                     'name': name,
-                                    'value': value.strip(),
+                                    'value': value,
                                     'expires': self.ensure_timestamp(expires)
                                 }
                             except IndexError as e:
-                                self.log(f"Error parsing cookie line: {line.strip()} - {e}", logging.ERROR)
-
+                                logging.error(f"Error parsing cookie line: {line.strip()} - {e}")
             self.save_cookies()
         except (FileNotFoundError, IOError) as e:
-            raise LensCookieError(
-                f"Error reading Netscape cookie file: {e}") from e
+            raise LensCookieError(f"Error reading Netscape cookie file: {e}") from e
 
     def generate_cookie_header(self):
         """Generates a cookie header for requests."""
         self.filter_expired_cookies()
         cookie_header = '; '.join(
             [f"{cookie['name']}={cookie['value']}" for cookie in self.cookies.values()])
-        self.log(f"Generated cookie header: {cookie_header}", logging.DEBUG)
+        logging.debug(f"Generated cookie header: {cookie_header}")
         return cookie_header
 
     def filter_expired_cookies(self):
         """Filters out expired cookies."""
-        self.log("Filtering expired cookies.")
+        logging.debug("Filtering expired cookies.")
         current_time = time.time()
         try:
-            self.cookies = {k: v for k, v in self.cookies.items(
-            ) if not v['expires'] or v['expires'] > current_time}
+            self.cookies = {k: v for k, v in self.cookies.items()
+                            if not v['expires'] or v['expires'] > current_time}
         except ValueError as e:
-            self.log(f"Error filtering cookies: {e}. Rewriting cookies.", logging.ERROR)
+            logging.error(f"Error filtering cookies: {e}. Rewriting cookies.")
             self.rewrite_cookies()
 
     def update_cookies(self, set_cookie_header):
         """Updates cookies from the Set-Cookie header and saves them."""
-        self.log(
-            f"Updating cookies from Set-Cookie header: {set_cookie_header}")
+        logging.debug(f"Updating cookies from Set-Cookie header: {set_cookie_header}")
         if set_cookie_header:
             cookie = SimpleCookie(set_cookie_header)
             for key, morsel in cookie.items():
@@ -132,12 +119,11 @@ class CookiesManager:
         """Saves cookies to a file."""
         with open(self.cookie_file, 'wb') as f:
             pickle.dump(self.cookies, f)
-            self.log(f"Cookies saved to file: {self.cookie_file}")
+            logging.debug(f"Cookies saved to file: {self.cookie_file}")
 
     def rewrite_cookies(self):
         """Rewrites cookies from the original config or file if an error occurs."""
-        self.log("Rewriting cookies from config or original file.",
-                 logging.WARNING)
+        logging.warning("Rewriting cookies from config or original file.")
         self.cookies = {}
         self.load_cookies()
         self.save_cookies()
@@ -151,6 +137,12 @@ class CookiesManager:
             try:
                 return float(expires)
             except ValueError:
-                raise LensCookieError(
-                    f"Failed to convert expires '{expires}' to timestamp: Invalid date value or format")
+                logging.debug(f"Failed to convert expires '{expires}' to float. Trying to parse date string.")
+                try:
+                    dt = datetime.strptime(expires, '%a, %d-%b-%Y %H:%M:%S GMT')
+                    timestamp = dt.timestamp()
+                    return float(timestamp)
+                except ValueError as e:
+                    logging.error(f"Failed to parse expires '{expires}' as datetime: {e}")
+                    raise LensCookieError(f"Failed to convert expires '{expires}' to timestamp: {e}")
         return expires

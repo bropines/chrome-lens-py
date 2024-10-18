@@ -339,6 +339,62 @@ These values are used to accurately place, scale, and display the text on the im
 
 </details>
 
+<details>
+  <summary><b>Debugging and Logging</b></summary>
+
+When using the CLI tool `lens_scan`, you can control the logging level using the `--debug` flag. There are two levels available:
+
+- `--debug=info`: Enables logging of informational messages, which include general information about the processing steps.
+- `--debug=debug`: Enables detailed debugging messages, including verbose output and the saving of the raw response from the API to a file named `response_debug.txt` in the current directory.
+
+**Example Usage:**
+
+- To run with informational logging:
+
+  ```bash
+  lens_scan path/to/image.jpg all --debug=info
+  ```
+
+- To run with detailed debugging logging:
+
+  ```bash
+  lens_scan path/to/image.jpg all --debug=debug
+  ```
+
+When using `--debug=debug`, the library will save the raw response from the API to `response_debug.txt` in the current working directory. This can be useful for deep debugging and understanding the exact response from the API.
+
+#### Programmatic Debugging
+
+When using the API in your Python scripts, you can control the logging level by configuring the logging module and by passing the `logging_level` parameter when instantiating the `LensAPI` class.
+
+**Example Usage:**
+
+```python
+import logging
+from chrome_lens_py import LensAPI
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Instantiate the API with the desired logging level
+api = LensAPI(logging_level=logging.DEBUG)
+
+# Process an image
+result = api.get_all_data('path/to/image.jpg')
+print(result)
+```
+
+The `logging_level` parameter accepts standard logging levels from the `logging` module, such as `logging.INFO`, `logging.DEBUG`, etc.
+
+When the logging level is set to `DEBUG`, the library will output detailed debugging information and save the raw API response to `response_debug.txt` in the current directory.
+
+#### Notes on Logging Levels
+
+- **INFO** level: Provides general information about the process, such as when requests are sent and responses are received.
+- **DEBUG** level: Provides detailed information useful for debugging, including internal state and saved responses.
+
+</details>
+
 ## Project Structure
 
 ```plain

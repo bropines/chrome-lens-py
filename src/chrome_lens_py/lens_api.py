@@ -1,11 +1,12 @@
 from .request_handler import Lens
 from .text_processing import simplify_output, extract_full_text
 from .exceptions import LensAPIError, LensParsingError
-from .utils import is_url  # Import the is_url function
+from .utils import is_url
+import logging
 
 class LensAPI:
-    def __init__(self, config=None, sleep_time=1000):
-        self.lens = Lens(config=config, sleep_time=sleep_time)
+    def __init__(self, config=None, sleep_time=1000, logging_level=logging.WARNING):
+        self.lens = Lens(config=config, sleep_time=sleep_time, logging_level=logging_level)
 
     def get_all_data(self, image_source):
         """Returns all data for the image, accepting either a file path or a URL."""
