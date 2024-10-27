@@ -102,7 +102,8 @@ class LensCore:
             raise LensError("Failed to parse expected data from response",
                             response.status_code, response.headers, response.text)
 
-        return json5.loads(r[0].text[len("AF_initDataCallback("):-2])
+        result = json5.loads(r[0].text[len("AF_initDataCallback("):-2])
+        return result  # Возвращаем результат без размеров
 
 class Lens(LensCore):
     """A class for working with the Google Lens API, providing convenience methods."""
@@ -116,8 +117,9 @@ class Lens(LensCore):
             raise FileNotFoundError(f"File not found: {file_path}")
         if not is_supported_mime(file_path):
             raise ValueError("Unsupported file type")
-        img_data, dimensions = resize_image(file_path)
-        return self.scan_by_data(img_data, 'image/jpeg', dimensions)
+        img_data, dimensions, original_size = resize_image(file_path)
+        result = self.scan_by_data(img_data, 'image/jpeg', dimensions)
+        return result, original_size  # Возвращаем оригинальные размеры
 
     def scan_by_url(self, url):
         """Scans an image from a URL and returns the results."""
@@ -133,7 +135,8 @@ class Lens(LensCore):
     def scan_by_buffer(self, buffer):
         """Scans an image from the buffer and returns the results."""
         try:
-            img_data, dimensions = resize_image_from_buffer(buffer)
-            return self.scan_by_data(img_data, 'image/jpeg', dimensions)
+            img_data, dimensions, original_size = resize_image_from_buffer(buffer)
+            result = self.scan_by_data(img_data, 'image/jpeg', dimensions)
+            return result, original_size  # Возвращаем оригинальные размеры
         except Exception as e:
             raise LensError(f"Error processing image from buffer: {e}") from e

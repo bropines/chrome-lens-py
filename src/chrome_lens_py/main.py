@@ -14,6 +14,7 @@ def print_help():
     console.print("[b]-c, --cookie-file[/b]         Path to the Netscape cookie file")
     console.print("[b]-p, --proxy[/b]               Specify proxy server (e.g., socks5://user:pass@host:port)")
     console.print("[b]--debug=(info|debug)[/b]      Enable logging at the specified level")
+    console.print("[b]--coordinate-format[/b]       Output coordinates format: 'percent' or 'pixels'")
     console.print("\n[b]<data_type>[/b] options:")
     console.print("[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
     console.print("[b]full_text_default[/b]         Get only the default full text")
@@ -35,6 +36,9 @@ def main():
         '-p', '--proxy', help="Proxy server (e.g., socks5://user:pass@host:port)")
     parser.add_argument('--debug', choices=['info', 'debug'],
                         help="Enable logging at the specified level")
+    # Добавляем аргумент для выбора формата координат
+    parser.add_argument('--coordinate-format', choices=['percent', 'pixels'], default='percent',
+                        help="Output coordinates format: 'percent' or 'pixels'")
 
     args = parser.parse_args()
 
@@ -63,18 +67,19 @@ def main():
 
     image_source = args.image_source
     data_type = args.data_type
+    coordinate_format = args.coordinate_format  # Получаем формат координат из аргументов
 
     try:
         if data_type == "all":
-            result = api.get_all_data(image_source)
+            result = api.get_all_data(image_source, coordinate_format=coordinate_format)
         elif data_type == "full_text_default":
             result = api.get_full_text(image_source)
         elif data_type == "full_text_old_method":
-            result = api.get_stitched_text_sequential(image_source)
+            result = api.get_stitched_text_sequential(image_source, coordinate_format=coordinate_format)
         elif data_type == "full_text_new_method":
-            result = api.get_stitched_text_smart(image_source)
+            result = api.get_stitched_text_smart(image_source, coordinate_format=coordinate_format)
         elif data_type == "coordinates":
-            result = api.get_text_with_coordinates(image_source)
+            result = api.get_text_with_coordinates(image_source, coordinate_format=coordinate_format)
         else:
             console.print("[red]Invalid data type specified.[/red]")
             sys.exit(1)

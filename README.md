@@ -300,17 +300,20 @@ You can make requests through a proxy server using the API or CLI. The library s
 In our project, coordinates are used to define the position, size, and rotation of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
 
 1. **Y Coordinate**: The first value in the coordinates array represents the vertical position of the top-left corner of the text region on the image. The value is expressed as a fraction of the image's total height, with `0.0` corresponding to the top edge and `1.0` to the bottom.
+
 2. **X Coordinate**: The second value indicates the horizontal position of the top-left corner of the text region. The value is expressed as a fraction of the image's total width, where `0.0` corresponds to the left edge and `1.0` to the right.
+
 3. **Width**: The third value represents the width of the text region as a fraction of the image's total width. This value determines how much horizontal space the text will occupy.
+
 4. **Height**: The fourth value indicates the height of the text region as a fraction of the image's total height.
+
 5. **Fifth Parameter**: In the current data, this parameter is always zero and appears to be unused. It might be reserved for future use or specific text modifications.
+
 6. **Sixth Parameter**: Specifies the rotation angle of the text region in degrees. Positive values indicate clockwise rotation, while negative values indicate counterclockwise rotation.
 
 Coordinates are measured from the top-left corner of the image. This means that `(0.0, 0.0)` corresponds to the very top-left corner of the image, while `(1.0, 1.0)` corresponds to the very bottom-right corner.
 
 #### Example of Coordinate Usage
-
-For clarity, let's look at the following example of coordinates:
 
 ```json
 {
@@ -337,6 +340,53 @@ In this example:
 
 These values are used to accurately place, scale, and display the text on the image.
 
+#### **Using Coordinate Format**
+
+You can choose the coordinate output format: percentages or pixels. By default, coordinates are output in percentages, but you can switch to pixels using the appropriate settings.
+
+##### **In Console**
+
+When using the command line, you can specify the coordinate format using the `--coordinate-format` flag. Acceptable values are `'percent'` or `'pixels'`.
+
+**Usage Examples:**
+
+- **Output coordinates in percentages (default):**
+
+  ```bash
+  lens_scan image.jpg coordinates
+  ```
+
+- **Output coordinates in pixels:**
+
+  ```bash
+  lens_scan image.jpg coordinates --coordinate-format=pixels
+  ```
+
+##### **In API**
+
+When using the programmatic API, you can pass the `coordinate_format` parameter to the methods of the `LensAPI` class. Acceptable values are `'percent'` or `'pixels'`.
+
+**Usage Example:**
+
+```python
+from lens_api import LensAPI
+
+api = LensAPI()
+
+# Path to the image
+image_path = 'image.jpg'
+
+# Get data with coordinates in pixels
+result = api.get_all_data(image_path, coordinate_format='pixels')
+
+print(result)
+```
+
+#### **Important**
+
+- When selecting the `'pixels'` format, coordinates will be calculated relative to the **original dimensions** of the image, even if the image was resized for processing.
+- If the format is not specified, coordinates are output in percentages by default.
+- When working with pixel coordinates, ensure you use the original image for accurate placement of text regions.
 </details>
 
 <details>
