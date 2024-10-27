@@ -473,6 +473,7 @@ Special thanks to [dimdenGD](https://github.com/dimdenGD) for the method of text
 ## TODO
 
 - [X] Add `scan by url`
+- [X] Add output in pixels 
 - [ ] Move all methods from [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
   - cookie!?
 - [ ] Do everything beautifully, and not like 400 lines of code, cut into modules by GPT chat
