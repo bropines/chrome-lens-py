@@ -445,6 +445,172 @@ When the logging level is set to `DEBUG`, the library will output detailed debug
 
 </details>
 
+<details> <summary><b>Configuration Management</b></summary>
+
+### Configuration Priority
+
+When running the CLI tool `lens_scan`, the application determines settings based on the following priority order (from highest to lowest):
+
+1. **Command-line arguments (CLI)**: Options specified directly when running the command have the highest priority.
+2. **Environment variables**: If a setting is not specified in the CLI, the application will check for corresponding environment variables.
+3. **Configuration file**: If a setting is not found in the CLI arguments or environment variables, the application will look into the configuration file.
+4. **Default values**: If a setting is not specified in any of the above, default values are used.
+
+### Default Configuration File
+
+* The default configuration file is located in the user's configuration directory, which varies by operating system:
+    * **Windows**: `C:\Users\<YourUserName>\.config\chrome-lens-py\config.json`
+    * **Unix/Linux**: `/home/<YourUserName>/.config/chrome-lens-py/config.json`
+    * **macOS**: `/Users/<YourUserName>/Library/Application Support/chrome-lens-py/config.json`
+
+### Specifying a Custom Configuration File
+
+* You can specify a custom configuration file using the `--config-file` flag:
+    
+    ```bash
+    lens_scan --config-file path/to/your/config.json <image_source> <data_type>
+    ```
+    
+* When a custom configuration file is specified, it is treated as read-only and will not be modified by the application.
+    
+
+### Configuration Settings
+
+The configuration file is a JSON file that can include the following settings:
+
+* **`proxy`**: Specify a proxy server to route requests.
+    
+    ```json
+    {
+      "proxy": "socks5://username:password@proxy.example.com:1080"
+    }
+    ```
+    
+* **`cookies`**: Specify cookies to use with requests. This can be a path to a cookies file or a cookie string.
+    
+    ```json
+    {
+      "cookies": "path/to/your/cookie_file.txt"
+    }
+    ```
+    
+    or
+    
+    ```json
+    {
+      "cookies": "__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-"
+    }
+    ```
+    
+* **`coordinate_format`**: Set the format of output coordinates. Acceptable values are `"percent"` or `"pixels"`.
+    
+    ```json
+    {
+      "coordinate_format": "pixels"
+    }
+    ```
+    
+* **`debug`**: Set the logging level. Acceptable values are `"info"` or `"debug"`.
+    
+    ```json
+    {
+      "debug": "debug"
+    }
+    ```
+* **`data_type`**: Set the type of [output data](#data-types).
+
+  ```json
+  {
+    "data_type": "all"
+  }
+
+### Complete Example Configuration File
+
+Here is an example of a configuration file that includes all possible configuration parameters:
+
+```json
+{
+  "proxy": "socks5://username:password@proxy.example.com:1080",
+  "cookies": "path/to/your/cookie_file.txt",
+  "coordinate_format": "pixels",
+  "debug": "debug"
+}
+```
+
+### Updating the Configuration File
+
+* To update the default configuration file with new settings from the CLI, use the `-uc` or `--update-config` flag.
+    
+    ```bash
+    lens_scan <image_source> <data_type> [options] -uc
+    ```
+    
+* **Note**: The configuration file will only be updated if it's the default configuration file (i.e., not specified via `--config-file`).
+    
+* Only specific settings will be updated:
+    
+    * **Settings that can be updated**:
+        
+        * `coordinate_format`
+        * `debug`
+        * `data_type`
+    * **Settings that will **not** be updated**:
+        
+        * `proxy`
+        * `cookies`
+        * `image_source`
+
+* This allows you to persist certain settings across runs without affecting critical configurations like proxy settings or cookies.
+    
+
+### Example Usage
+
+* **Updating the coordinate format in the default configuration file**:
+    
+    ```bash
+    lens_scan path/to/image.jpg all --coordinate-format=pixels -uc
+    ```
+    
+    * This command will set the coordinate format to pixels for the current run and update the default configuration file so that future runs will also use pixels as the coordinate format.
+* **Using a proxy without updating the configuration file**:
+    
+    ```bash
+    lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
+    ```
+    
+    * The proxy setting will be used for this run but will not be saved to the configuration file.
+* **Specifying a custom configuration file (read-only)**:
+    
+    ```bash
+    lens_scan --config-file path/to/config.json path/to/image.jpg all
+    ```
+    
+    * The application will use settings from the specified configuration file but will not modify it, even if the `-uc` flag is used.
+
+### Environment Variables
+
+You can also specify settings via environment variables:
+
+* **`LENS_SCAN_PROXY`**: Set the proxy server.
+    
+    ```bash
+    export LENS_SCAN_PROXY="socks5://username:password@proxy.example.com:1080"
+    ```
+    
+* **`LENS_SCAN_COOKIES`**: Provide cookies.
+    
+    ```bash
+    export LENS_SCAN_COOKIES="__Secure-ENID=17.SE=-dizH-; NID=511=---"
+    ```
+    
+* **`LENS_SCAN_CONFIG_PATH`**: Specify a custom configuration file.
+    
+    ```bash
+    export LENS_SCAN_CONFIG_PATH="path/to/your/config.json"
+    ```
+
+</details>
+
 ## Project Structure
 
 ```plain

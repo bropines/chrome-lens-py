@@ -125,81 +125,71 @@ from chrome_lens_py import LensAPI
 
 1. **Создание экземпляра API**:
 
-    ```python
-    api = LensAPI()
-    ```
-
+   ```python
+   api = LensAPI()
+   ```
 2. **Обработка изображения**:
 
-    - **Получение всех данных из локального файла**:
+   - **Получение всех данных из локального файла**:
 
-        ```python
-        result = api.get_all_data('path/to/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_all_data('path/to/image.jpg')
+     print(result)
+     ```
+   - **Получение всех данных по URL**:
 
-    - **Получение всех данных по URL**:
+     ```python
+     result = api.get_all_data('https://example.com/image.jpg')
+     print(result)
+     ```
+   - **Получение полного текста из локального файла**:
 
-        ```python
-        result = api.get_all_data('https://example.com/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_full_text('path/to/image.jpg')
+     print(result)
+     ```
+   - **Получение полного текста по URL**:
 
-    - **Получение полного текста из локального файла**:
+     ```python
+     result = api.get_full_text('https://example.com/image.jpg')
+     print(result)
+     ```
+   - **Получение сшитого текста с использованием старого метода из локального файла**:
 
-        ```python
-        result = api.get_full_text('path/to/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_stitched_text_sequential('path/to/image.jpg')
+     print(result)
+     ```
+   - **Получение сшитого текста с использованием старого метода по URL**:
 
-    - **Получение полного текста по URL**:
+     ```python
+     result = api.get_stitched_text_sequential('https://example.com/image.jpg')
+     print(result)
+     ```
+   - **Получение сшитого текста с использованием нового метода из локального файла**:
 
-        ```python
-        result = api.get_full_text('https://example.com/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_stitched_text_smart('path/to/image.jpg')
+     print(result)
+     ```
+   - **Получение сшитого текста с использованием нового метода по URL**:
 
-    - **Получение сшитого текста с использованием старого метода из локального файла**:
+     ```python
+     result = api.get_stitched_text_smart('https://example.com/image.jpg')
+     print(result)
+     ```
+   - **Получение текста с координатами из локального файла**:
 
-        ```python
-        result = api.get_stitched_text_sequential('path/to/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_text_with_coordinates('path/to/image.jpg')
+     print(result)
+     ```
+   - **Получение текста с координатами по URL**:
 
-    - **Получение сшитого текста с использованием старого метода по URL**:
-
-        ```python
-        result = api.get_stitched_text_sequential('https://example.com/image.jpg')
-        print(result)
-        ```
-
-    - **Получение сшитого текста с использованием нового метода из локального файла**:
-
-        ```python
-        result = api.get_stitched_text_smart('path/to/image.jpg')
-        print(result)
-        ```
-
-    - **Получение сшитого текста с использованием нового метода по URL**:
-
-        ```python
-        result = api.get_stitched_text_smart('https://example.com/image.jpg')
-        print(result)
-        ```
-
-    - **Получение текста с координатами из локального файла**:
-
-        ```python
-        result = api.get_text_with_coordinates('path/to/image.jpg')
-        print(result)
-        ```
-
-    - **Получение текста с координатами по URL**:
-
-        ```python
-        result = api.get_text_with_coordinates('https://example.com/image.jpg')
-        print(result)
-        ```
+     ```python
+     result = api.get_text_with_coordinates('https://example.com/image.jpg')
+     print(result)
+     ```
 
 </details>
 
@@ -215,60 +205,60 @@ from chrome_lens_py import LensAPI
 
 1. **Загрузка куки из файла в формате Netscape**:
 
-    * Вы можете загрузить куки из файла в формате Netscape, указав путь к файлу.
+   * Вы можете загрузить куки из файла в формате Netscape, указав путь к файлу.
 
-    **Программный API**:
+   **Программный API**:
 
-    ```python
-    config = {
-        'headers': {
-            'cookie': '/path/to/cookie_file.txt'
-        }
-    }
-    api = LensAPI(config=config)
-    ```
+   ```python
+   config = {
+       'headers': {
+           'cookie': '/path/to/cookie_file.txt'
+       }
+   }
+   api = LensAPI(config=config)
+   ```
 
-    **CLI**:
+   **CLI**:
 
-    ```bash
-    lens_scan path/to/image.jpg all -c /path/to/cookie_file.txt
-    ```
-
+   ```bash
+   lens_scan path/to/image.jpg all -c /path/to/cookie_file.txt
+   ```
 2. **Передача куки напрямую в виде строки**:
 
-    * Вы также можете передавать куки напрямую в виде строки через конфигурацию.
+   * Вы также можете передавать куки напрямую в виде строки через конфигурацию.
 
-    **Программный API**:
+   **Программный API**:
 
-    ```python
-    config = {
-        'headers': {
-            'cookie': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
-        }
-    }
-    api = LensAPI(config=config)
-    ```
-    или
+   ```python
+   config = {
+       'headers': {
+           'cookie': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
+       }
+   }
+   api = LensAPI(config=config)
+   ```
 
-    ```python
-    config = {
-        'headers': {
-            'cookie': {
-                '__Secure-ENID': {
-                    'name': '__Secure-ENID',
-                    'value': '',
-                    'expires': 1756858205,
-                },
-                'NID': {
-                    'name': 'NID',
-                    'value': '517=4.......',
-                    'expires': 1756858205,
-                }
-            }
-        }
-    }
-    api = LensAPI(config=config)
-    ```
+   или
+
+   ```python
+   config = {
+       'headers': {
+           'cookie': {
+               '__Secure-ENID': {
+                   'name': '__Secure-ENID',
+                   'value': '',
+                   'expires': 1756858205,
+               },
+               'NID': {
+                   'name': 'NID',
+                   'value': '517=4.......',
+                   'expires': 1756858205,
+               }
+           }
+       }
+   }
+   api = LensAPI(config=config)
+   ```
 
 </details>
 
@@ -279,18 +269,17 @@ from chrome_lens_py import LensAPI
 
 * **Установка прокси в API**:
 
-    ```python
-    config = {
-        'proxy': 'socks5://127.0.0.1:2080'
-    }
-    api = LensAPI(config=config)
-    ```
-
+  ```python
+  config = {
+      'proxy': 'socks5://127.0.0.1:2080'
+  }
+  api = LensAPI(config=config)
+  ```
 * **Установка прокси в CLI**:
 
-    ```bash
-    lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
-    ```
+  ```bash
+  lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
+  ```
 
 </details>
 
@@ -313,15 +302,10 @@ from chrome_lens_py import LensAPI
 В нашем проекте координаты используются для определения позиции, размера и вращения текста на изображении. Каждый текстовый регион описывается набором значений, которые помогают точно определить, где и как отображать текст. Вот как интерпретируются эти значения:
 
 1. **Y координата**: Первое значение в массиве координат представляет вертикальное положение верхнего левого угла текстового региона на изображении. Значение выражается как доля от общей высоты изображения, где `0.0` соответствует верхнему краю, а `1.0` — нижнему.
-
 2. **X координата**: Второе значение указывает горизонтальное положение верхнего левого угла текстового региона. Значение выражается как доля от общей ширины изображения, где `0.0` соответствует левому краю, а `1.0` — правому.
-
 3. **Ширина**: Третье значение представляет ширину текстового региона как долю от общей ширины изображения. Это значение определяет, сколько горизонтального пространства займет текст.
-
 4. **Высота**: Четвертое значение указывает высоту текстового региона как долю от общей высоты изображения.
-
 5. **Пятый параметр**: В текущих данных этот параметр всегда равен нулю и, по-видимому, не используется. Возможно, он зарезервирован для будущего использования или специфических модификаций текста.
-
 6. **Шестой параметр**: Задает угол вращения текстового региона в градусах. Положительные значения указывают на вращение по часовой стрелке, отрицательные — против часовой стрелки.
 
 Координаты измеряются от верхнего левого угла изображения. Это означает, что `(0.0, 0.0)` соответствует самому верхнему левому углу изображения, а `(1.0, 1.0)` — самому нижнему правому.
@@ -368,7 +352,6 @@ from chrome_lens_py import LensAPI
   ```bash
   lens_scan image.jpg coordinates
   ```
-
 - **Вывод координат в пикселях:**
 
   ```bash
@@ -400,6 +383,7 @@ print(result)
 - При выборе формата `'pixels'` координаты будут рассчитаны относительно **исходных размеров** изображения, даже если изображение было уменьшено для обработки.
 - Если формат не указан, координаты по умолчанию выводятся в процентах.
 - При работе с координатами в пикселях убедитесь, что вы используете исходное изображение для корректного отображения текстовых регионов.
+
 </details>
 
 <details>
@@ -417,7 +401,6 @@ print(result)
   ```bash
   lens_scan path/to/image.jpg all --debug=info
   ```
-
 - Запуск с подробным отладочным логированием:
 
   ```bash
@@ -458,9 +441,166 @@ print(result)
 
 </details>
 
+<details> <summary><b>Управление конфигурацией</b></summary>
+
+### Приоритет конфигурации
+
+При запуске CLI-инструмента `lens_scan` приложение определяет настройки на основе следующего приоритета (от самого высокого к самому низкому):
+
+1. **Аргументы командной строки (CLI)**: Опции, указанные непосредственно при запуске команды, имеют наивысший приоритет.
+2. **Переменные окружения**: Если настройка не указана в CLI, приложение проверит соответствующие переменные окружения.
+3. **Файл конфигурации**: Если настройка не найдена в аргументах CLI или переменных окружения, приложение обратится к файлу конфигурации.
+4. **Значения по умолчанию**: Если настройка не указана ни в одном из вышеперечисленных мест, используются значения по умолчанию.
+
+### Файл конфигурации по умолчанию
+
+* Файл конфигурации по умолчанию находится в директории конфигурации пользователя, которая зависит от операционной системы:
+  * **Windows**: `C:\Users\<ВашеИмяПользователя>\.config\chrome-lens-py\config.json`
+  * **Unix/Linux**: `/home/<ВашеИмяПользователя>/.config/chrome-lens-py/config.json`
+  * **macOS**: `/Users/<ВашеИмяПользователя>/Library/Application Support/chrome-lens-py/config.json`
+
+### Указание пользовательского файла конфигурации
+
+* Вы можете указать пользовательский файл конфигурации с помощью флага `--config-file`:
+
+  ```bash
+  lens_scan --config-file путь/до/вашего/config.json <image_source> <data_type>
+  ```
+* Когда указан пользовательский файл конфигурации, он считается только для чтения и не будет изменен приложением.
+
+### Настройки конфигурации
+
+Файл конфигурации представляет собой JSON-файл, который может включать следующие настройки:
+
+* **`proxy`**: Укажите прокси-сервер для маршрутизации запросов.
+
+  ```json
+  {
+    "proxy": "socks5://username:password@proxy.example.com:1080"
+  }
+  ```
+* **`cookies`**: Укажите cookies для использования в запросах. Это может быть путь к файлу cookies или строка cookies.
+
+  ```json
+  {
+    "cookies": "путь/до/вашего/cookie_file.txt"
+  }
+  ```
+
+  или
+
+  ```json
+  {
+    "cookies": "__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-"
+  }
+  ```
+* **`coordinate_format`**: Установите формат вывода координат. Допустимые значения: `"percent"` или `"pixels"`.
+
+  ```json
+  {
+    "coordinate_format": "pixels"
+  }
+  ```
+* **`debug`**: Установите уровень логирования. Допустимые значения: `"info"` или `"debug"`.
+
+  ```json
+  {
+    "debug": "debug"
+  }
+  ```
+
+* **`data_type`**: Установите тип [выходных данных](#типы-данных).
+
+  ```json
+  {
+    "data_type": "all"
+  }
+
+### Полный пример файла конфигурации
+
+Вот пример файла конфигурации, который включает все возможные параметры конфигурации:
+
+```json
+{
+  "proxy": "socks5://username:password@proxy.example.com:1080",
+  "cookies": "путь/до/вашего/cookie_file.txt",
+  "coordinate_format": "pixels",
+  "data_type": "all",
+  "debug": "debug"
+}
+```
+
+### Обновление файла конфигурации
+
+* Чтобы обновить файл конфигурации по умолчанию с новыми настройками из CLI, используйте флаг `-uc` или `--update-config`.
+
+  ```bash
+  lens_scan <image_source> <data_type> [опции] -uc
+  ```
+* **Примечание**: Файл конфигурации будет обновлен только в том случае, если это файл конфигурации по умолчанию (т.е. не указан через `--config-file`).
+* Обновляются только определенные настройки:
+
+  * **Настройки, которые могут быть обновлены**:
+
+    * `coordinate_format`
+    * `debug`
+  * **Настройки, которые **не** будут обновлены**:
+
+    * `proxy`
+    * `cookies`
+    * `image_source`
+    * `data_type`
+* Это позволяет сохранять определенные настройки между запусками без изменения критических конфигураций, таких как прокси или cookies.
+
+### Примеры использования
+
+* **Обновление формата координат в файле конфигурации по умолчанию**:
+
+  ```bash
+  lens_scan путь/до/image.jpg all --coordinate_format=pixels -uc
+  ```
+
+  * Эта команда установит формат координат в пикселях для текущего запуска и обновит файл конфигурации по умолчанию, чтобы в будущих запусках также использовались пиксели как формат координат.
+* **Использование прокси без обновления файла конфигурации**:
+
+  ```bash
+  lens_scan путь/до/image.jpg all -p socks5://127.0.0.1:2080
+  ```
+
+  * Настройка прокси будет использована для этого запуска, но не будет сохранена в файл конфигурации.
+* **Указание пользовательского файла конфигурации (только для чтения)**:
+
+  ```bash
+  lens_scan --config-file путь/до/config.json путь/до/image.jpg all
+  ```
+
+  * Приложение будет использовать настройки из указанного файла конфигурации, но не будет изменять его, даже если используется флаг `-uc`.
+
+### Переменные окружения
+
+Вы также можете указывать настройки через переменные окружения:
+
+* **`LENS_SCAN_PROXY`**: Установите прокси-сервер.
+
+  ```bash
+  export LENS_SCAN_PROXY="socks5://username:password@proxy.example.com:1080"
+  ```
+* **`LENS_SCAN_COOKIES`**: Предоставьте cookies.
+
+  ```bash
+  export LENS_SCAN_COOKIES="__Secure-ENID=17.SE=-dizH-; NID=511=---"
+  ```
+* **`LENS_SCAN_CONFIG_PATH`**: Укажите пользовательский файл конфигурации.
+
+  ```bash
+  export LENS_SCAN_CONFIG_PATH="путь/до/вашего/config.json"
+  ```
+
+</details>
+
 ## Структура проекта
 
-```plain text
+```plain
 /chrome-lens-api-py
 │
 ├── /src
@@ -486,7 +626,7 @@ print(result)
 ## TODO
 
 - [X] Добавить "scan by url"
-- [X] Добавить вывод в пикселях 
+- [X] Добавить вывод в пикселях
 - [ ] Перенести все методы из [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
   - cookie!?
 - [X] Сделать код чуть более читабельным...

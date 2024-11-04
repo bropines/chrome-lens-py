@@ -5,17 +5,48 @@ import os
 import pickle
 from datetime import datetime
 from .exceptions import LensCookieError
-
+from .utils import get_default_config_dir
 
 class CookiesManager:
-    def __init__(self, config=None, cookie_file='cookies.pkl', logging_level=logging.WARNING):
+    def __init__(self, config=None, cookie_file=None, logging_level=logging.WARNING):
         self.cookies = {}
         self.config = config or {}
-        self.cookie_file = os.path.join(os.path.dirname(__file__), cookie_file)
         self.logging_level = logging_level
         logging.getLogger().setLevel(self.logging_level)
+        self.imported_cookies = False  # Flag to check if cookies were imported directly
+
+        # Get the cookie file path from config if not provided directly
+        if cookie_file is None:
+            cookie_file = self.config.get('cookie_file')
+
+        if cookie_file is None:
+            app_name = 'chrome-lens-py'  # Name of your application
+            config_dir = get_default_config_dir(app_name)
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            self.cookie_file = os.path.join(config_dir, 'cookies.pkl')
+        else:
+            self.cookie_file = os.path.abspath(cookie_file)
+
         logging.debug(f"Initialized CookiesManager with cookie file: {self.cookie_file}")
-        self.load_cookies()
+
+        # If cookies are specified in the config, import them
+        cookies_from_config = self.config.get('cookies')
+        if cookies_from_config:
+            if isinstance(cookies_from_config, str):
+                if os.path.isfile(cookies_from_config):
+                    self.import_cookies_from_file(cookies_from_config)
+                else:
+                    self.import_cookies_from_string(cookies_from_config)
+            elif isinstance(cookies_from_config, dict):
+                self.parse_cookie_dict(cookies_from_config)
+                self.save_cookies()
+                self.imported_cookies = True
+                logging.debug("Imported cookies from config dictionary.")
+
+        # If cookies were not imported directly, load from the cookie_file
+        if not self.imported_cookies:
+            self.load_cookies()
 
     def load_cookies(self):
         """Loads cookies from a file or from config."""
@@ -27,21 +58,25 @@ class CookiesManager:
             except (FileNotFoundError, pickle.PickleError) as e:
                 logging.warning(f"Error loading cookies from file: {e}")
 
-        if 'headers' in self.config and 'cookie' in self.config['headers']:
-            cookie_data = self.config['headers']['cookie']
-
-            if isinstance(cookie_data, str) and os.path.isfile(cookie_data):
-                self.parse_netscape_cookie_file(cookie_data)
-            elif isinstance(cookie_data, str):
-                self.parse_cookie_string(cookie_data)
-            elif isinstance(cookie_data, dict):
-                self.parse_cookie_dict(cookie_data)
-            else:
-                logging.warning(f"Unexpected cookie data type in config: {type(cookie_data)}")
+    def import_cookies_from_file(self, cookie_file_path):
+        """Imports cookies from a Netscape-format cookie file."""
+        if os.path.isfile(cookie_file_path):
+            self.parse_netscape_cookie_file(cookie_file_path)
             self.save_cookies()
+            self.imported_cookies = True
+            logging.debug(f"Imported cookies from file: {cookie_file_path}")
+        else:
+            logging.warning(f"Cookie file not found: {cookie_file_path}")
+
+    def import_cookies_from_string(self, cookie_string):
+        """Imports cookies from a cookie string."""
+        self.parse_cookie_string(cookie_string)
+        self.save_cookies()
+        self.imported_cookies = True
+        logging.debug("Imported cookies from string.")
 
     def parse_cookie_string(self, cookie_string):
-        """Parses cookie string and stores it."""
+        """Parses a cookie string and stores it."""
         logging.debug(f"Parsing cookie string: {cookie_string}")
         cookie = SimpleCookie(cookie_string)
         for key, morsel in cookie.items():
@@ -52,7 +87,7 @@ class CookiesManager:
             }
 
     def parse_cookie_dict(self, cookie_dict):
-        """Parses cookie dict and stores it."""
+        """Parses a cookie dictionary and stores it."""
         logging.debug("Parsing cookie dictionary.")
         for key, cookie_data in cookie_dict.items():
             self.cookies[key] = {
@@ -62,7 +97,7 @@ class CookiesManager:
             }
 
     def parse_netscape_cookie_file(self, file_path):
-        """Parses a Netscape format cookie file and imports all cookies."""
+        """Parses a Netscape-format cookie file and imports all cookies."""
         logging.debug(f"Parsing Netscape cookie file: {file_path}")
         try:
             with open(file_path, 'r') as file:
