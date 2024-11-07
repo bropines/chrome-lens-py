@@ -26,6 +26,7 @@ class LensCore:
         self.session = requests.Session()
         self.use_httpx = False
         self.setup_proxies()
+        self.debug_out = self.config.get('debug_out')  # Added line
 
     def setup_proxies(self):
         """Sets up proxies for the session if provided in config."""
@@ -73,7 +74,7 @@ class LensCore:
 
         logging.info(f"Response code: {response.status_code}")
 
-        # Обновляем куки на основе ответа
+        """Update cookies based on response"""
         if 'set-cookie' in response.headers:
             self.cookies_manager.update_cookies(
                 response.headers['set-cookie'])
@@ -85,9 +86,12 @@ class LensCore:
             raise LensError("Failed to load image",
                             response.status_code, response.headers, response.text)
 
-        # Сохраняем полный текст ответа в файл для отладки, только если уровень логирования DEBUG
+        """Save the full text of the response to a file for debugging only if the logging level is DEBUG"""
         if logging.getLogger().isEnabledFor(logging.DEBUG):
-            response_file_path = os.path.join(os.getcwd(), "response_debug.txt")
+            if self.debug_out:
+                response_file_path = os.path.abspath(self.debug_out)
+            else:
+                response_file_path = os.path.join(os.getcwd(), "response_debug.txt")
             with open(response_file_path, "w", encoding="utf-8") as f:
                 f.write(response.text)
             logging.debug(f"Response saved to {response_file_path}")
@@ -103,7 +107,7 @@ class LensCore:
                             response.status_code, response.headers, response.text)
 
         result = json5.loads(r[0].text[len("AF_initDataCallback("):-2])
-        return result  # Возвращаем результат без размеров
+        return result  # Return the result without dimensions
 
 class Lens(LensCore):
     """A class for working with the Google Lens API, providing convenience methods."""

@@ -22,6 +22,7 @@ def print_help():
     console.print("[b]--debug=(info|debug)[/b]      Enable logging at the specified level")
     console.print("[b]--coordinate-format[/b]       Output coordinates format: 'percent' or 'pixels'")
     console.print("[b]-uc, --update-config[/b]      Update the default config file with CLI arguments (excluding proxy and cookies)")
+    console.print("[b]--debug-out[/b]               Path to save debug output response")
     console.print("\n[b][data_type][/b] options:")
     console.print("[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
     console.print("[b]full_text_default[/b]         Get only the default full text")
@@ -85,6 +86,7 @@ def main():
     parser.add_argument('--config-file', help="Path to the configuration file")
     parser.add_argument('-uc', '--update-config', action='store_true',
                         help="Update the default config file with CLI arguments (excluding proxy and cookies)")
+    parser.add_argument('--debug-out', help="Path to save debug output response")  # Added argument
 
     args = parser.parse_args()
 
@@ -167,6 +169,8 @@ def main():
         final_config['cookies'] = cookies
     if proxy:
         final_config['proxy'] = proxy
+    if args.debug_out:
+        final_config['debug_out'] = args.debug_out  # Added debug_out to config
 
     # Update config file if -uc flag is specified and config is in default location
     if args.update_config and not args.config_file:
