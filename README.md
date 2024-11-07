@@ -438,6 +438,8 @@ The `logging_level` parameter accepts standard logging levels from the `logging`
 
 When the logging level is set to `DEBUG`, the library will output detailed debugging information and save the raw API response to `response_debug.txt` in the current directory.
 
+The `--debug-out` flag will allow you to specify the path where to save the response from the server, in the case of the debug level `DEBUG`. By default, it is saved, as described above, in the folder where the console is launched, that is, in `CWD`
+
 #### Notes on Logging Levels
 
 - **INFO** level: Provides general information about the process, such as when requests are sent and responses are received.
