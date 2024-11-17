@@ -44,6 +44,5 @@ HEADERS = {
     'Sec-Fetch-Site': 'same-origin',
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'X-Client-Data': 'CIW2yQEIorbJAQipncoBCIH+ygEIlaHLAQj1mM0BCIWgzQEI3ezNAQji+s0BCOmFzgEIponOAQj1ic4BCIeLzgEY1d3NARjS/s0BGNiGzgE='
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }

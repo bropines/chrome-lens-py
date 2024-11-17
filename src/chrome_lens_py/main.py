@@ -8,7 +8,7 @@ import json
 from .lens_api import LensAPI
 from rich.console import Console
 from .exceptions import LensAPIError, LensParsingError, LensCookieError
-from .utils import get_default_config_dir
+from .utils import get_default_config_dir, is_supported_mime
 
 console = Console()
 
@@ -21,6 +21,7 @@ def print_help():
     console.print("[b]--config-file[/b]             Path to the configuration file")
     console.print("[b]--debug=(info|debug)[/b]      Enable logging at the specified level")
     console.print("[b]--coordinate-format[/b]       Output coordinates format: 'percent' or 'pixels'")
+    console.print("[b]-st, --sleep-time[/b]         Sleep time between requests in milliseconds")
     console.print("[b]-uc, --update-config[/b]      Update the default config file with CLI arguments (excluding proxy and cookies)")
     console.print("[b]--debug-out[/b]               Path to save debug output response")
     console.print("\n[b][data_type][/b] options:")
@@ -68,6 +69,46 @@ def save_config(config):
     except Exception as e:
         console.print(f"[red]Error saving config file:[/red] {e}")
 
+def process_image(image_source, data_type, coordinate_format, api):
+    try:
+        if data_type == "all":
+            result = api.get_all_data(image_source, coordinate_format=coordinate_format)
+        elif data_type == "full_text_default":
+            result = api.get_full_text(image_source)
+        elif data_type == "full_text_old_method":
+            result = api.get_stitched_text_sequential(image_source, coordinate_format=coordinate_format)
+        elif data_type == "full_text_new_method":
+            result = api.get_stitched_text_smart(image_source, coordinate_format=coordinate_format)
+        elif data_type == "coordinates":
+            result = api.get_text_with_coordinates(image_source, coordinate_format=coordinate_format)
+        else:
+            console.print("[red]Invalid data type specified.[/red]")
+            sys.exit(1)
+        return result
+    except (LensAPIError, LensParsingError, LensCookieError) as e:
+        console.print(f"[red]Error processing {image_source}:[/red] {e}")
+        return None
+
+def process_directory(directory_path, data_type, coordinate_format, api):
+    # Open the output text file
+    output_file_path = os.path.join(directory_path, 'output.txt')
+    with open(output_file_path, 'w', encoding='utf-8') as output_file:
+        # List all files in the directory
+        for filename in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, filename)
+            if os.path.isfile(file_path):
+                # Check if it's an image
+                if is_supported_mime(file_path):
+                    # Process the image
+                    result = process_image(file_path, data_type, coordinate_format, api)
+                    if result:
+                        # Write to output file
+                        output_file.write(f"#{filename}\n")
+                        output_file.write(f"{result}\n\n")
+                else:
+                    # Ignore non-image files
+                    continue
+
 def main():
     parser = argparse.ArgumentParser(
         description="Process images with Google Lens API and extract text data.", add_help=False)
@@ -83,6 +124,8 @@ def main():
                         help="Enable logging at the specified level")
     parser.add_argument('--coordinate-format', choices=['percent', 'pixels'], default=None,
                         help="Output coordinates format: 'percent' or 'pixels'")
+    parser.add_argument('-st', '--sleep-time', type=int, default=None,
+                        help="Sleep time between requests in milliseconds")
     parser.add_argument('--config-file', help="Path to the configuration file")
     parser.add_argument('-uc', '--update-config', action='store_true',
                         help="Update the default config file with CLI arguments (excluding proxy and cookies)")
@@ -121,6 +164,7 @@ def main():
     coordinate_format = None
     logging_level = logging.WARNING
     data_type = None
+    sleep_time = None  # Added sleep_time variable
 
     # Set cookies
     if 'cookies' in config:
@@ -164,6 +208,14 @@ def main():
     if not data_type:
         data_type = 'all'  # Default value
 
+    # Set sleep_time
+    if 'sleep_time' in config:
+        sleep_time = config['sleep_time']
+    if args.sleep_time is not None:
+        sleep_time = args.sleep_time
+    if sleep_time is None:
+        sleep_time = 1000  # Default sleep_time in milliseconds
+
     # Build final configuration
     if cookies:
         final_config['cookies'] = cookies
@@ -175,11 +227,6 @@ def main():
     # Update config file if -uc flag is specified and config is in default location
     if args.update_config and not args.config_file:
         # Only update the default config file
-        # app_name = 'chrome-lens-py'
-        # config_dir = get_default_config_dir(app_name)
-        # default_config_file = os.path.join(config_dir, 'config.json')
-        # Update config dictionary
-        # Exclude proxy, cookies, image_source
         config_updated = False
         if args.coordinate_format and config.get('coordinate_format') != args.coordinate_format:
             config['coordinate_format'] = args.coordinate_format
@@ -190,11 +237,14 @@ def main():
         if args.data_type and config.get('data_type') != args.data_type:
             config['data_type'] = args.data_type
             config_updated = True
+        if args.sleep_time is not None and config.get('sleep_time') != args.sleep_time:
+            config['sleep_time'] = args.sleep_time
+            config_updated = True
         if config_updated:
             save_config(config)
 
-    # Pass logging level to LensAPI
-    api = LensAPI(config=final_config, logging_level=logging_level)
+    # Pass logging level and sleep_time to LensAPI
+    api = LensAPI(config=final_config, logging_level=logging_level, sleep_time=sleep_time)
 
     image_source = args.image_source
 
@@ -203,22 +253,12 @@ def main():
         coordinate_format = 'percent'  # default value
 
     try:
-        if data_type == "all":
-            result = api.get_all_data(image_source, coordinate_format=coordinate_format)
-        elif data_type == "full_text_default":
-            result = api.get_full_text(image_source)
-        elif data_type == "full_text_old_method":
-            result = api.get_stitched_text_sequential(image_source, coordinate_format=coordinate_format)
-        elif data_type == "full_text_new_method":
-            result = api.get_stitched_text_smart(image_source, coordinate_format=coordinate_format)
-        elif data_type == "coordinates":
-            result = api.get_text_with_coordinates(image_source, coordinate_format=coordinate_format)
+        if os.path.isdir(image_source):
+            process_directory(image_source, data_type, coordinate_format, api)
         else:
-            console.print("[red]Invalid data type specified.[/red]")
-            sys.exit(1)
-
-        # Output the result
-        console.print(result)
+            result = process_image(image_source, data_type, coordinate_format, api)
+            if result:
+                console.print(result)
 
     except (LensAPIError, LensParsingError, LensCookieError) as e:
         console.print(f"[red]Error:[/red] {e}")

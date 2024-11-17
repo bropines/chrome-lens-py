@@ -613,6 +613,90 @@ You can also specify settings via environment variables:
 
 </details>
 
+<details> 
+<summary><b>Batch Processing</b></summary>
+
+### Batch Processing of Multiple Images
+
+This project supports batch processing of images when a directory path is provided instead of a single image file. The application will process all image files in the specified directory.
+
+#### CLI Usage
+
+To perform batch processing via the command line, simply provide the path to the directory containing the images instead of a single image file.
+
+```bash
+lens_scan path/to/directory <data_type>
+```
+
+* **`path/to/directory`**: Path to the directory containing image files.
+* **`<data_type>`**: Type of data to extract (e.g., `all`, `full_text_default`, etc.).
+
+**Example:**
+
+```bash
+lens_scan /path/to/images all
+```
+
+#### Output
+
+When processing a directory, the output will be saved to a text file named `output.txt` within the same directory. The format of the output file is:
+
+```csharp
+#filename1.jpg
+Extracted text from filename1.jpg
+
+#filename2.png
+Extracted text from filename2.png
+
+...
+```
+
+Each image's extracted text is prefixed with a `#` followed by the filename, and the text retains the original formatting, including newline characters.
+
+#### Sleep Time Between Requests
+
+To avoid overwhelming the API and to comply with rate limiting policies, the library introduces a delay between processing each image. By default, this sleep time is set to 1000 milliseconds (1 second). You can adjust this delay using the `-st` or `--sleep-time` flag, specifying the time in milliseconds.
+
+**Example:**
+
+```bash
+lens_scan /path/to/images all -st 500
+```
+
+This command sets the sleep time to 500 milliseconds between processing each image.
+
+#### Programmatic API Usage
+
+You can also perform batch processing using the Python API by providing a directory path to the methods.
+
+**Example:**
+
+```python
+from chrome_lens_py import LensAPI
+
+api = LensAPI(sleep_time=500)  # Set sleep time to 500 milliseconds
+
+# Path to the directory containing images
+directory_path = '/path/to/images'
+
+# Process the directory to extract full text from each image
+results = api.get_full_text(directory_path)
+
+# Iterate through the results
+for filename, text in results.items():
+    print(f"# {filename}")
+    print(text)
+    print()
+```
+
+#### Notes:
+
+* Only image files with supported MIME types will be processed. Non-image files or unsupported formats will be ignored.
+* The sleep time between requests can be adjusted to meet your needs, but be cautious when reducing it to prevent being rate-limited by the API.
+* **Error Handling**: If an error occurs while processing an image, the error message will be stored in the results under that filename.
+
+</details>
+
 ## Project Structure
 
 ```plain
