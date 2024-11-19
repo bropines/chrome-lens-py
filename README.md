@@ -625,23 +625,59 @@ This project supports batch processing of images when a directory path is provid
 To perform batch processing via the command line, simply provide the path to the directory containing the images instead of a single image file.
 
 ```bash
-lens_scan path/to/directory <data_type>
+lens_scan path/to/directory <data_type> [options]
 ```
 
 * **`path/to/directory`**: Path to the directory containing image files.
 * **`<data_type>`**: Type of data to extract (e.g., `all`, `full_text_default`, etc.).
+* **`[options]`**: Additional options such as `--out-txt`.
 
 **Example:**
 
 ```bash
-lens_scan /path/to/images all
+lens_scan /path/to/images all --out-txt=per_file
 ```
 
-#### Output
+#### Output Options with `--out-txt`
 
-When processing a directory, the output will be saved to a text file named `output.txt` within the same directory. The format of the output file is:
+The `--out-txt` flag allows you to control how the output is saved when processing multiple images:
 
-```csharp
+* **`--out-txt=per_file`**: Outputs each result to a separate text file based on the image name within the same directory.
+* **`--out-txt=filename.txt`**: Outputs all results into a single text file with the specified name within the same directory.
+* **No `--out-txt` flag**: By default, all results are saved into a file named `output.txt` within the same directory.
+
+**Examples:**
+
+1. **Output to Separate Files Per Image:**
+    
+    ```bash
+    lens_scan /path/to/images all --out-txt=per_file
+    ```
+    
+    This command processes all images in `/path/to/images` and saves each result to a separate text file named after the image (e.g., `image1.txt`, `image2.txt`).
+    
+2. **Output All Results to a Single File:**
+    
+    ```bash
+    lens_scan /path/to/images all --out-txt=results.txt
+    ```
+    
+    This command processes all images and saves all results into `results.txt` within the same directory.
+    
+3. **Default Output (output.txt):**
+    
+    ```bash
+    lens_scan /path/to/images all
+    ```
+    
+    Without specifying `--out-txt`, the results are saved into `output.txt` within the same directory.
+    
+
+#### Output Format
+
+When outputting to a single file (default behavior or when specifying a filename with `--out-txt`), the format of the output file is:
+
+```plaintext
 #filename1.jpg
 Extracted text from filename1.jpg
 
@@ -684,18 +720,23 @@ results = api.get_full_text(directory_path)
 
 # Iterate through the results
 for filename, text in results.items():
-    print(f"# {filename}")
-    print(text)
-    print()
+    if 'error' in text:
+        print(f"Error processing {filename}: {text['error']}")
+    else:
+        print(f"# {filename}")
+        print(text)
+        print()
 ```
 
 #### Notes:
 
-* Only image files with supported MIME types will be processed. Non-image files or unsupported formats will be ignored.
-* The sleep time between requests can be adjusted to meet your needs, but be cautious when reducing it to prevent being rate-limited by the API.
+* **Supported Image Files**: Only image files with supported MIME types will be processed. Non-image files or unsupported formats will be ignored.
+* **Adjusting Sleep Time**: The sleep time between requests can be adjusted to meet your needs, but be cautious when reducing it to prevent being rate-limited by the API.
 * **Error Handling**: If an error occurs while processing an image, the error message will be stored in the results under that filename.
+* **Output Files**: When using `--out-txt=per_file`, the output text files will be saved in the same directory as the images, with the same base filename and a `.txt` extension.
 
 </details>
+
 
 ## Project Structure
 

@@ -38,11 +38,13 @@ class LensCore:
                     'http://': proxy,
                     'https://': proxy
                 })
+                logging.debug(f"Using HTTPX client with proxy: {proxy}")
             else:
                 self.session.proxies = {
                     'http': proxy,
                     'https': proxy
                 }
+                logging.debug(f"Using requests session with proxy: {proxy}")
 
     def generate_cookie_header(self, headers):
         """Adds cookies to request headers."""
@@ -53,7 +55,10 @@ class LensCore:
         headers = HEADERS.copy()
         self.generate_cookie_header(headers)
 
-        logging.info(f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}")
+        logging.info("Sending data to Google Lens API...")
+        logging.debug(
+            f"Sending data to {LENS_ENDPOINT} via {'httpx' if self.use_httpx else 'requests'} with proxy: {self.config.get('proxy')}"
+        )
 
         file_name = f"image.{MIME_TO_EXT[mime]}"
         files = {
@@ -121,26 +126,34 @@ class Lens(LensCore):
             raise FileNotFoundError(f"File not found: {file_path}")
         if not is_supported_mime(file_path):
             raise ValueError("Unsupported file type")
+        logging.debug(f"Resizing image: {file_path}")
         img_data, dimensions, original_size = resize_image(file_path)
+        logging.debug(f"Image resized to dimensions: {dimensions}, original size: {original_size}")
         result = self.scan_by_data(img_data, 'image/jpeg', dimensions)
-        return result, original_size  # Возвращаем оригинальные размеры
+        return result, original_size
 
     def scan_by_url(self, url):
         """Scans an image from a URL and returns the results."""
         try:
+            logging.info("Downloading image from URL...")
+            logging.debug(f"Downloading image from URL: {url}")
             response = self.session.get(url, stream=True)
             if response.status_code != 200:
                 raise LensError(f"Failed to download image from URL: {url}")
             buffer = response.content  # Get image bytes
             return self.scan_by_buffer(buffer)
         except Exception as e:
+            logging.error(f"Error downloading or processing image from URL: {e}")
             raise LensError(f"Error downloading or processing image from URL: {e}") from e
 
     def scan_by_buffer(self, buffer):
         """Scans an image from the buffer and returns the results."""
         try:
+            logging.debug("Resizing image from buffer")
             img_data, dimensions, original_size = resize_image_from_buffer(buffer)
+            logging.debug(f"Image resized to dimensions: {dimensions}, original size: {original_size}")
             result = self.scan_by_data(img_data, 'image/jpeg', dimensions)
-            return result, original_size  # Возвращаем оригинальные размеры
+            return result, original_size
         except Exception as e:
+            logging.error(f"Error processing image from buffer: {e}")
             raise LensError(f"Error processing image from buffer: {e}") from e

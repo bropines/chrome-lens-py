@@ -1,4 +1,5 @@
 import re
+import logging
 
 def stitch_text_from_coordinates(text_with_coords):
     """Stitches text from coordinates along lines and positions."""
@@ -131,7 +132,7 @@ def simplify_output(result, image_dimensions=None, coordinate_format='percent'):
             simplified['stitched_text_smart'] = stitch_text_smart(text_with_coords)
             simplified['stitched_text_sequential'] = stitch_text_sequential(text_with_coords)
     except Exception as e:
-        print(f"Error in simplify_output: {e}")
+        logging.error(f"Error in simplify_output: {e}")
         simplified['error'] = str(e)
 
     return simplified

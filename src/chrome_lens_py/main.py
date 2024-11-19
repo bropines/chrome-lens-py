@@ -7,6 +7,7 @@ import os
 import json
 from .lens_api import LensAPI
 from rich.console import Console
+from rich.logging import RichHandler
 from .exceptions import LensAPIError, LensParsingError, LensCookieError
 from .utils import get_default_config_dir, is_supported_mime
 
@@ -24,6 +25,7 @@ def print_help():
     console.print("[b]-st, --sleep-time[/b]         Sleep time between requests in milliseconds")
     console.print("[b]-uc, --update-config[/b]      Update the default config file with CLI arguments (excluding proxy and cookies)")
     console.print("[b]--debug-out[/b]               Path to save debug output response")
+    console.print("[b]--out-txt[/b]                 Output option: 'per_file' to output each result to a separate text file based on image name, or specify a filename to output all results into one file")
     console.print("\n[b][data_type][/b] options:")
     console.print("[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
     console.print("[b]full_text_default[/b]         Get only the default full text")
@@ -71,6 +73,7 @@ def save_config(config):
 
 def process_image(image_source, data_type, coordinate_format, api):
     try:
+        logging.debug(f"Processing image source: {image_source} with data type: {data_type}")
         if data_type == "all":
             result = api.get_all_data(image_source, coordinate_format=coordinate_format)
         elif data_type == "full_text_default":
@@ -84,30 +87,52 @@ def process_image(image_source, data_type, coordinate_format, api):
         else:
             console.print("[red]Invalid data type specified.[/red]")
             sys.exit(1)
+        logging.debug(f"Result for {image_source}: {result}")
         return result
     except (LensAPIError, LensParsingError, LensCookieError) as e:
+        logging.error(f"Error processing {image_source}: {e}")
         console.print(f"[red]Error processing {image_source}:[/red] {e}")
         return None
 
-def process_directory(directory_path, data_type, coordinate_format, api):
-    # Open the output text file
-    output_file_path = os.path.join(directory_path, 'output.txt')
-    with open(output_file_path, 'w', encoding='utf-8') as output_file:
-        # List all files in the directory
-        for filename in os.listdir(directory_path):
+def process_directory(directory_path, data_type, coordinate_format, api, out_txt_option=None):
+    if out_txt_option == 'per_file':
+        # For each image file, process and write output to separate text files
+        for idx, filename in enumerate(os.listdir(directory_path)):
             file_path = os.path.join(directory_path, filename)
             if os.path.isfile(file_path):
-                # Check if it's an image
                 if is_supported_mime(file_path):
-                    # Process the image
+                    if logging.root.level > logging.DEBUG:
+                        console.print("-" * 20)
+                    logging.info(f"Processing file: {filename}...")
                     result = process_image(file_path, data_type, coordinate_format, api)
                     if result:
-                        # Write to output file
-                        output_file.write(f"#{filename}\n")
-                        output_file.write(f"{result}\n\n")
+                        base_name, _ = os.path.splitext(filename)
+                        output_file_path = os.path.join(directory_path, f"{base_name}.txt")
+                        with open(output_file_path, 'w', encoding='utf-8') as output_file:
+                            output_file.write(f"{result}\n")
+                        logging.info(f"Result written to {output_file_path}")
                 else:
-                    # Ignore non-image files
-                    continue
+                    logging.debug(f"Skipping non-image file: {file_path}")
+    else:
+        # Output all results into a single file
+        output_file_name = out_txt_option if out_txt_option else 'output.txt'
+        output_file_path = os.path.join(directory_path, output_file_name)
+        with open(output_file_path, 'w', encoding='utf-8') as output_file:
+            for idx, filename in enumerate(os.listdir(directory_path)):
+                file_path = os.path.join(directory_path, filename)
+                if os.path.isfile(file_path):
+                    if is_supported_mime(file_path):
+                        if logging.root.level > logging.DEBUG:
+                            console.print("-" * 20)
+                        logging.info(f"Processing file: {filename}...")
+                        result = process_image(file_path, data_type, coordinate_format, api)
+                        if result:
+                            output_file.write(f"#{filename}\n")
+                            output_file.write(f"{result}\n\n")
+                            logging.info(f"Result for {filename} written to {output_file_path}")
+                    else:
+                        logging.debug(f"Skipping non-image file: {file_path}")
+        logging.info(f"All results written to {output_file_path}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -129,7 +154,11 @@ def main():
     parser.add_argument('--config-file', help="Path to the configuration file")
     parser.add_argument('-uc', '--update-config', action='store_true',
                         help="Update the default config file with CLI arguments (excluding proxy and cookies)")
-    parser.add_argument('--debug-out', help="Path to save debug output response")  # Added argument
+    parser.add_argument('--debug-out', help="Path to save debug output response")
+    parser.add_argument(
+        '--out-txt',
+        help="Output option: 'per_file' to output each result to a separate text file based on image name, or specify a filename to output all results into one file"
+    )
 
     args = parser.parse_args()
 
@@ -199,7 +228,29 @@ def main():
     elif args.debug == 'info':
         logging_level = logging.INFO
 
-    logging.basicConfig(level=logging_level)
+    # Update logging configuration to include module, function, and line number, and use RichHandler
+    from rich.logging import RichHandler
+
+    # Adjust the logging format based on the logging level
+    if logging_level == logging.DEBUG:
+        FORMAT = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+    elif logging_level == logging.INFO:
+        FORMAT = "[%(levelname)s] %(message)s"
+    else:
+        FORMAT = "%(message)s"
+
+    logging.basicConfig(
+        level=logging_level,
+        format=FORMAT,
+        datefmt="[%X]",
+        handlers=[RichHandler(
+            rich_tracebacks=True,
+            markup=True,
+            show_level=False if logging_level == logging.WARNING else True,
+            show_time=False,
+            show_path=False
+        )]
+    )
 
     # Set data_type
     data_type = args.data_type
@@ -254,13 +305,14 @@ def main():
 
     try:
         if os.path.isdir(image_source):
-            process_directory(image_source, data_type, coordinate_format, api)
+            process_directory(image_source, data_type, coordinate_format, api, args.out_txt)
         else:
             result = process_image(image_source, data_type, coordinate_format, api)
             if result:
                 console.print(result)
 
     except (LensAPIError, LensParsingError, LensCookieError) as e:
+        logging.error(f"Error: {e}")
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 

@@ -19,10 +19,12 @@ class LensAPI:
             file_path = os.path.join(image_source, filename)
             if os.path.isfile(file_path) and is_supported_mime(file_path):
                 try:
+                    logging.info(f"Processing batch file: {file_path}")
                     method = getattr(self, '_' + method_name + '_single')
                     # Call the method with appropriate arguments
                     result = method(file_path, coordinate_format)
                     results[filename] = result
+                    logging.debug(f"Result for {filename}: {result}")
                     time.sleep(self.sleep_between_requests)  # Sleep between requests
                 except (LensAPIError, LensParsingError, KeyError) as e:
                     logging.error(f"Error processing {file_path}: {e}")
@@ -45,6 +47,7 @@ class LensAPI:
                 result, original_size = self.lens.scan_by_file(image_source)
             return simplify_output(result, image_dimensions=original_size, coordinate_format=coordinate_format)
         except (LensAPIError, LensParsingError) as e:
+            logging.error(f"Error getting all data from image: {e}")
             raise LensAPIError(f"Error getting all data from image: {e}") from e
 
     def get_full_text(self, image_source, coordinate_format='percent'):
@@ -61,6 +64,7 @@ class LensAPI:
                 result, _ = self.lens.scan_by_file(image_source)
             return extract_full_text(result['data'])
         except (LensAPIError, LensParsingError, KeyError) as e:
+            logging.error(f"Error getting full text from image: {e}")
             raise LensAPIError(f"Error getting full text from image: {e}") from e
 
     def get_text_with_coordinates(self, image_source, coordinate_format='percent'):
@@ -78,6 +82,7 @@ class LensAPI:
             simplified_result = simplify_output(result, image_dimensions=original_size, coordinate_format=coordinate_format)
             return simplified_result['text_with_coordinates']
         except (LensAPIError, LensParsingError, KeyError) as e:
+            logging.error(f"Error getting text with coordinates from image: {e}")
             raise LensAPIError(f"Error getting text with coordinates from image: {e}") from e
 
     def get_stitched_text_smart(self, image_source, coordinate_format='percent'):
@@ -95,6 +100,7 @@ class LensAPI:
             simplified_result = simplify_output(result, image_dimensions=original_size, coordinate_format=coordinate_format)
             return simplified_result['stitched_text_smart']
         except (LensAPIError, LensParsingError, KeyError) as e:
+            logging.error(f"Error getting stitched text (smart method) from image: {e}")
             raise LensAPIError(f"Error getting stitched text (smart method) from image: {e}") from e
 
     def get_stitched_text_sequential(self, image_source, coordinate_format='percent'):
@@ -112,4 +118,5 @@ class LensAPI:
             simplified_result = simplify_output(result, image_dimensions=original_size, coordinate_format=coordinate_format)
             return simplified_result['stitched_text_sequential']
         except (LensAPIError, LensParsingError, KeyError) as e:
+            logging.error(f"Error getting stitched text (sequential method) from image: {e}")
             raise LensAPIError(f"Error getting stitched text (sequential method) from image: {e}") from e
