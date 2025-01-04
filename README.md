@@ -191,6 +191,46 @@ from chrome_lens_py import LensAPI
      print(result)
      ```
 
+#### Configuration Options
+
+You can customize the behavior of the `LensAPI` by passing a `config` dictionary when instantiating the class. This allows you to control various aspects of the API, such as headers, proxies, cookie management, debugging, and request timing.
+
+The following keys can be used in the `config` dictionary:
+
+- **`header_type`**:  Selects the set of headers to use for requests.
+    - `'default'`: Uses the default set of headers.
+    - `'custom'`: Uses a custom set of headers.
+    ```python
+    api = LensAPI(config={'header_type': 'custom'})
+    ```
+
+- **`proxy`**: Specifies a proxy server for making requests. Supports HTTP, HTTPS, and SOCKS proxies.
+    ```python
+    api = LensAPI(config={'proxy': 'socks5://127.0.0.1:2080'})
+    ```
+
+- **`cookies`**:  Manages cookies for the session. Can be a file path to a Netscape format cookie file, a cookie string, or a cookie dictionary.
+    ```python
+    api = LensAPI(config={'cookies': '/path/to/cookie_file.txt'})
+    ```
+    ```python
+    api = LensAPI(config={'cookies': '__Secure-ENID=...; NID=...'})
+    ```
+    ```python
+    api = LensAPI(config={'cookies': {'__Secure-ENID': {'name': '...', 'value': '...', 'expires': ...}, 'NID': {'name': '...', 'value': '...', 'expires': ...}}})
+    ```
+
+- **`sleep_time`**: Sets the delay in milliseconds between consecutive API requests. This is particularly useful in batch processing to avoid overloading the server.
+    ```python
+    api = LensAPI(config={'sleep_time': 500}) # Set a 500ms delay
+    ```
+
+- **`debug_out`**:  Specifies the file path to save the raw API response for debugging purposes when the logging level is set to `DEBUG`.
+    ```python
+    api = LensAPI(config={'debug_out': '/path/to/response_debug.txt'})
+    ```
+
+
 </details>
 
 <details>

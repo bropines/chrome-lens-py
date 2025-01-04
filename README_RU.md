@@ -190,6 +190,44 @@ from chrome_lens_py import LensAPI
      result = api.get_text_with_coordinates('https://example.com/image.jpg')
      print(result)
      ```
+#### Параметры конфигурации
+
+Вы можете настроить поведение LensAPI, передав словарь config при создании экземпляра класса. Это позволяет вам контролировать различные аспекты API, такие как заголовки, прокси, управление файлами cookie, отладку и время запроса.
+
+В словаре `config` можно использовать следующие ключи:
+
+- **`header_type`**: выбирает набор заголовков, которые будут использоваться для запросов.
+    - `'default'`: использует набор заголовков по умолчанию.
+    - `'custom'`: использует собственный набор заголовков.
+    ``` python
+    API = LensAPI(config={'header_type': 'custom'})
+    ```
+
+- **`proxy`**: указывает прокси-сервер для отправки запросов. Поддерживает прокси-серверы HTTP, HTTPS и SOCKS.
+    ``` python
+    api = LensAPI(config={'proxy': 'socks5://127.0.0.1:2080'})
+    ```
+
+- **`cookies`**: управляет файлами cookie для сеанса. Может быть путем к файлу cookie формата Netscape, строке cookie или словарю cookie.
+    ``` python
+    api = LensAPI(config={'cookies': '/path/to/cookie_file.txt'})
+    ```
+    ``` python
+    api = LensAPI(config={'cookies': '__Secure-ENID=...; NID=...'})
+    ```
+    ``` python
+    api = LensAPI(config={'cookies': {'__Secure-ENID': {'name': '...', 'value': '...', 'expires': ...}, 'NID ': {'имя': '...', 'значение': '...', 'истекает': ...}}})
+    ```
+
+- **`sleep_time`**: устанавливает задержку в миллисекундах между последовательными запросами API. Это особенно полезно при пакетной обработке, чтобы избежать перегрузки сервера.
+    ``` питон
+    api = LensAPI(config={'sleep_time': 500}) # Установите задержку 500 мс
+    ```
+
+- **`debug_out`**: указывает путь к файлу для сохранения необработанного ответа API для целей отладки, когда уровень ведения журнала установлен на `DEBUG`.
+    ``` питон
+    api = LensAPI(config={'debug_out': '/path/to/response_debug.txt'})
+    ```
 
 </details>
 

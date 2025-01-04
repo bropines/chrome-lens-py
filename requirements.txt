@@ -4,4 +4,4 @@ filetype
 lxml
 json5
 PySocks
-httpx
+httpx==0.27.2
