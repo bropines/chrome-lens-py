@@ -35,6 +35,7 @@ class LensCore:
     def setup_proxies(self):
         """Sets up proxies for the session if specified in the configuration."""
         proxy = self.config.get('proxy')
+        
         if proxy:
             if proxy.startswith('socks'):
                 self.use_httpx = True
@@ -49,6 +50,14 @@ class LensCore:
                     'https': proxy
                 }
                 logging.debug(f"Using requests session with proxy: {proxy}")
+        else:
+            # Явно отключаем прокси для обоих клиентов
+            self.session.proxies = {
+                'http': None,
+                'https': None
+            }
+            self.client = httpx.Client(proxies=None)
+            logging.debug("Proxies explicitly disabled")
 
     def generate_cookie_header(self, headers):
         """Adds cookies to the request headers."""
