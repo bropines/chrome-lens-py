@@ -9,9 +9,10 @@ README = (HERE / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='chrome_lens_py',
-    version='1.5.1',
+    version='1.5.2',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    python_requires='>=3.8',
     install_requires=[
         'requests',
         'Pillow',
@@ -20,7 +21,7 @@ setup(
         'json5',
         'rich',
         'PySocks',
-        'httpx==0.27.2',
+        'httpx>=0.28.0',
         'socksio',
     ],
     entry_points={
@@ -36,6 +37,11 @@ setup(
     url='https://github.com/bropines/chrome-lens-py',
     classifiers=[
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],

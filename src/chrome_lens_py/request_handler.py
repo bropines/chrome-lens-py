@@ -1,4 +1,3 @@
-
 import requests
 import httpx
 import io
@@ -35,16 +34,15 @@ class LensCore:
     def setup_proxies(self):
         """Sets up proxies for the session if specified in the configuration."""
         proxy = self.config.get('proxy')
-        
+
         if proxy:
             if proxy.startswith('socks'):
+                # Для прокси через SOCKS используем httpx с параметром proxy (а не proxies)
                 self.use_httpx = True
-                self.client = httpx.Client(proxies={
-                    'http://': proxy,
-                    'https://': proxy
-                })
+                self.client = httpx.Client(proxy=proxy)
                 logging.debug(f"Using HTTPX client with proxy: {proxy}")
             else:
+                # Если прокси не SOCKS, оставляем requests для работы с прокси
                 self.session.proxies = {
                     'http': proxy,
                     'https': proxy
@@ -52,11 +50,8 @@ class LensCore:
                 logging.debug(f"Using requests session with proxy: {proxy}")
         else:
             # Явно отключаем прокси для обоих клиентов
-            self.session.proxies = {
-                'http': None,
-                'https': None
-            }
-            self.client = httpx.Client(proxies=None)
+            self.session.proxies = {'http': None, 'https': None}
+            self.client = httpx.Client()
             logging.debug("Proxies explicitly disabled")
 
     def generate_cookie_header(self, headers):
@@ -97,11 +92,19 @@ class LensCore:
         }
 
         sleep(self.sleep_time)
-        params = {'ep': 'ccm', 're': 'dcsp', 's': '4', 'st': str(time.time() * 1000), 'sideimagesearch': '1', 'vpw': str(dimensions[0]), 'vph': str(dimensions[1])}
-        
+        params = {
+            'ep': 'ccm',
+            're': 'dcsp',
+            's': '4',
+            'st': str(time.time() * 1000),
+            'sideimagesearch': '1',
+            'vpw': str(dimensions[0]),
+            'vph': str(dimensions[1])
+        }
+
         if self.use_httpx:
             response = self.client.post(
-                LENS_ENDPOINT, headers=headers, files=files)
+                LENS_ENDPOINT, headers=headers, files=files, params=params)
         else:
             response = self.session.post(
                 LENS_ENDPOINT, headers=headers, files=files, params=params)
@@ -110,8 +113,7 @@ class LensCore:
 
         # Update cookies based on the response
         if 'set-cookie' in response.headers:
-            self.cookies_manager.update_cookies(
-                response.headers['set-cookie'])
+            self.cookies_manager.update_cookies(response.headers['set-cookie'])
 
         if response.status_code != 200:
             logging.error(
