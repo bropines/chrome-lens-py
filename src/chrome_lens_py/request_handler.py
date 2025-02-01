@@ -9,7 +9,7 @@ import logging
 import random
 import string
 
-from .constants import LENS_ENDPOINT, HEADERS_DEFAULT, HEADERS_CUSTOM, MIME_TO_EXT
+from .constants import LENS_ENDPOINT, HEADERS_DEFAULT, HEADERS_CUSTOM, CHROME_HEADERS, MIME_TO_EXT
 from .utils import sleep, is_supported_mime
 from .image_processing import resize_image, resize_image_from_buffer
 from .cookies_manager import CookiesManager
@@ -37,19 +37,16 @@ class LensCore:
 
         if proxy:
             if proxy.startswith('socks'):
-                # Для прокси через SOCKS используем httpx с параметром proxy (а не proxies)
                 self.use_httpx = True
                 self.client = httpx.Client(proxy=proxy)
                 logging.debug(f"Using HTTPX client with proxy: {proxy}")
             else:
-                # Если прокси не SOCKS, оставляем requests для работы с прокси
                 self.session.proxies = {
                     'http': proxy,
                     'https': proxy
                 }
                 logging.debug(f"Using requests session with proxy: {proxy}")
         else:
-            # Явно отключаем прокси для обоих клиентов
             self.session.proxies = {'http': None, 'https': None}
             self.client = httpx.Client()
             logging.debug("Proxies explicitly disabled")
@@ -63,6 +60,9 @@ class LensCore:
         header_type = self.config.get('header_type', 'default')
         if header_type == 'custom':
             headers = HEADERS_CUSTOM.copy()
+            logging.debug("Using CUSTOM headers.")
+        elif header_type == 'chrome':
+            headers = CHROME_HEADERS.copy()
             logging.debug("Using CUSTOM headers.")
         else:
             headers = HEADERS_DEFAULT.copy()

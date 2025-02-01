@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='chrome_lens_py',
-    version='1.5.2',
+    version='1.5.3',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     python_requires='>=3.8',

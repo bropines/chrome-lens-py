@@ -1,5 +1,3 @@
-# main.py
-
 import sys
 import argparse
 import logging
@@ -11,7 +9,7 @@ from rich.logging import RichHandler
 from .lens_api import LensAPI
 from .exceptions import LensAPIError, LensParsingError, LensCookieError
 from .utils import get_default_config_dir, is_supported_mime
-from .constants import HEADERS_DEFAULT, HEADERS_CUSTOM
+from .constants import HEADERS_DEFAULT, HEADERS_CUSTOM, CHROME_HEADERS
 
 console = Console()
 
@@ -201,7 +199,7 @@ def main():
     # New argument
     parser.add_argument(
         '--header-type',
-        choices=['default', 'custom'],
+        choices=['default', 'custom', 'chrome'],
         default='default',
         help="Header type to use: 'default' or 'custom'"
     )
