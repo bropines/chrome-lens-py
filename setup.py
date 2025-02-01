@@ -5,11 +5,11 @@ import pathlib
 HERE = pathlib.Path(__file__).parent
 
 # The text of the README file
-README = (HERE / "README.md").read_text()
+README = (HERE / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='chrome_lens_py',
-    version='1.5.0',
+    version='1.5.1',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[

@@ -97,13 +97,14 @@ class LensCore:
         }
 
         sleep(self.sleep_time)
-
+        params = {'ep': 'ccm', 're': 'dcsp', 's': '4', 'st': str(time.time() * 1000), 'sideimagesearch': '1', 'vpw': str(dimensions[0]), 'vph': str(dimensions[1])}
+        
         if self.use_httpx:
             response = self.client.post(
                 LENS_ENDPOINT, headers=headers, files=files)
         else:
             response = self.session.post(
-                LENS_ENDPOINT, headers=headers, files=files)
+                LENS_ENDPOINT, headers=headers, files=files, params=params)
 
         logging.info(f"Response code: {response.status_code}")
 
