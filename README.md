@@ -1,5 +1,3 @@
-# Google updated something again. If it doesn't work, wait. I'm looking for a solution method for now
-
 # Chrome Lens API for Python
 
 [English](/README.md) | [Русский](/README_RU.md)
