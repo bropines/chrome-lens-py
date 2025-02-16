@@ -9,7 +9,7 @@ README = (HERE / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='chrome_lens_py',
-    version='1.5.3.1',
+    version='2.0.0',
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     python_requires='>=3.8',
@@ -23,10 +23,11 @@ setup(
         'PySocks',
         'httpx>=0.28.0',
         'socksio',
+        'numpy',
     ],
     entry_points={
         'console_scripts': [
-            'lens_scan=chrome_lens_py.main:main',
+            'lens_scan=chrome_lens_py.main:cli_run', # Указываем cli_run как entry point
         ],
     },
     description='Library to use Google Lens OCR for free via API used in Chromium on python ',

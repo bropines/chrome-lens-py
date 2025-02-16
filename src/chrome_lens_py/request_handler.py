@@ -9,7 +9,7 @@ import random
 import string
 import asyncio
 
-from .constants import LENS_ENDPOINT, HEADERS_DEFAULT, HEADERS_CUSTOM, CHROME_HEADERS, MIME_TO_EXT
+from .constants import MIME_TO_EXT, LENS_ENDPOINT, HEADERS_DEFAULT #HEADERS_CUSTOM, CHROME_HEADERS, 
 from .utils import sleep, is_supported_mime
 from .image_processing import resize_image, resize_image_from_buffer
 from .cookies_manager import CookiesManager
@@ -35,14 +35,14 @@ class LensCore:
         self.rate_limit_config = self.config.get('rate_limiting', {})
         max_rpm_config = self.rate_limit_config.get('max_requests_per_minute')
         default_rpm = 30
-        max_limit_rpm = 50
+        max_limit_rpm = 40
 
         if max_rpm_config is not None:
             try:
                 self.max_requests_per_minute = int(max_rpm_config)
                 if not 1 <= self.max_requests_per_minute <= max_limit_rpm:
                     logging.warning(
-                        f"Configured rate_limit_rpm is out of range [1-50], using default value: {default_rpm}")
+                        f"Configured rate_limit_rpm is out of range [1-40], using default value: {default_rpm}")
                     self.max_requests_per_minute = default_rpm
             except ValueError:
                 logging.warning(
@@ -51,7 +51,7 @@ class LensCore:
         else:
             self.max_requests_per_minute = default_rpm # Default RPM if not in config
 
-        self.max_requests_per_minute = min(self.max_requests_per_minute, max_limit_rpm) # Hard cap at 50 RPM
+        self.max_requests_per_minute = min(self.max_requests_per_minute, max_limit_rpm) # Hard cap at 40 RPM
         self.token_bucket = self.max_requests_per_minute
         self.last_refill_time = time.monotonic()
         logging.debug(f"Rate limiting enabled, max RPM: {self.max_requests_per_minute}")
@@ -84,16 +84,16 @@ class LensCore:
 
     def get_headers(self):
         """Returns the selected set of headers based on the configuration."""
-        header_type = self.config.get('header_type', 'default')
-        if header_type == 'custom':
-            headers = HEADERS_CUSTOM.copy()
-            logging.debug("Using CUSTOM headers.")
-        elif header_type == 'chrome':
-            headers = CHROME_HEADERS.copy()
-            logging.debug("Using CUSTOM headers.")
-        else:
-            headers = HEADERS_DEFAULT.copy()
-            logging.debug("Using DEFAULT headers.")
+        # header_type = self.config.get('header_type', 'default') 
+        # if header_type == 'custom':
+        #     headers = HEADERS_CUSTOM.copy()
+        #     logging.debug("Using CUSTOM headers.")
+        # elif header_type == 'chrome':
+        #     headers = CHROME_HEADERS.copy()
+        #     logging.debug("Using CHROME headers.")
+        # else:
+        headers = HEADERS_DEFAULT.copy()
+        logging.debug("Using DEFAULT headers.")
         return headers
 
     async def _refill_token_bucket(self):
@@ -125,7 +125,7 @@ class LensCore:
 
         # Generate a random filename
         random_filename = ''.join(random.choices(string.ascii_letters, k=8))
-        file_extension = MIME_TO_EXT.get(mime, 'jpg')  # Default to 'jpg'
+        file_extension = MIME_TO_EXT.get(mime, 'jpg') 
         file_name = f"{random_filename}.{file_extension}"
 
         files = {

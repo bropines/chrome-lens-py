@@ -9,11 +9,18 @@
 - **Извлечение полного текста**: Извлекайте полный текст с изображения.
 - **Извлечение координат**: Извлекайте текст вместе с его координатами.
 - **Сшитый текст**: Восстанавливайте текст из блоков координат, используя различные методы:
-  - **Старый метод**: Последовательное сшивание текста.
-  - **Новый метод**: Улучшенное сшивание текста за счет расчета их по строчкам. Не рекомендуется на повернутых текстах. Используйте прошлый.
+  - **Умный метод**: Улучшенное построчное сшивание текста, подходит для большинства изображений (но может быть менее эффективен для сильно повернутого текста).
+  - **Последовательный метод**: Базовое последовательное сшивание текстовых блоков.
+- **Ввод из различных источников**: Обрабатывайте изображения из файловых путей, URL-адресов, объектов [PIL Image](https://pillow.readthedocs.io/en/stable/reference/Image.html) и массивов [NumPy](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html) (включая изображения, считанные с помощью [OpenCV](https://opencv.org/)).
 - **Сканирование изображений по URL**: Обрабатывайте изображения напрямую по URL без необходимости предварительно их загружать.
 - **Управление куки**: Загружайте и управляйте куки из файла в формате Netscape или напрямую через конфигурацию.
 - **Поддержка прокси**: Поддержка HTTP, HTTPS и SOCKS4/5 прокси для выполнения запросов через разные сети.
+- **Ограничение скорости (Rate Limiting)**: Контролируйте количество запросов в минуту для соблюдения ограничений использования API.
+- ~~**Выбор типа заголовков**: Выбирайте между различными наборами заголовков запросов (`default`, `custom`, `chrome`).~~ Временно убрано!
+
+**Важно: Асинхронный API**
+
+**Эта библиотека теперь использует асинхронные запросы для повышения производительности и эффективности. При использовании программного API необходимо использовать `async` и `await` в вашем коде для вызова методов API. Смотрите раздел "Использование API" для примеров.**
 
 _PS: У Google Lens есть проблема с отображением полного текста, поэтому добавлены методы, которые сшивают текст из координат._
 
@@ -58,45 +65,74 @@ pip install .
   <summary><b>Использование CLI</b></summary>
 
 ```bash
-lens_scan <image_source> <data_type>
+lens_scan <image_source> <data_type> [опции]
 ```
 
-- `<image_source>`: Путь к файлу изображения или URL.
+- `<image_source>`: Путь к файлу изображения или URL, или путь к каталогу для пакетной обработки.
 - `<data_type>`: Тип данных для извлечения (см. ниже).
+- `[опции]`: Дополнительные флаги для настройки поведения.
 
 #### Типы данных
 
-- **all**: Получить все данные (полный текст, координаты и сшитый текст с использованием обоих методов).
+- **all**: Получить все данные (полный текст, координаты и сшитый текст с использованием умного и последовательного методов).
 - **full_text_default**: Получить только полный текст по умолчанию.
-- **full_text_old_method**: Получить сшитый текст с использованием старого последовательного метода.
-- **full_text_new_method**: Получить сшитый текст с использованием нового улучшенного метода.
+- **full_text_sequential**: Получить сшитый текст с использованием последовательного метода.
+- **full_text_smart**: Получить сшитый текст с использованием умного метода.
 - **coordinates**: Получить текст вместе с координатами.
+
+#### Опции
+
+- **`-h, --help`**: Показать это справочное сообщение и выйти.
+- **`-c, --cookie-file <путь>`**: Путь к файлу cookie в формате Netscape.
+- **`-p, --proxy <URL_прокси>`**: Указать прокси-сервер (например, `socks5://user:pass@host:port`).
+- **`--config-file <путь>`**: Путь к файлу конфигурации.
+- **`--debug=(info|debug)`**: Включить логирование на указанном уровне (`info` или `debug`).
+- **`--coordinate-format=(percent|pixels)`**: Формат вывода координат: `'percent'` или `'pixels'`.
+- **`-st, --sleep-time <миллисекунды>`**: Время задержки между запросами в миллисекундах (для пакетной обработки).
+- **`-uc, --update-config`**: Обновить файл конфигурации по умолчанию аргументами CLI (исключая прокси и cookies).
+- **`--debug-out <путь>`**: Путь для сохранения отладочного вывода ответа (при использовании `--debug=debug`).
+- **`--out-txt=(per_file|имя_файла.txt)`**: Опция вывода для пакетной обработки: `'per_file'` для вывода каждого результата в отдельный текстовый файл, или указать `имя_файла.txt` для общего файла вывода.
+- ~~**`--header-type=(default|custom|chrome)`**: Тип заголовков для использования: `'default'`, `'custom'` или `'chrome'`.~~ Временно убрано!
+- **`--rate-limit-rpm <RPM>`**: Установить максимальное количество запросов в минуту (RPM), значение от 1 до 50.
 
 #### Примеры
 
-Извлечение текста с использованием нового метода сшивания из локального файла:
+Извлечение текста с использованием умного метода сшивания из локального файла:
 
 ```bash
-lens_scan path/to/image.jpg full_text_new_method
+lens_scan путь/к/изображению.jpg full_text_smart
 ```
 
-Извлечение текста с использованием нового метода сшивания по URL:
+Извлечение текста с использованием умного метода сшивания по URL:
 
 ```bash
-lens_scan https://example.com/image.jpg full_text_new_method
+lens_scan https://example.com/image.jpg full_text_smart
 ```
 
-Получение всех доступных данных из локального файла:
+Получение всех доступных данных из локального файла и вывод координат в пикселях:
 
 ```bash
-lens_scan path/to/image.jpg all
+lens_scan путь/к/изображению.jpg all --coordinate-format=pixels
 ```
 
-Получение всех доступных данных по URL:
+Обработка всех изображений в каталоге и сохранение результатов в отдельные файлы:
 
 ```bash
-lens_scan https://example.com/image.jpg all
+lens_scan /путь/к/изображениям all --out-txt=per_file
 ```
+
+Установка ограничения скорости в 30 запросов в минуту:
+
+```bash
+lens_scan путь/к/изображению.jpg all --rate-limit-rpm 30
+```
+
+~~Использование Chrome-подобных заголовков для запросов:~~ Временно убрано!
+
+```bash
+lens_scan путь/к/изображению.jpg all --header-type chrome
+```
+
 
 #### CLI Справка
 
@@ -113,11 +149,16 @@ lens_scan -h
 
 В дополнение к CLI инструменту, этот проект предоставляет Python API, который можно использовать в ваших скриптах.
 
+**Важно: Асинхронный API**
+
+**`LensAPI` разработан для асинхронных операций. Вы должны использовать `async` и `await` при вызове его методов.**
+
 #### Базовое использование API
 
-Сначала импортируйте класс `LensAPI`:
+Сначала импортируйте класс `LensAPI` и `asyncio`:
 
 ```python
+import asyncio
 from chrome_lens_py import LensAPI
 ```
 
@@ -126,108 +167,140 @@ from chrome_lens_py import LensAPI
 1. **Создание экземпляра API**:
 
    ```python
-   api = LensAPI()
+   api = LensAPI() # Или с конфигурацией, смотрите "Параметры конфигурации"
    ```
+
 2. **Обработка изображения**:
+
+   Вы можете обрабатывать изображения из различных источников: файловые пути, URL-адреса, объекты PIL Image и массивы NumPy.
 
    - **Получение всех данных из локального файла**:
 
      ```python
-     result = api.get_all_data('path/to/image.jpg')
-     print(result)
+     import asyncio
+     from chrome_lens_py import LensAPI
+
+     async def main():
+         api = LensAPI()
+         result = await api.get_all_data('путь/к/изображению.jpg') # Используйте await!
+         print(result)
+
+     if __name__ == "__main__":
+         asyncio.run(main())
      ```
+
    - **Получение всех данных по URL**:
 
      ```python
-     result = api.get_all_data('https://example.com/image.jpg')
-     print(result)
+     import asyncio
+     from chrome_lens_py import LensAPI
+
+     async def main():
+         api = LensAPI()
+         result = await api.get_all_data('https://example.com/image.jpg') # Используйте await!
+         print(result)
+
+     if __name__ == "__main__":
+         asyncio.run(main())
      ```
-   - **Получение полного текста из локального файла**:
+
+   - **Получение полного текста по умолчанию из объекта PIL Image**:
 
      ```python
-     result = api.get_full_text('path/to/image.jpg')
-     print(result)
+     import asyncio
+     from PIL import Image
+     from chrome_lens_py import LensAPI
+
+     async def main():
+         api = LensAPI()
+         image = Image.open('путь/к/изображению.jpg')
+         result = await api.get_full_text(image) # Передайте объект PIL Image, используйте await!
+         print(result)
+
+     if __name__ == "__main__":
+         asyncio.run(main())
      ```
-   - **Получение полного текста по URL**:
+
+   - **Получение сшитого текста с использованием умного метода из массива NumPy**:
 
      ```python
-     result = api.get_full_text('https://example.com/image.jpg')
-     print(result)
-     ```
-   - **Получение сшитого текста с использованием старого метода из локального файла**:
+     import asyncio
+     import numpy as np
+     from PIL import Image # Pillow необходим для загрузки изображения в этом примере
+     from chrome_lens_py import LensAPI
 
-     ```python
-     result = api.get_stitched_text_sequential('path/to/image.jpg')
-     print(result)
-     ```
-   - **Получение сшитого текста с использованием старого метода по URL**:
+     async def main():
+         api = LensAPI()
+         image_np_array = np.array(Image.open('путь/к/изображению.jpg')) # Загрузите изображение как массив NumPy
+         result = await api.get_stitched_text_smart(image_np_array) # Передайте массив NumPy, используйте await!
+         print(result)
 
-     ```python
-     result = api.get_stitched_text_sequential('https://example.com/image.jpg')
-     print(result)
+     if __name__ == "__main__":
+         asyncio.run(main())
      ```
-   - **Получение сшитого текста с использованием нового метода из локального файла**:
 
-     ```python
-     result = api.get_stitched_text_smart('path/to/image.jpg')
-     print(result)
-     ```
-   - **Получение сшитого текста с использованием нового метода по URL**:
+   - **Другие методы (full_text_sequential, get_text_with_coordinates и т.д.)**: Следуйте тому же шаблону, используя `await` перед вызовом методов API и убедившись, что ваш вызывающий код находится внутри `async` функции.
 
-     ```python
-     result = api.get_stitched_text_smart('https://example.com/image.jpg')
-     print(result)
-     ```
-   - **Получение текста с координатами из локального файла**:
-
-     ```python
-     result = api.get_text_with_coordinates('path/to/image.jpg')
-     print(result)
-     ```
-   - **Получение текста с координатами по URL**:
-
-     ```python
-     result = api.get_text_with_coordinates('https://example.com/image.jpg')
-     print(result)
-     ```
 #### Параметры конфигурации
 
-Вы можете настроить поведение LensAPI, передав словарь config при создании экземпляра класса. Это позволяет вам контролировать различные аспекты API, такие как заголовки, прокси, управление файлами cookie, отладку и время запроса.
+Вы можете настроить поведение `LensAPI`, передав словарь `config` и другие параметры при создании экземпляра класса. Это позволяет вам контролировать различные аспекты API, такие как заголовки, прокси, управление куки, отладку, время запроса и ограничение скорости.
 
-В словаре `config` можно использовать следующие ключи:
+Конструктор `LensAPI` принимает следующие параметры:
 
-- **`header_type`**: выбирает набор заголовков, которые будут использоваться для запросов.
+- **`config` (dict, optional)**: Словарь, содержащий параметры конфигурации (подробности смотрите ниже).
+- **`sleep_time` (int, optional)**: Устанавливает задержку по умолчанию в миллисекундах между последовательными запросами API. По умолчанию `1000` (1 секунда). Может быть переопределено параметром `sleep_time` в `config`.
+- **`logging_level` (int, optional)**: Устанавливает уровень логирования для API. Использует уровни модуля `logging` Python (например, `logging.DEBUG`, `logging.INFO`, `logging.WARNING`). По умолчанию `logging.WARNING`. Может быть переопределено параметром `debug` в `config`.
+- **`rate_limit_rpm` (int, optional)**: Устанавливает максимальное количество запросов в минуту (RPM) для ограничения скорости. Значение должно быть от 1 до 50. Может быть переопределено параметром `rate_limiting` в `config`.
+
+Следующие ключи могут быть использованы в словаре `config`:
+
+- ~~**`header_type`**: выбирает набор заголовков, которые будут использоваться для запросов.~~ Временно убрано!
     - `'default'`: использует набор заголовков по умолчанию.
     - `'custom'`: использует собственный набор заголовков.
-    ``` python
-    API = LensAPI(config={'header_type': 'custom'})
+    - `'chrome'`: использует заголовки, имитирующие заголовки, отправляемые браузером Chrome.
+    ```python
+    api = LensAPI(config={'header_type': 'chrome'})
     ```
 
 - **`proxy`**: указывает прокси-сервер для отправки запросов. Поддерживает прокси-серверы HTTP, HTTPS и SOCKS.
-    ``` python
+    ```python
     api = LensAPI(config={'proxy': 'socks5://127.0.0.1:2080'})
     ```
 
-- **`cookies`**: управляет файлами cookie для сеанса. Может быть путем к файлу cookie формата Netscape, строке cookie или словарю cookie.
-    ``` python
-    api = LensAPI(config={'cookies': '/path/to/cookie_file.txt'})
+- **`cookies`**: управляет куки для сеанса. Может быть путем к файлу cookie формата Netscape, строкой cookie или словарем cookie.
+    ```python
+    api = LensAPI(config={'cookies': '/путь/к/cookie_file.txt'})
     ```
-    ``` python
+    ```python
     api = LensAPI(config={'cookies': '__Secure-ENID=...; NID=...'})
     ```
-    ``` python
+    ```python
     api = LensAPI(config={'cookies': {'__Secure-ENID': {'name': '...', 'value': '...', 'expires': ...}, 'NID ': {'имя': '...', 'значение': '...', 'истекает': ...}}})
     ```
 
-- **`sleep_time`**: устанавливает задержку в миллисекундах между последовательными запросами API. Это особенно полезно при пакетной обработке, чтобы избежать перегрузки сервера.
-    ``` питон
+- **`sleep_time`**: устанавливает задержку в миллисекундах между последовательными запросами API. Это особенно полезно при пакетной обработке, чтобы избежать перегрузки сервера. Переопределяет параметр `sleep_time` в конструкторе `LensAPI`.
+    ```python
     api = LensAPI(config={'sleep_time': 500}) # Установите задержку 500 мс
     ```
 
-- **`debug_out`**: указывает путь к файлу для сохранения необработанного ответа API для целей отладки, когда уровень ведения журнала установлен на `DEBUG`.
-    ``` питон
-    api = LensAPI(config={'debug_out': '/path/to/response_debug.txt'})
+- **`debug`**: Включает отладочное логирование.
+    - `'info'`: Включает информационное логирование.
+    - `'debug'`: Включает подробное отладочное логирование и сохраняет необработанные ответы API в `response_debug.txt`. Переопределяет параметр `logging_level` в конструкторе `LensAPI`.
+    ```python
+    api = LensAPI(config={'debug': 'debug'})
     ```
+
+- **`debug_out`**:  указывает путь к файлу для сохранения необработанного ответа API для целей отладки, когда `debug` установлен в `'debug'`.
+    ```python
+    api = LensAPI(config={'debug_out': '/путь/к/response_debug.txt'})
+    ```
+
+- **`rate_limiting`**: Настраивает параметры ограничения скорости.
+    - **`max_requests_per_minute`**: Устанавливает максимальное количество запросов в минуту (RPM). Значение должно быть от 1 до 50. Переопределяет параметры `rate_limit_rpm` в конструкторе `LensAPI` и `--rate-limit-rpm` в CLI, если не указано в командной строке.
+    ```python
+    api = LensAPI(config={'rate_limiting': {'max_requests_per_minute': 30}})
+    ```
+
 
 </details>
 
@@ -249,9 +322,7 @@ from chrome_lens_py import LensAPI
 
    ```python
    config = {
-       'headers': {
-           'cookie': '/path/to/cookie_file.txt'
-       }
+       'cookies': '/путь/к/cookie_file.txt'
    }
    api = LensAPI(config=config)
    ```
@@ -259,7 +330,7 @@ from chrome_lens_py import LensAPI
    **CLI**:
 
    ```bash
-   lens_scan path/to/image.jpg all -c /path/to/cookie_file.txt
+   lens_scan путь/к/изображению.jpg all -c /путь/к/cookie_file.txt
    ```
 2. **Передача куки напрямую в виде строки**:
 
@@ -269,9 +340,7 @@ from chrome_lens_py import LensAPI
 
    ```python
    config = {
-       'headers': {
-           'cookie': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
-       }
+       'cookies': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
    }
    api = LensAPI(config=config)
    ```
@@ -280,18 +349,16 @@ from chrome_lens_py import LensAPI
 
    ```python
    config = {
-       'headers': {
-           'cookie': {
-               '__Secure-ENID': {
-                   'name': '__Secure-ENID',
-                   'value': '',
-                   'expires': 1756858205,
-               },
-               'NID': {
-                   'name': 'NID',
-                   'value': '517=4.......',
-                   'expires': 1756858205,
-               }
+       'cookies': {
+           '__Secure-ENID': {
+               'name': '__Secure-ENID',
+               'value': '',
+               'expires': 1756858205,
+           },
+           'NID': {
+               'name': 'NID',
+               'value': '517=4.......',
+               'expires': 1756858205,
            }
        }
    }
@@ -316,7 +383,7 @@ from chrome_lens_py import LensAPI
 * **Установка прокси в CLI**:
 
   ```bash
-  lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
+  lens_scan путь/к/изображению.jpg all -p socks5://127.0.0.1:2080
   ```
 
 </details>
@@ -324,11 +391,25 @@ from chrome_lens_py import LensAPI
 <details>
   <summary><b>Методы программного API</b></summary>
 
-- **`get_all_data(image_source)`**: Возвращает все доступные данные для данного источника изображения (путь к файлу или URL).
-- **`get_full_text(image_source)`**: Возвращает только полный текст с источника изображения.
-- **`get_text_with_coordinates(image_source)`**: Возвращает текст вместе с его координатами в формате JSON с источника изображения.
-- **`get_stitched_text_smart(image_source)`**: Возвращает сшитый текст с использованием улучшенного метода с источника изображения.
-- **`get_stitched_text_sequential(image_source)`**: Возвращает сшитый текст с использованием базового последовательного метода с источника изображения.
+**Важно: Асинхронные методы**
+
+**Все методы класса `LensAPI` являются асинхронными и должны вызываться с `await`.**
+
+- **`get_all_data(image_source, coordinate_format='percent')`**: Возвращает все доступные данные для данного источника изображения (путь к файлу, URL, объект PIL Image или массив NumPy).
+    - `image_source`: Путь к файлу изображения, URL изображения, объект PIL Image или массив NumPy.
+    - `coordinate_format` (str, optional): Формат вывода координат, либо `'percent'`, либо `'pixels'`. По умолчанию `'percent'`.
+- **`get_full_text(image_source, coordinate_format='percent')`**: Возвращает только полный текст с источника изображения.
+    - `image_source`: Путь к файлу изображения, URL изображения, объект PIL Image или массив NumPy.
+    - `coordinate_format` (str, optional): Формат вывода координат, либо `'percent'`, либо `'pixels'`. По умолчанию `'percent'`.
+- **`get_text_with_coordinates(image_source, coordinate_format='percent')`**: Возвращает текст вместе с его координатами в формате JSON с источника изображения.
+    - `image_source`: Путь к файлу изображения, URL изображения, объект PIL Image или массив NumPy.
+    - `coordinate_format` (str, optional): Формат вывода координат, либо `'percent'`, либо `'pixels'`. По умолчанию `'percent'`.
+- **`get_stitched_text_smart(image_source, coordinate_format='percent')`**: Возвращает сшитый текст с использованием умного метода с источника изображения.
+    - `image_source`: Путь к файлу изображения, URL изображения, объект PIL Image или массив NumPy.
+    - `coordinate_format` (str, optional): Формат вывода координат, либо `'percent'`, либо `'pixels'`. По умолчанию `'percent'`.
+- **`get_stitched_text_sequential(image_source, coordinate_format='percent')`**: Возвращает сшитый текст с использованием базового последовательного метода с источника изображения.
+    - `image_source`: Путь к файлу изображения, URL изображения, объект PIL Image или массив NumPy.
+    - `coordinate_format` (str, optional): Формат вывода координат, либо `'percent'`, либо `'pixels'`. По умолчанию `'percent'`.
 
 </details>
 
@@ -403,17 +484,22 @@ from chrome_lens_py import LensAPI
 **Пример использования:**
 
 ```python
-from lens_api import LensAPI
+import asyncio
+from chrome_lens_py import LensAPI
 
-api = LensAPI()
+async def main():
+    api = LensAPI()
 
-# Путь к изображению
-image_path = 'image.jpg'
+    # Путь к изображению
+    image_path = 'image.jpg'
 
-# Получение данных с координатами в пикселях
-result = api.get_all_data(image_path, coordinate_format='pixels')
+    # Получение данных с координатами в пикселях
+    result = await api.get_all_data(image_path, coordinate_format='pixels') # Используйте await!
 
-print(result)
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 #### **Важно**
@@ -437,42 +523,47 @@ print(result)
 - Запуск с информационным логированием:
 
   ```bash
-  lens_scan path/to/image.jpg all --debug=info
+  lens_scan путь/к/изображению.jpg all --debug=info
   ```
 - Запуск с подробным отладочным логированием:
 
   ```bash
-  lens_scan path/to/image.jpg all --debug=debug
+  lens_scan путь/к/изображению.jpg all --debug=debug
   ```
 
 При использовании `--debug=debug` библиотека сохранит сырой ответ от API в файл `response_debug.txt` в текущей рабочей директории. Это может быть полезно для глубокой отладки и понимания точного ответа от API.
 
 #### Программная Отладка
 
-При использовании API в ваших Python-скриптах вы можете управлять уровнем логирования, настраивая модуль `logging` и передавая параметр `logging_level` при создании экземпляра класса `LensAPI`.
+При использовании API в ваших Python-скриптах вы можете управлять уровнем логирования, настраивая модуль `logging` и передавая параметр `logging_level` при создании экземпляра класса `LensAPI`, или установив `debug` в `config`.
 
 **Пример использования:**
 
 ```python
+import asyncio
 import logging
 from chrome_lens_py import LensAPI
 
-# Настройка логирования
-logging.basicConfig(level=logging.DEBUG)
+async def main():
+    # Настройка базового логирования в консоль (опционально, для общего логирования Python)
+    logging.basicConfig(level=logging.DEBUG)
 
-# Создаем экземпляр API с нужным уровнем логирования
-api = LensAPI(logging_level=logging.DEBUG)
+    # Создаем экземпляр API с нужным уровнем логирования
+    api = LensAPI(logging_level=logging.DEBUG) # Или api = LensAPI(config={'debug': 'debug'})
 
-# Обрабатываем изображение
-result = api.get_all_data('path/to/image.jpg')
-print(result)
+    # Обрабатываем изображение
+    result = await api.get_all_data('путь/к/изображению.jpg') # Используйте await!
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-Параметр `logging_level` принимает стандартные уровни логирования из модуля `logging`, такие как `logging.INFO`, `logging.DEBUG` и т.д.
+Параметр `logging_level` в конструкторе `LensAPI` (или `debug` в `config`) принимает уровни логирования из модуля `logging` Python, такие как `logging.INFO`, `logging.DEBUG`, `logging.WARNING` и т.д. Вы также можете использовать строковые значения `'info'` и `'debug'` в `config` для параметра `debug`.
 
-Когда уровень логирования установлен на `DEBUG`, библиотека будет выводить подробную отладочную информацию и сохранять сырой ответ от API в файл `response_debug.txt` в текущей директории.
+Когда уровень логирования установлен на `logging.DEBUG` (или `debug: 'debug'`), библиотека будет выводить подробную отладочную информацию и сохранять сырой ответ от API в файл `response_debug.txt` в текущей директории.
 
-Флаг `--debug-out` позволит указать путь, где сохранить ответ от сервера, в случае уровня отладки `DEBUG`. По уполчанию он сохраняется, как описано выше, в папке откуда запущена консоль, то есть в `CWD`
+Флаг `--debug-out` (или `debug_out` в `config`) позволит указать путь, где сохранить ответ от сервера, в случае уровня отладки `DEBUG`. По уполчанию он сохраняется, как описано выше, в папке откуда запущена консоль, то есть в `CWD`.
 
 #### Примечания об Уровнях Логирования
 
@@ -497,7 +588,7 @@ print(result)
 
 * Файл конфигурации по умолчанию находится в директории конфигурации пользователя, которая зависит от операционной системы:
   * **Windows**: `C:\Users\<ВашеИмяПользователя>\.config\chrome-lens-py\config.json`
-  * **Unix/Linux**: `/home/<ВашеИмяПользователя>/.config/chrome-lens-py/config.json`
+  * **Unix/Linux**: `/home/<ВашеИмяПользователя>/.config\chrome-lens-py\config.json`
   * **macOS**: `/Users/<ВашеИмяПользователя>/Library/Application Support/chrome-lens-py/config.json`
 
 ### Указание пользовательского файла конфигурации
@@ -542,7 +633,7 @@ print(result)
     "coordinate_format": "pixels"
   }
   ```
-* **`debug`**: Установите уровень логирования. Допустимые значения: `"info"` или `"debug"`.
+* **`debug`**: Установите уровень логирования для CLI и API. Допустимые значения: `"info"` или `"debug"`.
 
   ```json
   {
@@ -550,12 +641,48 @@ print(result)
   }
   ```
 
-* **`data_type`**: Установите тип [выходных данных](#типы-данных).
+* **`debug_out`**:  указывает путь к файлу для сохранения необработанного ответа API для целей отладки, когда `debug` установлен в `'debug'`.
+
+    ```json
+    {
+      "debug_out": "/путь/к/response_debug.txt"
+    }
+    ```
+
+* **`data_type`**: Установите тип [выходных данных](#типы-данных) по умолчанию для CLI, если не указан в командной строке.
 
   ```json
   {
     "data_type": "all"
   }
+  ```
+
+* **`sleep_time`**: Устанавливает задержку по умолчанию в миллисекундах между последовательными запросами API, используемую в пакетной обработке и вызовах API, если не переопределена в конструкторе `LensAPI`.
+
+    ```json
+    {
+      "sleep_time": 500
+    }
+    ```
+* ~~**`header_type`**:  выбирает набор заголовков по умолчанию для использования в запросах, если не указано через CLI или конструктор API. Допустимые значения: `"default"`, `"custom"`, `"chrome"`.~~ Временно убрано!
+
+    ```json
+    {
+      "header_type": "chrome"
+    }
+    ```
+
+* **`rate_limiting`**: Настраивает параметры ограничения скорости.
+    - **`max_requests_per_minute`**: Устанавливает максимальное количество запросов в минуту (RPM). Значение должно быть от 1 до 50. Переопределяет параметры `rate_limit_rpm` в конструкторе `LensAPI` и `--rate-limit-rpm` в CLI, если не указано в командной строке.
+
+    ```json
+    {
+      "rate_limiting": {
+        "max_requests_per_minute": 30
+      }
+    }
+    ```
+
 
 ### Полный пример файла конфигурации
 
@@ -566,8 +693,14 @@ print(result)
   "proxy": "socks5://username:password@proxy.example.com:1080",
   "cookies": "путь/до/вашего/cookie_file.txt",
   "coordinate_format": "pixels",
+  "debug": "debug",
+  "debug_out": "/путь/к/response_debug.txt",
   "data_type": "all",
-  "debug": "debug"
+  "sleep_time": 500,
+  "header_type": "chrome",
+  "rate_limiting": {
+    "max_requests_per_minute": 30
+  }
 }
 ```
 
@@ -585,12 +718,16 @@ print(result)
 
     * `coordinate_format`
     * `debug`
+    * `data_type`
+    * `sleep_time`
+    * `header_type`
+    * `rate_limiting.max_requests_per_minute`
   * **Настройки, которые **не** будут обновлены**:
 
     * `proxy`
     * `cookies`
     * `image_source`
-    * `data_type`
+
 * Это позволяет сохранять определенные настройки между запусками без изменения критических конфигураций, таких как прокси или cookies.
 
 ### Примеры использования
@@ -598,21 +735,21 @@ print(result)
 * **Обновление формата координат в файле конфигурации по умолчанию**:
 
   ```bash
-  lens_scan путь/до/image.jpg all --coordinate_format=pixels -uc
+  lens_scan путь/до/изображения.jpg all --coordinate-format=pixels -uc
   ```
 
   * Эта команда установит формат координат в пикселях для текущего запуска и обновит файл конфигурации по умолчанию, чтобы в будущих запусках также использовались пиксели как формат координат.
 * **Использование прокси без обновления файла конфигурации**:
 
   ```bash
-  lens_scan путь/до/image.jpg all -p socks5://127.0.0.1:2080
+  lens_scan путь/до/изображения.jpg all -p socks5://127.0.0.1:2080
   ```
 
   * Настройка прокси будет использована для этого запуска, но не будет сохранена в файл конфигурации.
 * **Указание пользовательского файла конфигурации (только для чтения)**:
 
   ```bash
-  lens_scan --config-file путь/до/config.json путь/до/image.jpg all
+  lens_scan --config-file путь/до/config.json путь/до/изображения.jpg all
   ```
 
   * Приложение будет использовать настройки из указанного файла конфигурации, но не будет изменять его, даже если используется флаг `-uc`.
@@ -639,7 +776,8 @@ print(result)
 
 </details>
 
-<details> <summary><b>Пакетная Обработка</b></summary>
+<details>
+<summary><b>Пакетная Обработка</b></summary>
 
 ### Пакетная обработка нескольких изображений
 
@@ -655,12 +793,12 @@ lens_scan путь/к/каталогу <data_type> [опции]
 
 * **`путь/к/каталогу`**: Путь к каталогу, содержащему файлы изображений.
 * **`<data_type>`**: Тип данных для извлечения (например, `all`, `full_text_default` и т.д.).
-* **`[опции]`**: Дополнительные опции, такие как `--out-txt`.
+* **`[опции]`**: Дополнительные опции, такие как `--out-txt`, `--sleep-time` и т.д.
 
 **Пример:**
 
 ```bash
-lens_scan /путь/к/изображениям all --out-txt=per_file
+lens_scan /путь/к/изображениям all --out-txt=per_file --sleep-time=500
 ```
 
 #### Опции вывода с помощью `--out-txt`
@@ -674,40 +812,40 @@ lens_scan /путь/к/изображениям all --out-txt=per_file
 **Примеры:**
 
 1. **Вывод в отдельные файлы для каждого изображения:**
-    
+
     ```bash
     lens_scan /путь/к/изображениям all --out-txt=per_file
     ```
-    
+
     Эта команда обрабатывает все изображения в `/путь/к/изображениям` и сохраняет каждый результат в отдельный текстовый файл с именем изображения (например, `image1.txt`, `image2.txt`).
-    
+
 2. **Вывод всех результатов в один файл:**
-    
+
     ```bash
     lens_scan /путь/к/изображениям all --out-txt=результаты.txt
     ```
-    
+
     Эта команда обрабатывает все изображения и сохраняет все результаты в `результаты.txt` в том же каталоге.
-    
+
 3. **Вывод по умолчанию (output.txt):**
-    
+
     ```bash
     lens_scan /путь/к/изображениям all
     ```
-    
+
     Без указания `--out-txt` результаты сохраняются в `output.txt` в том же каталоге.
-    
+
 
 #### Формат вывода
 
 При выводе в один файл (поведение по умолчанию или при указании имени файла с помощью `--out-txt`) формат файла вывода следующий:
 
 ```plaintext
-#filename1.jpg
-Извлеченный текст из filename1.jpg
+#имя_файла1.jpg
+Извлеченный текст из имя_файла1.jpg
 
-#filename2.png
-Извлеченный текст из filename2.png
+#имя_файла2.png
+Извлеченный текст из имя_файла2.png
 
 ...
 ```
@@ -721,42 +859,49 @@ lens_scan /путь/к/изображениям all --out-txt=per_file
 **Пример:**
 
 ```bash
-lens_scan /путь/к/изображениям all -st 500
+lens_scan /путь/к/изображениям all --sleep-time 500
 ```
 
 Эта команда устанавливает время задержки в 500 миллисекунд между обработкой каждого изображения.
 
 #### Программное использование API
 
-Вы также можете выполнить пакетную обработку с помощью Python API, предоставив путь к каталогу методам.
+Вы также можете выполнить пакетную обработку с помощью Python API, предоставив путь к каталогу методам. **Обратите внимание, что пакетная обработка через методы API также является асинхронной и требует `await`.**
 
 **Пример:**
 
 ```python
+import asyncio
 from chrome_lens_py import LensAPI
 
-api = LensAPI(sleep_time=500)  # Установите время задержки в 500 миллисекунд
+async def main():
+    api = LensAPI(sleep_time=500)  # Установите время задержки в 500 миллисекунд
 
-# Путь к каталогу, содержащему изображения
-directory_path = '/путь/к/изображениям'
+    # Путь к каталогу, содержащему изображения
+    directory_path = '/путь/к/изображениям'
 
-# Обработайте каталог для извлечения полного текста из каждого изображения
-results = api.get_full_text(directory_path)
+    # Обработайте каталог для извлечения полного текста из каждого изображения
+    results = await api.get_full_text(directory_path) # Используйте await!
 
-# Переберите результаты
-for filename, text in results.items():
-    if 'error' in text:
-        print(f"Ошибка при обработке {filename}: {text['error']}")
-    else:
-        print(f"# {filename}")
-        print(text)
-        print()
+    # Переберите результаты
+    for filename, text in results.items():
+        if 'error' in text:
+            print(f"Ошибка при обработке {filename}: {text['error']}")
+        else:
+            print(f"# {filename}")
+            print(text)
+            print()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
+
 
 #### Примечания:
 
-* **Поддерживаемые файлы изображений**: Обрабатываются только файлы изображений с поддерживаемыми MIME-типами. Неформатированные файлы или неподдерживаемые форматы будут игнорированы.
+* **Поддерживаемые файлы изображений**: Обрабатываются только файлы изображений с поддерживаемыми MIME-типами. Неформатированные файлы или неподдерживаемые форматы будут проигнорированы.
 * **Настройка времени задержки**: Время задержки между запросами можно настроить в соответствии с вашими потребностями, но будьте осторожны при его уменьшении, чтобы избежать ограничения по скорости со стороны API.
+* **Ограничение скорости (Rate Limiting)**: Помните об ограничении скорости, особенно при обработке больших пакетов изображений. Используйте опцию CLI `--rate-limit-rpm` или параметр `rate_limit_rpm` в конструкторе `LensAPI` для контроля скорости запросов.
 * **Обработка ошибок**: Если при обработке изображения возникает ошибка, сообщение об ошибке будет сохранено в результатах под именем этого файла.
 * **Файлы вывода**: При использовании `--out-txt=per_file` текстовые файлы вывода будут сохранены в том же каталоге, что и изображения, с тем же базовым именем файла и расширением `.txt`.
 
@@ -791,6 +936,8 @@ for filename, text in results.items():
 
 - [X] Добавить "scan by url"
 - [X] Добавить вывод в пикселях
+- [X] Поддержка ввода из PIL Image и NumPy массивов
+- [X] Реализовать Rate Limiting
 - [ ] Перенести все методы из [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
   - cookie!?
 - [X] Сделать код чуть более читабельным...

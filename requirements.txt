@@ -5,3 +5,4 @@ lxml
 json5
 PySocks
 httpx==0.27.2
+numpy

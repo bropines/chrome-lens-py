@@ -5,11 +5,12 @@ import os
 import json
 from rich.console import Console
 from rich.logging import RichHandler
+import asyncio  
 
 from .lens_api import LensAPI
 from .exceptions import LensAPIError, LensParsingError, LensCookieError
 from .utils import get_default_config_dir, is_supported_mime
-from .constants import HEADERS_DEFAULT, HEADERS_CUSTOM, CHROME_HEADERS
+from .constants import HEADERS_DEFAULT #, HEADERS_CUSTOM, CHROME_HEADERS
 
 console = Console()
 
@@ -41,7 +42,7 @@ def print_help():
     console.print(
         "[b]--header-type[/b]             Header type to use: 'default' or 'custom'")
     console.print(
-        "[b]--rate-limit-rpm[/b]          Set max requests per minute (1-50)") # Updated help text
+        "[b]--rate-limit-rpm[/b]          Set max requests per minute (1-40)") # Updated help text
     console.print("\n[b][data_type][/b] options:")
     console.print(
         "[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
@@ -96,23 +97,23 @@ def save_config(config):
         console.print(f"[red]Error saving config file:[/red] {e}")
 
 
-def process_image(image_source, data_type, coordinate_format, api):
+async def process_image(image_source, data_type, coordinate_format, api): 
     try:
         logging.debug(
             f"Processing image source: {image_source} with data type: {data_type}")
         if data_type == "all":
-            result = api.get_all_data(
+            result = await api.get_all_data( 
                 image_source, coordinate_format=coordinate_format)
         elif data_type == "full_text_default":
-            result = api.get_full_text(image_source)
+            result = await api.get_full_text(image_source) 
         elif data_type == "full_text_old_method":
-            result = api.get_stitched_text_sequential(
+            result = await api.get_stitched_text_sequential( 
                 image_source, coordinate_format=coordinate_format)
         elif data_type == "full_text_new_method":
-            result = api.get_stitched_text_smart(
+            result = await api.get_stitched_text_smart( 
                 image_source, coordinate_format=coordinate_format)
         elif data_type == "coordinates":
-            result = api.get_text_with_coordinates(
+            result = await api.get_text_with_coordinates( 
                 image_source, coordinate_format=coordinate_format)
         else:
             console.print("[red]Invalid data type specified.[/red]")
@@ -125,7 +126,7 @@ def process_image(image_source, data_type, coordinate_format, api):
         return None
 
 
-def process_directory(directory_path, data_type, coordinate_format, api, out_txt_option=None):
+async def process_directory(directory_path, data_type, coordinate_format, api, out_txt_option=None): 
     if out_txt_option == 'per_file':
         # For each image file, process and write output to separate text files
         for idx, filename in enumerate(os.listdir(directory_path)):
@@ -135,7 +136,7 @@ def process_directory(directory_path, data_type, coordinate_format, api, out_txt
                     if logging.root.level > logging.DEBUG:
                         console.print("-" * 20)
                     logging.info(f"Processing file: {filename}...")
-                    result = process_image(
+                    result = await process_image( 
                         file_path, data_type, coordinate_format, api)
                     if result:
                         base_name, _ = os.path.splitext(filename)
@@ -158,7 +159,7 @@ def process_directory(directory_path, data_type, coordinate_format, api, out_txt
                         if logging.root.level > logging.DEBUG:
                             console.print("-" * 20)
                         logging.info(f"Processing file: {filename}...")
-                        result = process_image(
+                        result = await process_image( 
                             file_path, data_type, coordinate_format, api)
                         if result:
                             output_file.write(f"#{filename}\n")
@@ -170,7 +171,7 @@ def process_directory(directory_path, data_type, coordinate_format, api, out_txt
         logging.info(f"All results written to {output_file_path}")
 
 
-def main():
+async def main(): # Make async
     parser = argparse.ArgumentParser(
         description="Process images with Google Lens API and extract text data.", add_help=False)
     parser.add_argument('image_source', nargs='?',
@@ -201,14 +202,14 @@ def main():
     # New argument
     parser.add_argument(
         '--header-type',
-        choices=['default', 'custom', 'chrome'],
+        choices=['default', 'custom', 'chrome'], #['default', 'custom', 'chrome']
         default='default',
         help="Header type to use: 'default' or 'custom'"
     )
     parser.add_argument(
         '--rate-limit-rpm',
         type=int,
-        help="Set max requests per minute (1-50)" # Updated argument description
+        help="Set max requests per minute (1-40)"
     )
 
     args = parser.parse_args()
@@ -327,11 +328,11 @@ def main():
     if args.rate_limit_rpm is not None:
         try:
             rate_limit_rpm = int(args.rate_limit_rpm)
-            if 1 <= rate_limit_rpm <= 50:
+            if 1 <= rate_limit_rpm <= 40:
                 final_config.setdefault('rate_limiting', {})['max_requests_per_minute'] = rate_limit_rpm
             else:
                 console.print(
-                    "[red]Error:[/red] --rate-limit-rpm must be between 1 and 50.")
+                    "[red]Error:[/red] --rate-limit-rpm must be between 1 and 40.")
                 sys.exit(1)
         except ValueError:
             console.print(
@@ -367,7 +368,7 @@ def main():
         if args.header_type and config.get('header_type') != args.header_type:
             config['header_type'] = args.header_type
             config_updated = True
-        if args.rate_limit_rpm is not None and config.get('rate_limiting', {}).get('max_requests_per_minute') != args.rate_limit_rpm: # сохранение rate_limit_rpm
+        if args.rate_limit_rpm is not None and config.get('rate_limiting', {}).get('max_requests_per_minute') != args.rate_limit_rpm: # Save Rate_Limit_rpm
             config.setdefault('rate_limiting', {})['max_requests_per_minute'] = args.rate_limit_rpm
             config_updated = True
 
@@ -386,10 +387,10 @@ def main():
 
     try:
         if os.path.isdir(image_source):
-            process_directory(directory_path=image_source, data_type=data_type,
+            await process_directory(directory_path=image_source, data_type=data_type, 
                               coordinate_format=coordinate_format, api=api, out_txt_option=args.out_txt)
         else:
-            result = process_image(image_source=image_source, data_type=data_type,
+            result = await process_image(image_source=image_source, data_type=data_type, 
                                    coordinate_format=coordinate_format, api=api)
             if result:
                 console.print(result)
@@ -399,6 +400,8 @@ def main():
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
+def cli_run(): # Synchronous function is an explosion
+    asyncio.run(main())
 
 if __name__ == "__main__":
-    main()
+    cli_run() 
