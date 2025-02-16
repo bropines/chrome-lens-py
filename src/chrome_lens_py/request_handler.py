@@ -217,7 +217,7 @@ class Lens(LensCore):
             logging.info("Downloading image from URL...")
             logging.debug(f"Downloading image from URL: {url}")
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, stream=True)
+                response = await client.get(url)
                 if response.status_code != 200:
                     raise LensError(f"Failed to download image from URL: {url}")
                 buffer = await response.aread()
