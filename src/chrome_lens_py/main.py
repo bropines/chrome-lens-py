@@ -40,6 +40,8 @@ def print_help():
     # New options
     console.print(
         "[b]--header-type[/b]             Header type to use: 'default' or 'custom'")
+    console.print(
+        "[b]--rate-limit-rpm[/b]          Set max requests per minute (1-50)") # Updated help text
     console.print("\n[b][data_type][/b] options:")
     console.print(
         "[b]all[/b]                       Get all data (full text, coordinates, and stitched text)")
@@ -203,6 +205,11 @@ def main():
         default='default',
         help="Header type to use: 'default' or 'custom'"
     )
+    parser.add_argument(
+        '--rate-limit-rpm',
+        type=int,
+        help="Set max requests per minute (1-50)" # Updated argument description
+    )
 
     args = parser.parse_args()
 
@@ -238,7 +245,7 @@ def main():
     coordinate_format = None
     logging_level = logging.WARNING
     data_type = None
-    sleep_time = None  # Added sleep_time variable
+    sleep_time = None
 
     # Set cookies
     if 'cookies' in config:
@@ -273,10 +280,9 @@ def main():
     elif args.debug == 'info':
         logging_level = logging.INFO
 
-    # Update logging configuration to include module, function, and line number, and use RichHandler
+    # Update logging configuration
     from rich.logging import RichHandler
 
-    # Adjust the logging format based on the logging level
     if logging_level == logging.DEBUG:
         FORMAT = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
     elif logging_level == logging.INFO:
@@ -317,6 +323,22 @@ def main():
     final_config['header_type'] = header_type
     logging.debug(f"Selected header type: {header_type}")
 
+    # Rate limiting configuration from command line
+    if args.rate_limit_rpm is not None:
+        try:
+            rate_limit_rpm = int(args.rate_limit_rpm)
+            if 1 <= rate_limit_rpm <= 50:
+                final_config.setdefault('rate_limiting', {})['max_requests_per_minute'] = rate_limit_rpm
+            else:
+                console.print(
+                    "[red]Error:[/red] --rate-limit-rpm must be between 1 and 50.")
+                sys.exit(1)
+        except ValueError:
+            console.print(
+                "[red]Error:[/red] --rate-limit-rpm must be an integer.")
+            sys.exit(1)
+
+
     # Set cookies
     if cookies:
         final_config['cookies'] = cookies
@@ -329,7 +351,6 @@ def main():
 
     # Update config file if -uc flag is specified and config is in default location
     if args.update_config and not args.config_file:
-        # Only update the default config file
         config_updated = False
         if args.coordinate_format and config.get('coordinate_format') != args.coordinate_format:
             config['coordinate_format'] = args.coordinate_format
@@ -346,12 +367,16 @@ def main():
         if args.header_type and config.get('header_type') != args.header_type:
             config['header_type'] = args.header_type
             config_updated = True
+        if args.rate_limit_rpm is not None and config.get('rate_limiting', {}).get('max_requests_per_minute') != args.rate_limit_rpm: # сохранение rate_limit_rpm
+            config.setdefault('rate_limiting', {})['max_requests_per_minute'] = args.rate_limit_rpm
+            config_updated = True
+
         if config_updated:
             save_config(config)
 
     # Initialize LensAPI with the final configuration
     api = LensAPI(config=final_config,
-                  logging_level=logging_level, sleep_time=sleep_time)
+                  logging_level=logging_level, sleep_time=sleep_time, rate_limit_rpm=final_config.get('rate_limiting', {}).get('max_requests_per_minute')) # pass rate_limit_rpm to LensAPI
 
     image_source = args.image_source
 

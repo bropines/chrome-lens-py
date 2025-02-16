@@ -7,11 +7,31 @@ import os
 import time
 
 class LensAPI:
-    def __init__(self, config=None, sleep_time=1000, logging_level=logging.WARNING):
+    def __init__(self, config=None, sleep_time=1000, logging_level=logging.WARNING, rate_limit_rpm=None):
         self.lens = Lens(config=config, sleep_time=sleep_time, logging_level=logging_level)
         self.logging_level = logging_level
-        self.sleep_time = sleep_time  # Store sleep_time
-        self.sleep_between_requests = sleep_time / 1000.0  # Convert to seconds
+        self.sleep_time = sleep_time
+        self.sleep_between_requests = sleep_time / 1000.0
+
+        # Rate Limiting configuration from API parameter
+        if rate_limit_rpm is not None:
+            try:
+                rate_limit_rpm = int(rate_limit_rpm)
+                if not 1 <= rate_limit_rpm <= 50:
+                    logging.warning(
+                        f"rate_limit_rpm must be between 1 and 50, using default value instead of: {rate_limit_rpm}")
+                    rate_limit_rpm = None  # Use default if out of range
+            except ValueError:
+                logging.warning(
+                    f"rate_limit_rpm must be an integer, using default value instead of: {rate_limit_rpm}")
+                rate_limit_rpm = None  # Use default if not an integer
+
+            if rate_limit_rpm:
+                config = config or {}
+                config.setdefault('rate_limiting', {})['max_requests_per_minute'] = rate_limit_rpm
+
+        self.lens = Lens(config=config, sleep_time=sleep_time, logging_level=logging_level)
+
 
     def process_batch(self, image_source, method_name, coordinate_format='percent'):
         results = {}
