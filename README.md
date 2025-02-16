@@ -1,3 +1,4 @@
+# The library switched to Async. Update your projects !!!!
 # Chrome Lens API for Python
 
 [English](/README.md) | [Русский](/README_RU.md)
