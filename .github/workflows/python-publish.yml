@@ -47,7 +47,7 @@ jobs:
 
       - name: Sort imports with isort
         run: |
-          isort --check --profile black .
+          isort --check .
 
       - name: Lint with flake8
         run: |

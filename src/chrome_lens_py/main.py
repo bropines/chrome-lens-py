@@ -492,7 +492,7 @@ async def main():
             "data_type",
             "rate_limiting",
             "debug_out",
-        ]  #'sleep_time', 'header_type' removed
+        ]  # 'sleep_time', 'header_type' removed
         for field in update_fields:
             # Get value determined by CLI/Env/File merge (stored in final_config)
             cli_value = final_config.get(field)
