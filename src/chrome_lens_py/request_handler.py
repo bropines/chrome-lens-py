@@ -103,12 +103,28 @@ class LensCore:
                     )
                     continue
 
-                initial_cookies_jar.set(
-                    name=cookie_data.get("name", cookie_name),
-                    value=cookie_value,
-                    domain=cookie_data.get("domain"),  # Pass domain if available
-                    path=cookie_data.get("path"),  # Pass path if available
-                )
+                # Prepare arguments conditionally
+                set_args = {
+                    "name": cookie_data.get("name", cookie_name),
+                    "value": cookie_value,
+                }
+                cookie_domain = cookie_data.get("domain")
+                if cookie_domain is not None:
+                    set_args["domain"] = cookie_domain
+
+                cookie_path = cookie_data.get("path")
+                if cookie_path is not None:
+                    set_args["path"] = cookie_path
+
+                # Call .set() with only the defined arguments
+                try:
+                    initial_cookies_jar.set(**set_args)
+                except Exception as e_set:
+                    # Log potential errors during individual cookie setting
+                    logging.error(
+                        f"Failed to set initial cookie '{set_args.get('name')}': {e_set}"
+                    )
+                # --- END CORRECTION ---
 
         try:
             proxy_config = {"proxy": self.proxy} if self.proxy else {}
@@ -116,7 +132,6 @@ class LensCore:
                 f"Setting up httpx client. Proxy configured: {bool(self.proxy)}"
             )
             self.client = httpx.AsyncClient(
-                # Pass the httpx.Cookies object
                 cookies=initial_cookies_jar,
                 follow_redirects=True,
                 timeout=timeout,
