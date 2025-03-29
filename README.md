@@ -2,7 +2,7 @@
 > The library switched to Async. Update your projects !!!!
 
 > [!NOTE] 
-> If you don't want to figure out what's in the modules (and there's a lot of garbage written here), and how to transfer it to your project, go to experiments/reverse.py . It's enough for you to figure out how it all works. 
+> If you don't want to figure out what's in the modules (and there's a lot of garbage written here), and how to transfer it to your project, go to `experiments/reverse.py` . It's enough for you to figure out how it all works. 
 
 # Chrome Lens API for Python
 
