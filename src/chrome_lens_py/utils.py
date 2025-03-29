@@ -1,5 +1,5 @@
 import os
-import sys  # Добавили импорт модуля sys
+import sys
 import filetype
 import time
 from urllib.parse import urlparse

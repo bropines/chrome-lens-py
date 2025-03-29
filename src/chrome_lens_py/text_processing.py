@@ -1,138 +1,181 @@
 import re
 import logging
+import math # For degrees conversion
+import json # To potentially parse the coordinate string if needed elsewhere
 
-def stitch_text_from_coordinates(text_with_coords):
-    """Stitches text from coordinates along lines and positions."""
-    sorted_elements = sorted(text_with_coords, key=lambda x: (round(x['coordinates'][1], 2), x['coordinates'][0]))
+# Note: Stitching logic needs significant changes due to the new bbox format.
+# The old methods relied heavily on simple [y, x] sorting.
+# We'll adapt stitch_text_sequential and provide a simplified smart stitch.
+
+def stitch_text_sequential(word_annotations):
+    """Stitches text sequentially based on the order of word annotations."""
+    if not word_annotations:
+        return ""
+    # Assumes word_annotations is the list of {"text": "word", "bbox": [...], ...} dicts
+    texts = [item.get('text', '') for item in word_annotations]
+    # Basic joining, might need smarter space handling based on original script's logic if available
+    stitched_text = " ".join(texts)
+    # Simple punctuation cleanup (can be improved)
+    stitched_text = re.sub(r'\s+([,.!?;:])', r'\1', stitched_text)
+    stitched_text = re.sub(r'([«“"\'])\s+', r'\1', stitched_text) # Fix space after opening quote
+    stitched_text = re.sub(r'\s+([»”"\'])', r'\1', stitched_text) # Fix space before closing quote
+    return stitched_text.strip()
+
+def stitch_text_smart(word_annotations):
+    """
+    Stitches text attempting to reconstruct lines based on bounding box vertical positions.
+    Simplified approach using bbox center y for sorting.
+    """
+    if not word_annotations:
+        return ""
+
+    # Extract relevant info: text, center y (bbox[0]), center x (bbox[1])
+    elements = []
+    for item in word_annotations:
+        text = item.get('text')
+        bbox = item.get('bbox')
+        if text and isinstance(bbox, list) and len(bbox) >= 2:
+             # Use center Y (index 0) and center X (index 1) from bbox
+             elements.append({'text': text, 'y': bbox[0], 'x': bbox[1]})
+        elif text:
+            # Fallback if bbox is malformed - add without coords, will be appended at end
+             elements.append({'text': text, 'y': float('inf'), 'x': float('inf')})
+
+
+    # Sort primarily by approximate vertical position (y), then horizontal (x)
+    # Round y slightly to group words on the same visual line
+    # Threshold for y-grouping might need tuning
+    y_grouping_threshold = 0.01 # Relative threshold (adjust based on image size/resolution if needed)
+    sorted_elements = sorted(elements, key=lambda e: (round(e['y'] / y_grouping_threshold), e['x']))
 
     stitched_text = ""
-    current_y = None
+    current_y_group = None
     current_line = []
 
-    for element in sorted_elements:
-        if current_y is None or abs(element['coordinates'][1] - current_y) > 0.05:
+    for elem in sorted_elements:
+        # Determine the group for the current y-coordinate
+        y_group = round(elem['y'] / y_grouping_threshold) if elem['y'] != float('inf') else float('inf')
+
+        # If it's a new line (different y group)
+        if current_y_group is None or y_group != current_y_group:
             if current_line:
-                stitched_text += " ".join(current_line) + "\n"
+                # Join words in the completed line
+                line_text = " ".join(current_line)
+                # Simple punctuation cleanup for the line
+                line_text = re.sub(r'\s+([,.!?;:])', r'\1', line_text).strip()
+                stitched_text += line_text + "\n"
                 current_line = []
-            current_y = element['coordinates'][1]
-        current_line.append(element['text'])
+            current_y_group = y_group
 
+        # Add text to the current line
+        current_line.append(elem['text'])
+
+    # Add the last line
     if current_line:
-        stitched_text += " ".join(current_line)
-
-    stitched_text = re.sub(r'\s+([,?.!])', r'\1', stitched_text)
+        line_text = " ".join(current_line)
+        line_text = re.sub(r'\s+([,.!?;:])', r'\1', line_text).strip()
+        stitched_text += line_text
 
     return stitched_text.strip()
 
-def stitch_text_smart(text_with_coords):
-    """Stitches text from coordinates using a smart method."""
-    transformed_coords = [{'text': item['text'], 'coordinates': [item['coordinates'][1], item['coordinates'][0]]} for item in text_with_coords]
-    sorted_elements = sorted(transformed_coords, key=lambda x: (round(x['coordinates'][1], 2), x['coordinates'][0]))
 
-    stitched_text = []
-    current_y = None
-    current_line = []
-    word_threshold = 0.02
-
-    for element in sorted_elements:
-        if current_y is None or abs(element['coordinates'][1] - current_y) > 0.05:
-            if current_line:
-                stitched_text.append(" ".join(current_line))
-                current_line = []
-            current_y = element['coordinates'][1]
-
-        if element['text'] in [',', '.', '!', '?', ';', ':'] and current_line:
-            current_line[-1] += element['text']
-        else:
-            current_line.append(element['text'])
-
-    if current_line:
-        stitched_text.append(" ".join(current_line))
-
-    return "\n".join(stitched_text).strip()
-
-def stitch_text_sequential(text_with_coords):
-    """Stitches the text in the sequence as it was recognized."""
-    stitched_text = " ".join([element['text'] for element in text_with_coords])
-    stitched_text = re.sub(r'\s+([,?.!])', r'\1', stitched_text)
-
-    return stitched_text.strip()
-
-def extract_text_and_coordinates(data, image_dimensions=None, coordinate_format='percent'):
-    """Extracts text and coordinates from a data structure."""
+def extract_text_and_coordinates(parsed_data, image_dimensions=None, coordinate_format='percent'):
+    """
+    Extracts text and coordinates from the parsed data structure.
+    Coordinates in bbox are typically relative (0-1). Pixel conversion requires original dimensions.
+    Angle is added in degrees.
+    """
     text_with_coords = []
-    if coordinate_format == 'pixels' and not image_dimensions:
-        raise ValueError("Image dimensions are required to convert coordinates to pixels.")
+    word_annotations = parsed_data.get('word_annotations', [])
 
-    if isinstance(data, list):
-        for item in data:
-            if isinstance(item, list):
-                for sub_item in item:
-                    if isinstance(sub_item, list) and len(sub_item) > 1 and isinstance(sub_item[0], str):
-                        word = sub_item[0]
-                        coords = sub_item[1]
-                        if isinstance(coords, list) and all(isinstance(coord, (int, float)) for coord in coords):
-                            if coordinate_format == 'pixels':
-                                coords = convert_coords_to_pixels(coords, image_dimensions)
-                            text_with_coords.append({"text": word, "coordinates": coords})
-                    else:
-                        text_with_coords.extend(extract_text_and_coordinates(sub_item, image_dimensions, coordinate_format))
-            else:
-                text_with_coords.extend(extract_text_and_coordinates(item, image_dimensions, coordinate_format))
-    elif isinstance(data, dict):
-        for value in data.values():
-            text_with_coords.extend(extract_text_and_coordinates(value, image_dimensions, coordinate_format))
+    if coordinate_format == 'pixels' and not image_dimensions:
+        logging.warning("Image dimensions needed for pixel conversion, returning relative coordinates.")
+        coordinate_format = 'percent' # Fallback
+
+    if not isinstance(word_annotations, list):
+         logging.error("Word annotations format invalid, expected a list.")
+         return []
+
+    for item in word_annotations:
+        text = item.get('text')
+        bbox_orig = item.get('bbox') # Original bbox [center_y, center_x, height, width, angle_rad?, conf?]
+        angle_deg = item.get('angle_degrees') # Already converted angle
+
+        if text is None or bbox_orig is None:
+            logging.warning(f"Skipping annotation due to missing text or bbox: {item}")
+            continue
+
+        if not isinstance(bbox_orig, list) or len(bbox_orig) < 4:
+            logging.warning(f"Skipping annotation due to invalid bbox format: {bbox_orig}")
+            continue
+
+        # --- Coordinate Conversion ---
+        coords_to_store = list(bbox_orig) # Make a copy
+
+        if coordinate_format == 'pixels':
+            try:
+                img_width, img_height = image_dimensions
+                # Assuming bbox format: [center_y, center_x, height, width, ...]
+                center_y_rel, center_x_rel, height_rel, width_rel = bbox_orig[:4]
+
+                center_y_px = center_y_rel * img_height
+                center_x_px = center_x_rel * img_width
+                height_px = height_rel * img_height
+                width_px = width_rel * img_width
+
+                # Replace the first four elements with pixel values
+                coords_to_store[:4] = [center_y_px, center_x_px, height_px, width_px]
+
+            except Exception as e:
+                logging.error(f"Error converting coordinates to pixels for bbox {bbox_orig}: {e}. Using relative.")
+                # Keep coords_to_store as the original relative values if conversion fails
+
+        coord_entry = {
+            "text": text,
+            "coordinates": coords_to_store # This is the potentially converted bbox list
+        }
+        # Add angle in degrees if available
+        if angle_deg is not None:
+            coord_entry["angle_degrees"] = angle_deg
+
+        text_with_coords.append(coord_entry)
+
     return text_with_coords
 
-def convert_coords_to_pixels(coords, image_dimensions):
-    """Converts coordinates from percentages to pixels."""
-    y_percent = coords[0]
-    x_percent = coords[1]
-    width_percent = coords[2]
-    height_percent = coords[3]
+# This function is less relevant now as full text is reconstructed directly
+# def extract_full_text(data):
+#     """Retrieves the full text from a data structure (Old Method - Deprecated)."""
+#     # ... (keep old implementation commented out or remove) ...
+#     return "Full text extraction method needs update for new API response."
 
-    image_width, image_height = image_dimensions
-
-    y_pixel = y_percent * image_height
-    x_pixel = x_percent * image_width
-    width_pixel = width_percent * image_width
-    height_pixel = height_percent * image_height
-
-    new_coords = [y_pixel, x_pixel, width_pixel, height_pixel] + coords[4:]
-
-    return new_coords
-
-def extract_full_text(data):
-    """Retrieves the full text from a data structure."""
-    try:
-        text_data = data[3][4][0][0]
-        if isinstance(text_data, list):
-            return "\n".join(text_data)
-        return text_data
-    except (IndexError, TypeError):
-        return "Full text not found in expected structure"
-
-def simplify_output(result, image_dimensions=None, coordinate_format='percent'):
-    """Simplified the data structure by extracting key elements."""
+def simplify_output(parsed_data, image_dimensions=None, coordinate_format='percent'):
+    """Simplified the parsed data structure by extracting key elements."""
     simplified = {}
 
+    if not isinstance(parsed_data, dict):
+        logging.error("Invalid parsed_data format received in simplify_output.")
+        simplified['error'] = "Invalid input data structure"
+        return simplified
+
     try:
-        if 'data' in result and isinstance(result['data'], list) and len(result['data']) > 3:
-            if isinstance(result['data'][3], list) and len(result['data'][3]) > 3:
-                simplified['language'] = result['data'][3][3]
-            else:
-                simplified['language'] = "Language not found in expected structure"
+        simplified['language'] = parsed_data.get('language', 'und')
 
-        simplified['full_text'] = extract_full_text(result['data'])
+        # Reconstructed full text (already joined blocks)
+        reconstructed_blocks = parsed_data.get('reconstructed_blocks', [])
+        simplified['full_text'] = "\n".join(reconstructed_blocks) # This is the primary full text now
 
-        if 'data' in result and isinstance(result['data'], list):
-            text_with_coords = extract_text_and_coordinates(result['data'], image_dimensions=image_dimensions, coordinate_format=coordinate_format)
-            simplified['text_with_coordinates'] = text_with_coords
+        # Extract text with coordinates (including degree conversion and pixel option)
+        word_annotations = parsed_data.get('word_annotations', [])
+        text_with_coords = extract_text_and_coordinates(parsed_data, image_dimensions, coordinate_format)
+        simplified['text_with_coordinates'] = text_with_coords # List of dicts {"text": t, "coordinates": bbox, "angle_degrees": d}
 
-            simplified['stitched_text_smart'] = stitch_text_smart(text_with_coords)
-            simplified['stitched_text_sequential'] = stitch_text_sequential(text_with_coords)
+        # Stitching methods using the extracted word annotations
+        # Note: These might produce different results than the old methods due to structure changes
+        simplified['stitched_text_smart'] = stitch_text_smart(word_annotations)
+        simplified['stitched_text_sequential'] = stitch_text_sequential(word_annotations)
+
     except Exception as e:
-        logging.error(f"Error in simplify_output: {e}")
-        simplified['error'] = str(e)
+        logging.error(f"Error in simplify_output processing parsed data: {e}", exc_info=True)
+        simplified['error'] = f"Error during output simplification: {e}"
 
     return simplified

@@ -1,5 +1,9 @@
-LENS_ENDPOINT = 'https://lens.google.com/v3/upload'
-LENS_API_ENDPOINT = 'https://lens.google.com/uploadbyurl'
+LENS_UPLOAD_ENDPOINT = 'https://lens.google.com/v3/upload' # New Upload Endpoint
+LENS_METADATA_ENDPOINT = 'https://lens.google.com/qfmetadata' # New Metadata Endpoint
+
+# Old endpoint, potentially keep for reference or remove later if unused
+# LENS_ENDPOINT = 'https://lens.google.com/v3/upload'
+# LENS_API_ENDPOINT = 'https://lens.google.com/uploadbyurl' # Likely unused with new method
 
 SUPPORTED_MIMES = [
     'image/x-icon',
@@ -22,6 +26,7 @@ MIME_TO_EXT = {
     'image/heic': 'heic',
     'image/gif': 'gif'
 }
+
 
 #Replaced with Chrome Headers
 HEADERS_DEFAULT = {    
@@ -49,6 +54,3 @@ HEADERS_DEFAULT = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     'X-Client-Data': 'CIW2yQEIorbJAQipncoBCIH+ygEIkqHLAQiKo8sBCPWYzQEIhaDNAQji0M4BCLPTzgEI19TOAQjy1c4BCJLYzgEIwNjOAQjM2M4BGM7VzgE='
 }
-
-
-#CHROME_HEADERS =
