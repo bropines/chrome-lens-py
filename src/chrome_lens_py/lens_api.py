@@ -15,9 +15,9 @@ from .exceptions import (
 )
 from .image_processing import image_to_jpeg_buffer, numpy_array_to_jpeg_buffer
 from .request_handler import Lens
-from .text_processing import (
+from .text_processing import (  # stitch_* functions are used within simplify_output
     simplify_output,
-)  # stitch_* functions are used within simplify_output
+)
 from .utils import is_supported_mime, is_url  # Keep utils
 
 
