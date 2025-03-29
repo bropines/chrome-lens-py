@@ -1,4 +1,9 @@
-# The library switched to Async. Update your projects !!!!
+> [!IMPORTANT] 
+> The library switched to Async. Update your projects !!!!
+
+> [!NOTE] 
+> If you don't want to figure out what's in the modules (and there's a lot of garbage written here), and how to transfer it to your project, go to experiments/reverse.py . It's enough for you to figure out how it all works. 
+
 # Chrome Lens API for Python
 
 [English](/README.md) | [Русский](/README_RU.md)
@@ -7,21 +12,21 @@ This project provides a Python library and CLI tool for interacting with Google 
 
 ## Features
 
-- **Extract the full text**: Extract the full text from the image.
-- **Coordinate Extraction**: Extract the text along with its coordinates.
-- **Stitched text**: Restore text from coordinate blocks using various methods:
-  - **Smart method**: Improved line-by-line text stitching, suitable for most images (but may be less effective on heavily rotated text).
-  - **Sequential method**: Sequential stitching of text blocks, a more basic approach.
+- **Extract the full text**: Extract the main reconstructed text from the image.
+- **Coordinate Extraction**: Extract word annotations along with their coordinates (center position, size, and angle in degrees).
+- **Stitched text**: Restore text from word annotations using various methods:
+  - **Smart method**: Attempts line reconstruction based on vertical positions.
+  - **Sequential method**: Sequential stitching based on the order words were recognized.
 - **Input from various sources**: Process images from file paths, URLs, [PIL Image objects](https://pillow.readthedocs.io/en/stable/reference/Image.html), and [NumPy arrays](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html) (including images read by [OpenCV](https://opencv.org/)).
 - **Scan images from URLs**: Process images directly from URLs without downloading them manually.
-- **Cookie Management**: Download and manage cookies from a file in Netscape format or directly through the configuration.
+- **Cookie Management**: Handles session cookies automatically, saving/loading them from a `.pkl` file. Can import from Netscape format files or strings via configuration.
 - **Proxy Support**: Supports HTTP, HTTPS, and SOCKS4/5 proxies to make requests over different networks.
-- **Rate Limiting**: Control the number of requests per minute to respect API usage limits.
-- ~~**Header Type Selection**: Choose between different sets of request headers (`default`, `custom`, `chrome`).~~ Temporarily deleted!
+- **Rate Limiting**: Automatically controls the number of requests per minute to respect API usage limits (configurable).
+- ~~**Header Type Selection**: Choose between different sets of request headers.~~ Temporarily deleted!
 
 **Important: Asynchronous API**
 
-**This library now uses asynchronous requests for improved performance and efficiency. When using the programmatic API, you must use `async` and `await` in your code to call the API methods. See the "Programmatic API Usage" section for examples.**
+**This library now uses asynchronous requests (`asyncio`, `httpx`) for improved performance and efficiency. When using the programmatic API, you MUST use `async` and `await` in your code to call the API methods. See the "Programmatic API Usage" section for examples.**
 
 _PS: Lens has a problem with the way it displays full text, which is why methods have been added that stitch text from coordinates._
 
@@ -66,48 +71,48 @@ You can use the `lens_scan` command from the CLI to process images and extract t
   <summary><b>CLI Usage</b></summary>
 
 ```bash
-lens_scan <image_source> <data_type> [options]
+lens_scan <image_source> [data_type] [options]
 ```
 
 - `<image_source>`: Path to the image file or URL, or path to a directory for batch processing.
-- `<data_type>`: Type of data to extract (see below).
+- `[data_type]` (optional): Type of data to extract (default: `all`). See below.
 - `[options]`: Optional flags to customize behavior.
 
 #### Data Types
 
-- **all**: Get all data (full text, coordinates, and stitched text using both smart and sequential methods).
-- **full_text_default**: Get only the default full text.
-- **full_text_sequential**: Get stitched text using the sequential method.
-- **full_text_smart**: Get stitched text using the smart method.
-- **coordinates**: Get text along with coordinates.
+- **`all`**: Get all data (language, full text, coordinates, and stitched text using both methods).
+- **`full_text_default`**: Get the main reconstructed text.
+- **`full_text_old_method`**: Get stitched text using the sequential method.
+- **`full_text_new_method`**: Get stitched text using the smart (line reconstruction) method.
+- **`coordinates`**: Get word annotations with coordinates.
 
 #### Options
 
 - **`-h, --help`**: Show this help message and exit.
-- **`-c, --cookie-file <path>`**: Path to the Netscape cookie file.
-- **`-p, --proxy <proxy_url>`**: Specify proxy server (e.g., `socks5://user:pass@host:port`).
-- **`--config-file <path>`**: Path to the configuration file.
+- **`-c, --cookie-file <path>`**: Path to the Netscape or `.pkl` cookie file used by the library.
+- **`-p, --proxy <proxy_url>`**: Specify proxy server (e.g., `http://user:pass@host:port`, `socks5://host:port`).
+- **`--config-file <path>`**: Path to the JSON configuration file.
 - **`--debug=(info|debug)`**: Enable logging at the specified level (`info` or `debug`).
-- **`--coordinate-format=(percent|pixels)`**: Output coordinates format: `'percent'` or `'pixels'`.
-- **`-st, --sleep-time <milliseconds>`**: Sleep time between requests in milliseconds (for batch processing).
-- **`-uc, --update-config`**: Update the default config file with CLI arguments (excluding proxy and cookies).
-- **`--debug-out <path>`**: Path to save debug output response (when `--debug=debug` is used).
-- **`--out-txt=(per_file|filename.txt)`**: Output option for batch processing: `'per_file'` to output each result to a separate text file, or specify a `filename.txt` for a single output file.
-- ~~**`--header-type=(default|custom|chrome)`**: Header type to use: `'default'`, `'custom'`, or `'chrome'`.~~ Temporarily deleted!
-- **`--rate-limit-rpm <rpm>`**: Set maximum requests per minute (RPM), value between 1 and 40.
+- **`--coordinate-format=(percent|pixels)`**: Output coordinates format: `'percent'` (default) or `'pixels'`.
+- **`-st, --sleep-time <milliseconds>`**: DEPRECATED. Sleep time is handled by the internal rate limiter.
+- **`-uc, --update-config`**: Update the default config file with non-sensitive CLI arguments.
+- **`--debug-out <path>`**: Path to save raw metadata response text (useful when `--debug=debug` is used).
+- **`--out-txt=(per_file|filename.txt)`**: Output option when processing a directory: `'per_file'` to output each result to a separate text file, or specify a `filename.txt` for a single combined output file. If not specified for a directory, results print to console.
+- ~~**`--header-type=(default|custom|chrome)`**: IGNORED.~~ Temporarily deleted!
+- **`--rate-limit-rpm <rpm>`**: Set maximum requests per minute (RPM), e.g., 30. Overrides config value.
 
 #### Examples
 
 To extract text using the smart stitching method from a local file:
 
 ```bash
-lens_scan path/to/image.jpg full_text_smart
+lens_scan path/to/image.jpg full_text_new_method
 ```
 
 To extract text using the smart stitching method from a URL:
 
 ```bash
-lens_scan https://example.com/image.jpg full_text_smart
+lens_scan https://example.com/image.jpg full_text_new_method
 ```
 
 To get all available data from a local file and output coordinates in pixels:
@@ -128,13 +133,6 @@ To set a rate limit of 30 requests per minute:
 lens_scan path/to/image.jpg all --rate-limit-rpm 30
 ```
 
-~~To use Chrome-like headers for requests:~~ Temporarily deleted!
-
-```bash
-lens_scan path/to/image.jpg all --header-type chrome
-```
-
-
 #### CLI Help
 
 You can use the `-h` or `--help` option to display usage information:
@@ -152,7 +150,7 @@ In addition to the CLI tool, this project provides a Python API that can be used
 
 **Important: Asynchronous API**
 
-**The `LensAPI` is designed for asynchronous operations. You must use `async` and `await` when calling its methods.**
+**The `LensAPI` is designed for asynchronous operations. You MUST use `async` and `await` when calling its methods.**
 
 #### Basic Programmatic Usage
 
@@ -165,227 +163,214 @@ from chrome_lens_py import LensAPI
 
 #### Example Programmatic Usage
 
-1. **Instantiate the API**:
+1.  **Instantiate the API**:
 
-   ```python
-   api = LensAPI() # Or with configuration, see "Configuration Options"
-   ```
+    ```python
+    # Instantiate LensAPI - it will handle client setup internally
+    api = LensAPI()
+    # Example with proxy and debug logging:
+    # api = LensAPI(config={'proxy': 'socks5://127.0.0.1:7265'}, logging_level=logging.DEBUG)
+    ```
 
-2. **Process an image**:
+2.  **Process an image within an `async` function**:
 
-   You can process images from various sources: file paths, URLs, PIL Image objects, and NumPy arrays.
+    You can process images from various sources: file paths, URLs, PIL Image objects, and NumPy arrays.
 
-   - **Get all data from a local file**:
+    ```python
+    import asyncio
+    import logging # For setting log level example
+    from chrome_lens_py import LensAPI
+    from PIL import Image
+    import numpy as np
 
-     ```python
-     import asyncio
-     from chrome_lens_py import LensAPI
+    async def run_lens_tasks():
+        # Initialize API (consider proxy, cookies, logging level here)
+        # Example: Enable debug logging and set a proxy
+        api = LensAPI(
+            config={'proxy': 'socks5://127.0.0.1:7265', 'debug_out': 'debug_response.json'},
+            logging_level=logging.DEBUG
+        )
 
-     async def main():
-         api = LensAPI()
-         result = await api.get_all_data('path/to/image.jpg') # Use await!
-         print(result)
+        image_path = 'd:/bropi/Documents/ShareX/Screenshots/2025-03/NVIDIA_Overlay_GknkEZGEgr.png' # Your image path
+        image_url = 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_light_color_272x92dp.png' # Example URL
 
-     if __name__ == "__main__":
-         asyncio.run(main())
-     ```
+        try:
+            # --- Test 1: Get all data from local file ---
+            print("\n--- Testing get_all_data (local file) ---")
+            result_all_file = await api.get_all_data(image_path, coordinate_format='pixels')
+            print(result_all_file)
 
-   - **Get all data from a URL**:
+            # --- Test 2: Get full text from URL ---
+            print("\n--- Testing get_full_text (URL) ---")
+            # Corresponds to full_text_default in CLI
+            result_text_url = await api.get_full_text(image_url)
+            print(result_text_url)
 
-     ```python
-     import asyncio
-     from chrome_lens_py import LensAPI
+            # --- Test 3: Get coordinates from PIL Image ---
+            print("\n--- Testing get_text_with_coordinates (PIL Image) ---")
+            try:
+                pil_image = Image.open(image_path)
+                result_coords_pil = await api.get_text_with_coordinates(pil_image, coordinate_format='percent')
+                print(result_coords_pil)
+                pil_image.close()
+            except FileNotFoundError:
+                print(f"PIL Test skipped: Image file not found at {image_path}")
+            except Exception as e:
+                print(f"Error processing PIL image: {e}")
 
-     async def main():
-         api = LensAPI()
-         result = await api.get_all_data('https://example.com/image.jpg') # Use await!
-         print(result)
+            # --- Test 4: Get smart stitched text from NumPy array ---
+            print("\n--- Testing get_stitched_text_smart (NumPy array) ---")
+            # Corresponds to full_text_new_method in CLI
+            try:
+                np_image = np.array(Image.open(image_path)) # Load image into numpy array
+                result_smart_np = await api.get_stitched_text_smart(np_image)
+                print(result_smart_np)
+            except FileNotFoundError:
+                print(f"NumPy Test skipped: Image file not found at {image_path}")
+            except Exception as e:
+                print(f"Error processing NumPy array: {e}")
 
-     if __name__ == "__main__":
-         asyncio.run(main())
-     ```
+            # --- Test 5: Get sequential stitched text from local file ---
+            print("\n--- Testing get_stitched_text_sequential (local file) ---")
+            # Corresponds to full_text_old_method in CLI
+            result_seq_file = await api.get_stitched_text_sequential(image_path)
+            print(result_seq_file)
 
-   - **Get the default full text from a PIL Image object**:
+        except Exception as e:
+            print(f"\n--- An error occurred during testing: {e} ---")
+            logging.exception("Error details:") # Log traceback if logging is enabled
+        finally:
+            # --- IMPORTANT: Close the session when done ---
+            print("\n--- Closing API session ---")
+            await api.close_session()
 
-     ```python
-     import asyncio
-     from PIL import Image
-     from chrome_lens_py import LensAPI
-
-     async def main():
-         api = LensAPI()
-         image = Image.open('path/to/image.jpg')
-         result = await api.get_full_text(image) # Pass PIL Image object, use await!
-         print(result)
-
-     if __name__ == "__main__":
-         asyncio.run(main())
-     ```
-
-   - **Get stitched text using the smart method from a NumPy array**:
-
-     ```python
-     import asyncio
-     import numpy as np
-     from PIL import Image # Pillow is needed for image loading in this example
-     from chrome_lens_py import LensAPI
-
-     async def main():
-         api = LensAPI()
-         image_np_array = np.array(Image.open('path/to/image.jpg')) # Load image as NumPy array
-         result = await api.get_stitched_text_smart(image_np_array) # Pass NumPy array, use await!
-         print(result)
-
-     if __name__ == "__main__":
-         asyncio.run(main())
-     ```
-
-   - **Other methods (full_text_sequential, get_text_with_coordinates, etc.)**: Follow the same pattern, using `await` before calling the API methods and ensuring your calling code is within an `async` function.
+    if __name__ == "__main__":
+        # Basic logging setup for the test script
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+        asyncio.run(run_lens_tasks())
+    ```
 
 #### Configuration Options
 
-You can customize the behavior of the `LensAPI` by passing a `config` dictionary and other parameters when instantiating the class. This allows you to control various aspects of the API, such as ~~headers~~, proxies, cookie management, debugging, request timing, and rate limiting.
+You can customize the behavior of the `LensAPI` by passing a `config` dictionary and other parameters when instantiating the class. This allows you to control various aspects of the API, such as proxies, cookie management, debugging, and rate limiting.
 
 The `LensAPI` constructor accepts the following parameters:
 
-- **`config` (dict, optional)**: A dictionary containing configuration options (see below for details).
-- **`sleep_time` (int, optional)**: Sets the default delay in milliseconds between consecutive API requests. Default is `1000` (1 second). Can be overridden by the `sleep_time` in the `config`.
-- **`logging_level` (int, optional)**: Sets the logging level for the API. Uses Python's `logging` module levels (e.g., `logging.DEBUG`, `logging.INFO`, `logging.WARNING`). Default is `logging.WARNING`. Can be overridden by the `debug` in the `config`.
-- **`rate_limit_rpm` (int, optional)**: Sets the maximum requests per minute (RPM) for rate limiting. Value must be between 1 and 40. Can be overridden by the `rate_limiting` in the `config`.
+-   **`config` (dict, optional)**: A dictionary containing configuration options (see below for details).
+-   **`sleep_time` (int, optional)**: DEPRECATED. Internal rate limiter handles delays. Parameter is ignored.
+-   **`logging_level` (int, optional)**: Sets the logging level for the API. Uses Python's `logging` module levels (e.g., `logging.DEBUG`, `logging.INFO`, `logging.WARNING`). Default is `logging.WARNING`. Can be overridden by the `debug` in the `config`.
+-   **`rate_limit_rpm` (int, optional)**: Sets the maximum requests per minute (RPM) for rate limiting. Overrides `rate_limiting` in `config`. Processed internally.
 
 The following keys can be used within the `config` dictionary:
 
-- ~~**`header_type`**:  Selects the set of headers to use for requests.~~ Temporarily deleted!
-    - `'default'`: Uses the default set of headers.
-    - `'custom'`: Uses a custom set of headers.
-    - `'chrome'`: Uses headers that resemble those sent by Chrome browser.
+-   **`proxy`**: Specifies a proxy server for making requests. Supports HTTP, HTTPS, and SOCKS proxies.
     ```python
-    api = LensAPI(config={'header_type': 'chrome'})
+    api = LensAPI(config={'proxy': 'socks5://127.0.0.1:7265'})
     ```
 
-- **`proxy`**: Specifies a proxy server for making requests. Supports HTTP, HTTPS, and SOCKS proxies.
+-   **`cookies`**: Manages cookies for the session. Can be a file path to a Netscape format cookie file to import initially, a cookie string, or a cookie dictionary. The library will manage cookies in its own `.pkl` file after initialization.
     ```python
-    api = LensAPI(config={'proxy': 'socks5://127.0.0.1:2080'})
-    ```
-
-- **`cookies`**:  Manages cookies for the session. Can be a file path to a Netscape format cookie file, a cookie string, or a cookie dictionary.
-    ```python
+    # Import from Netscape file on first run
     api = LensAPI(config={'cookies': '/path/to/cookie_file.txt'})
     ```
     ```python
+    # Import from header string on first run
     api = LensAPI(config={'cookies': '__Secure-ENID=...; NID=...'})
     ```
     ```python
-    api = LensAPI(config={'cookies': {'__Secure-ENID': {'name': '...', 'value': '...', 'expires': ...}, 'NID': {'name': '...', 'value': '...', 'expires': ...}}})
+    # Import from dictionary on first run
+    api = LensAPI(config={'cookies': {'__Secure-ENID': {'name': '...', 'value': '...'}, 'NID': {'name': '...', 'value': '...'}}})
     ```
 
-- **`sleep_time`**: Sets the delay in milliseconds between consecutive API requests. This is particularly useful in batch processing to avoid overloading the server. Overrides the `sleep_time` parameter in `LensAPI` constructor.
-    ```python
-    api = LensAPI(config={'sleep_time': 500}) # Set a 500ms delay
-    ```
-
-- **`debug`**: Enables debug logging.
-    - `'info'`: Enables informational logging.
-    - `'debug'`: Enables detailed debug logging and saves raw API responses to `response_debug.txt`. Overrides the `logging_level` parameter in `LensAPI` constructor.
+-   **`debug`**: Enables debug logging.
+    -   `'info'`: Enables informational logging (level `logging.INFO`).
+    -   `'debug'`: Enables detailed debug logging (level `logging.DEBUG`). Overrides the `logging_level` parameter in `LensAPI` constructor.
     ```python
     api = LensAPI(config={'debug': 'debug'})
     ```
 
-- **`debug_out`**:  Specifies the file path to save the raw API response for debugging purposes when `debug` is set to `'debug'`.
+-   **`debug_out`**: Specifies the file path to save the raw API metadata response for debugging purposes when `debug` level is `'debug'`.
     ```python
-    api = LensAPI(config={'debug_out': '/path/to/response_debug.txt'})
+    api = LensAPI(config={'debug': 'debug', 'debug_out': '/path/to/response_debug.json'})
     ```
 
-- **`rate_limiting`**: Configures rate limiting settings.
-    - **`max_requests_per_minute`**: Sets the maximum requests per minute (RPM). Value must be between 1 and 50. Overrides the `rate_limit_rpm` parameter in `LensAPI` constructor.
+-   **`rate_limiting`**: Configures rate limiting settings.
+    -   **`max_requests_per_minute`**: Sets the maximum requests per minute (RPM). Defaults to around 30 if not set.
     ```python
-    api = LensAPI(config={'rate_limiting': {'max_requests_per_minute': 30}})
+    api = LensAPI(config={'rate_limiting': {'max_requests_per_minute': 20}})
     ```
-
 
 </details>
 
 <details>
   <summary><b>Cookie Management</b></summary>
 
-This project supports the management of cookies through various methods.
+This library automatically manages cookies using a `cookies.pkl` file stored in the user's default configuration directory.
 
-To receive cookies in Netscape format, you can use the following extensions:
+You can **import** cookies initially using the `cookies` option in the `config` dictionary when creating a `LensAPI` instance, or via the `-c` flag in the CLI. Supported import formats:
 
-- Chrome (Chromium): [Cookie Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
-- Firefox: [Cookie Editor](https://addons.mozilla.org/ru/firefox/addon/cookie-editor/)
+1.  **Netscape Format File**: Provide the path to the file.
 
-1. **Loading Cookies from a Netscape Format File**:
+    *   Use browser extensions like [Cookie Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) (Chrome) or [Cookie Editor](https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/) (Firefox) to export cookies in this format.
 
-   * You can load cookies from a Netscape format file by specifying the file path.
+    **Programmatic API (Initial Import)**:
+    ```python
+    api = LensAPI(config={'cookies': '/path/to/google_cookies.txt'})
+    ```
+    **CLI (Initial Import)**:
+    ```bash
+    lens_scan path/to/image.jpg all -c /path/to/google_cookies.txt
+    ```
 
-   **Programmatic API**:
+2.  **Cookie Header String**: Provide the string value of a `Cookie:` HTTP header.
 
-   ```python
-   config = {
-       'cookies': '/path/to/cookie_file.txt'
-   }
-   api = LensAPI(config=config)
-   ```
+    **Programmatic API (Initial Import)**:
+    ```python
+    api = LensAPI(config={'cookies': '__Secure-ENID=...; NID=...'})
+    ```
 
-   **CLI**:
+3.  **Cookie Dictionary**: Provide a dictionary where keys are cookie names and values are either the cookie value string or another dictionary with details like `name`, `value`, `expires`.
 
-   ```bash
-   lens_scan path/to/image.jpg all -c /path/to/cookie_file.txt
-   ```
-2. **Passing Cookies Directly as a String**:
+    **Programmatic API (Initial Import)**:
+    ```python
+    config = {
+        'cookies': {
+            '__Secure-ENID': 'value1.....',
+            'NID': 'value2.....'
+         }
+    }
+    # OR more detailed:
+    # config = {
+    #    'cookies': {
+    #        '__Secure-ENID': {'name': '__Secure-ENID', 'value': 'value1', 'expires': 1756858205},
+    #        'NID': {'name': 'NID', 'value': 'value2', 'expires': 1756858205}
+    #    }
+    # }
+    api = LensAPI(config=config)
+    ```
 
-   * You can also pass cookies directly as a string in the configuration or via CLI.
-
-   **Programmatic API**:
-
-   ```python
-   config = {
-       'cookies': '__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-'
-   }
-   api = LensAPI(config=config)
-   ```
-
-   or
-
-   ```python
-   config = {
-       'cookies': {
-           '__Secure-ENID': {
-               'name': '__Secure-ENID',
-               'value': '',
-               'expires': 1756858205,
-           },
-           'NID': {
-               'name': 'NID',
-               'value': '517=4.......',
-               'expires': 1756858205,
-           }
-       }
-   }
-   api = LensAPI(config=config)
-   ```
+**Note**: Once initialized, the library manages cookies internally using `cookies.pkl`. The import options are primarily for the *first run* or if you need to force-reload cookies. Cookies received from the server during requests will automatically update the internal store and the `.pkl` file.
 
 </details>
 
 <details>
   <summary><b>Proxy Support</b></summary>
 
-You can make requests through a proxy server using the API or CLI. The library supports HTTP, HTTPS, and SOCKS4/5 proxies.
+You can make requests through a proxy server using the API or CLI. The library supports HTTP, HTTPS, and SOCKS4/5 proxies via `httpx`.
 
-* **Set Proxy in API**:
+*   **Set Proxy in API**:
 
-  ```python
-  config = {
-      'proxy': 'socks5://127.0.0.1:2080'
-  }
-  api = LensAPI(config=config)
-  ```
-* **Set Proxy in CLI**:
+    ```python
+    config = {
+        'proxy': 'socks5://127.0.0.1:7265' # Your proxy address
+    }
+    api = LensAPI(config=config)
+    ```
+*   **Set Proxy in CLI**:
 
-  ```bash
-  lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
-  ```
+    ```bash
+    lens_scan path/to/image.jpg all -p socks5://127.0.0.1:7265
+    ```
 
 </details>
 
@@ -394,99 +379,75 @@ You can make requests through a proxy server using the API or CLI. The library s
 
 **Important: Asynchronous Methods**
 
-**All methods of the `LensAPI` class are asynchronous and must be called with `await`.**
+**All data retrieval methods of the `LensAPI` class are asynchronous and MUST be called with `await` from within an `async` function.**
 
-- **`get_all_data(image_source, coordinate_format='percent')`**: Returns all available data for the given image source (file path, URL, PIL Image object, or NumPy array).
-    - `image_source`: Path to the image file, image URL, PIL Image object, or NumPy array.
-    - `coordinate_format` (str, optional): Output coordinate format, either `'percent'` or `'pixels'`. Defaults to `'percent'`.
-- **`get_full_text(image_source, coordinate_format='percent')`**: Returns only the full text from the image source.
-    - `image_source`: Path to the image file, image URL, PIL Image object, or NumPy array.
-    - `coordinate_format` (str, optional): Output coordinate format, either `'percent'` or `'pixels'`. Defaults to `'percent'`.
-- **`get_text_with_coordinates(image_source, coordinate_format='percent')`**: Returns text along with its coordinates in JSON format from the image source.
-    - `image_source`: Path to the image file, image URL, PIL Image object, or NumPy array.
-    - `coordinate_format` (str, optional): Output coordinate format, either `'percent'` or `'pixels'`. Defaults to `'percent'`.
-- **`get_stitched_text_smart(image_source, coordinate_format='percent')`**: Returns stitched text using the smart method from the image source.
-    - `image_source`: Path to the image file, image URL, PIL Image object, or NumPy array.
-    - `coordinate_format` (str, optional): Output coordinate format, either `'percent'` or `'pixels'`. Defaults to `'percent'`.
-- **`get_stitched_text_sequential(image_source, coordinate_format='percent')`**: Returns stitched text using the basic sequential method from the image source.
-    - `image_source`: Path to the image file, image URL, PIL Image object, or NumPy array.
-    - `coordinate_format` (str, optional): Output coordinate format, either `'percent'` or `'pixels'`. Defaults to `'percent'`.
+-   **`async get_all_data(image_source, coordinate_format='percent')`**: Returns a dictionary containing all available data (language, full text, coordinates, stitched text) for the given image source.
+    -   `image_source`: Path to image file, image URL, PIL Image object, NumPy array, or bytes.
+    -   `coordinate_format` (str, optional): Output coordinate format (`'percent'` or `'pixels'`). Defaults to `'percent'`.
+-   **`async get_full_text(image_source)`**: Returns the main reconstructed full text (string). Corresponds to CLI `full_text_default`.
+    -   `image_source`: Path to image file, image URL, PIL Image object, NumPy array, or bytes.
+-   **`async get_text_with_coordinates(image_source, coordinate_format='percent')`**: Returns a list of dictionaries, each containing word text, coordinates (bbox list), and angle (`angle_degrees`). Corresponds to CLI `coordinates`.
+    -   `image_source`: Path to image file, image URL, PIL Image object, NumPy array, or bytes.
+    -   `coordinate_format` (str, optional): Output coordinate format (`'percent'` or `'pixels'`). Defaults to `'percent'`.
+-   **`async get_stitched_text_smart(image_source)`**: Returns text stitched using the smart (line reconstruction) method (string). Corresponds to CLI `full_text_new_method`.
+    -   `image_source`: Path to image file, image URL, PIL Image object, NumPy array, or bytes.
+-   **`async get_stitched_text_sequential(image_source)`**: Returns text stitched using the basic sequential method (string). Corresponds to CLI `full_text_old_method`.
+    -   `image_source`: Path to image file, image URL, PIL Image object, NumPy array, or bytes.
+-   **`async close_session()`**: Closes the underlying network session. **Should be called when you are finished using the API instance.**
 
 </details>
 
 <details>
   <summary><b>Working with Coordinates</b></summary>
 
-In our project, coordinates are used to define the position, size, and rotation of text on an image. Each text region is described by a set of values that help accurately determine where and how to display the text. Here's how these values are interpreted:
+The API returns coordinate information for each recognized word. This information is provided within the `text_with_coordinates` list when using `get_all_data` or `get_text_with_coordinates`. Each item in the list is a dictionary containing:
 
-1. **Y Coordinate**: The first value in the coordinates array represents the vertical position of the top-left corner of the text region on the image. The value is expressed as a fraction of the image's total height, with `0.0` corresponding to the top edge and `1.0` to the bottom.
+-   **`"text"`**: The recognized word (string).
+-   **`"coordinates"`**: A list representing the bounding box (`bbox`). The format is typically `[center_y, center_x, height, width, angle_in_radians?, confidence_score?]`.
+    -   `center_y`, `center_x`: Coordinates of the bounding box center, relative to image dimensions (0.0 to 1.0).
+    -   `height`, `width`: Dimensions of the bounding box, relative to image dimensions (0.0 to 1.0).
+    -   `angle_in_radians`: Rotation angle of the box (optional, might not always be present). 0 means no rotation. This value remains in radians as received from the API.
+    -   `confidence_score`: A score indicating the OCR confidence (optional).
+-   **`"angle_degrees"`** (optional): The rotation angle conveniently converted to **degrees**. This key is added by the library if an angle in radians was present in the raw `coordinates` list. Positive is clockwise, negative is counter-clockwise.
 
-2. **X Coordinate**: The second value indicates the horizontal position of the top-left corner of the text region. The value is expressed as a fraction of the image's total width, where `0.0` corresponds to the left edge and `1.0` to the right.
+Coordinates (`center_y`, `center_x`, `height`, `width`) are relative to the image dimensions (top-left is `(0.0, 0.0)`, bottom-right is `(1.0, 1.0)`), unless `coordinate_format='pixels'` is used.
 
-3. **Width**: The third value represents the width of the text region as a fraction of the image's total width. This value determines how much horizontal space the text will occupy.
-
-4. **Height**: The fourth value indicates the height of the text region as a fraction of the image's total height.
-
-5. **Fifth Parameter**: In the current data, this parameter is always zero and appears to be unused. It might be reserved for future use or specific text modifications.
-
-6. **Sixth Parameter**: Specifies the rotation angle of the text region in degrees. Positive values indicate clockwise rotation, while negative values indicate counterclockwise rotation.
-
-Coordinates are measured from the top-left corner of the image. This means that `(0.0, 0.0)` corresponds to the very top-left corner of the image, while `(1.0, 1.0)` corresponds to the very bottom-right corner.
-
-#### Example of Coordinate Usage
+#### Example Coordinate Entry
 
 ```json
 {
-    "text": "Sample text",
-    "coordinates": [
-        0.5,
-        0.5,
-        0.3,
-        0.1,
-        0,
-        -45
-    ]
+  "text": "Example",
+  "coordinates": [
+    0.5123,    // center_y (relative)
+    0.3456,    // center_x (relative)
+    0.087,     // height (relative)
+    0.25,      // width (relative)
+    -0.174533, // angle (radians, approx -10 deg)
+    0.95       // confidence
+  ],
+  "angle_degrees": -10.0  // Angle automatically converted to degrees
 }
 ```
 
-In this example:
+#### Using Coordinate Format (`percent` vs `pixels`)
 
-- `0.5` — Y coordinate (50% of the image height, text centered vertically).
-- `0.5` — X coordinate (50% of the image width, text centered horizontally).
-- `0.3` — width of the text region (30% of the image width).
-- `0.1` — height of the text region (10% of the image height).
-- `0` — not used, default value (possibly reserved for future use).
-- `-45` — rotation angle of the text counterclockwise by 45 degrees.
+You can choose the output format for the `coordinates` list values:
 
-These values are used to accurately place, scale, and display the text on the image.
-
-#### **Using Coordinate Format**
-
-You can choose the coordinate output format: percentages or pixels. By default, coordinates are output in percentages, but you can switch to pixels using the appropriate settings.
+-   **`'percent'` (Default)**: Values remain relative (0.0 to 1.0).
+-   **`'pixels'`**: The first four values (`center_y`, `center_x`, `height`, `width`) are converted to absolute pixel values based on the **original dimensions** of the image. The angle (in radians) and confidence inside the `coordinates` list remain unchanged. The `angle_degrees` key is unaffected.
 
 ##### **In Console**
 
-When using the command line, you can specify the coordinate format using the `--coordinate-format` flag. Acceptable values are `'percent'` or `'pixels'`.
+Use the `--coordinate-format` flag:
 
-**Usage Examples:**
-
-- **Output coordinates in percentages (default):**
-
-  ```bash
-  lens_scan image.jpg coordinates
-  ```
-
-- **Output coordinates in pixels:**
-
-  ```bash
-  lens_scan image.jpg coordinates --coordinate-format=pixels
-  ```
+```bash
+# Output coordinates in pixels:
+lens_scan image.jpg coordinates --coordinate-format=pixels
+```
 
 ##### **In API**
 
-When using the programmatic API, you can pass the `coordinate_format` parameter to the methods of the `LensAPI` class. Acceptable values are `'percent'` or `'pixels'`.
-
-**Usage Example:**
+Pass the `coordinate_format` parameter to the relevant methods:
 
 ```python
 import asyncio
@@ -494,24 +455,21 @@ from chrome_lens_py import LensAPI
 
 async def main():
     api = LensAPI()
-
-    # Path to the image
     image_path = 'image.jpg'
-
     # Get data with coordinates in pixels
-    result = await api.get_all_data(image_path, coordinate_format='pixels') # Use await!
-
+    result = await api.get_text_with_coordinates(image_path, coordinate_format='pixels') # Use await!
     print(result)
+    await api.close_session() # Don't forget to close
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-#### **Important**
+#### **Important Notes**
 
-- When selecting the `'pixels'` format, coordinates will be calculated relative to the **original dimensions** of the image, even if the image was resized for processing.
-- If the format is not specified, coordinates are output in percentages by default.
-- When working with pixel coordinates, ensure you use the original image for accurate placement of text regions.
+-   Pixel conversion uses the **original** image dimensions detected before any resizing for the API request.
+-   The `angle_degrees` key provides the angle in degrees regardless of the `coordinate_format` setting. The angle value *inside* the `coordinates` list always remains in radians (if originally present).
+
 </details>
 
 <details>
@@ -519,28 +477,24 @@ if __name__ == "__main__":
 
 When using the CLI tool `lens_scan`, you can control the logging level using the `--debug` flag. There are two levels available:
 
-- `--debug=info`: Enables logging of informational messages, which include general information about the processing steps.
-- `--debug=debug`: Enables detailed debugging messages, including verbose output and the saving of the raw response from the API to a file named `response_debug.txt` in the current directory.
+-   `--debug=info`: Enables logging of informational messages (`logging.INFO`).
+-   `--debug=debug`: Enables detailed debugging messages (`logging.DEBUG`), including potentially sensitive data.
 
 **Example Usage:**
 
-- To run with informational logging:
+```bash
+# Run with informational logging:
+lens_scan path/to/image.jpg all --debug=info
 
-  ```bash
-  lens_scan path/to/image.jpg all --debug=info
-  ```
+# Run with detailed debugging logging:
+lens_scan path/to/image.jpg all --debug=debug
+```
 
-- To run with detailed debugging logging:
-
-  ```bash
-  lens_scan path/to/image.jpg all --debug=debug
-  ```
-
-When using `--debug=debug`, the library will save the raw response from the API to `response_debug.txt` in the current working directory. This can be useful for deep debugging and understanding the exact response from the API.
+When using `--debug=debug`, you can also use `--debug-out <path>` to save the raw JSON metadata response from the API to the specified file path (e.g., `--debug-out response.json`). This is useful for inspecting the raw data structure.
 
 #### Programmatic Debugging
 
-When using the API in your Python scripts, you can control the logging level by configuring the logging module and by passing the `logging_level` parameter when instantiating the `LensAPI` class, or by setting `debug` in the `config`.
+When using the API in your Python scripts, you can control the logging level by configuring the Python `logging` module and by passing the `logging_level` parameter (e.g., `logging.DEBUG`, `logging.INFO`) when instantiating `LensAPI`, or by setting `debug` (`'info'` or `'debug'`) in the `config`.
 
 **Example Usage:**
 
@@ -550,30 +504,33 @@ import logging
 from chrome_lens_py import LensAPI
 
 async def main():
-    # Configure basic logging to console (optional, for general Python logging)
-    logging.basicConfig(level=logging.DEBUG)
+    # Configure basic logging for the application
+    # logging.basicConfig(level=logging.DEBUG) # Can set global level here
 
-    # Instantiate the API with the desired logging level
-    api = LensAPI(logging_level=logging.DEBUG) # Or api = LensAPI(config={'debug': 'debug'})
+    # Instantiate the API with DEBUG level and specify debug output file
+    api = LensAPI(
+        logging_level=logging.DEBUG,
+        config={'debug_out': 'api_response.json'}
+    )
+    # Or using config:
+    # api = LensAPI(config={'debug': 'debug', 'debug_out': 'api_response.json'})
 
-    # Process an image
-    result = await api.get_all_data('path/to/image.jpg') # Use await!
-    print(result)
+    try:
+        result = await api.get_all_data('path/to/image.jpg') # Use await!
+        print(result)
+    finally:
+        await api.close_session() # Ensure closure
 
 if __name__ == "__main__":
+    # Set format for logging if basicConfig wasn't used or needs overriding
+    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    logging.basicConfig(level=logging.INFO, format=log_format) # Set default level for script run
     asyncio.run(main())
 ```
 
-The `logging_level` parameter in `LensAPI` constructor (or `debug` in `config`) accepts logging levels from Python's `logging` module, such as `logging.INFO`, `logging.DEBUG`, `logging.WARNING`, etc.  You can also use string values `'info'` and `'debug'` in the `config` for `debug` parameter.
+The `logging_level` parameter in `LensAPI` constructor (or `debug` in `config`) controls the library's internal logging verbosity.
 
-When the logging level is set to `logging.DEBUG` (or `debug: 'debug'`), the library will output detailed debugging information and save the raw API response to `response_debug.txt` in the current directory.
-
-The `--debug-out` flag (or `debug_out` in `config`) will allow you to specify the path where to save the response from the server, in the case of the debug level `DEBUG`. By default, it is saved, as described above, in the folder where the console is launched, that is, in `CWD`.
-
-#### Notes on Logging Levels
-
-- **INFO** level: Provides general information about the process, such as when requests are sent and responses are received.
-- **DEBUG** level: Provides detailed information useful for debugging, including internal state and saved responses.
+When the level is `logging.DEBUG` (or `debug: 'debug'`), the library will output detailed information. If `debug_out` is also specified in the config, the raw metadata response will be saved.
 
 </details>
 
@@ -581,347 +538,145 @@ The `--debug-out` flag (or `debug_out` in `config`) will allow you to specify th
 
 ### Configuration Priority
 
-When running the CLI tool `lens_scan`, the application determines settings based on the following priority order (from highest to lowest):
+Settings are determined in this order (highest priority first):
 
-1. **Command-line arguments (CLI)**: Options specified directly when running the command have the highest priority.
-2. **Environment variables**: If a setting is not specified in the CLI, the application will check for corresponding environment variables.
-3. **Configuration file**: If a setting is not found in the CLI arguments or environment variables, the application will look into the configuration file.
-4. **Default values**: If a setting is not specified in any of the above, default values are used.
+1.  **Command-line arguments (CLI)**
+2.  **Environment variables** (`LENS_SCAN_PROXY`, `LENS_SCAN_COOKIES`, `LENS_SCAN_CONFIG_PATH`)
+3.  **Configuration file** (specified by `--config-file`, env var, or default location)
+4.  **Default values** built into the library.
 
 ### Default Configuration File
 
-* The default configuration file is located in the user's configuration directory, which varies by operating system:
-    * **Windows**: `C:\Users\<YourUserName>\.config\chrome-lens-py\config.json`
-    * **Unix/Linux**: `/home/<YourUserName>/.config/chrome-lens-py/config.json`
-    * **macOS**: `/Users/<YourUserName>/Library/Application Support/chrome-lens-py/config.json`
+*   Stored in the user's OS-specific config directory (e.g., `~/.config/chrome-lens-py/config.json` on Linux, `~/Library/Application Support/chrome-lens-py/config.json` on macOS, `%USERPROFILE%/.config/chrome-lens-py/config.json` on Windows). File name: `config.json`.
 
 ### Specifying a Custom Configuration File
 
-* You can specify a custom configuration file using the `--config-file` flag:
+*   Use `--config-file path/to/your/config.json` or set `LENS_SCAN_CONFIG_PATH`.
+*   Custom config files are **read-only** and not updated by `-uc`.
 
-    ```bash
-    lens_scan --config-file path/to/your/config.json <image_source> <data_type>
-    ```
+### Configuration Settings (JSON File)
 
-* When a custom configuration file is specified, it is treated as read-only and will not be modified by the application.
+*   **`proxy`** (string): Proxy URL (e.g., `"socks5://user:pass@host:port"`).
+*   **`cookies`** (string or dict): Initial cookies to import (path, header string, or dict). See Cookie Management section.
+*   **`coordinate_format`** (string): `"percent"` or `"pixels"`.
+*   **`debug`** (string): `"info"` or `"debug"`. Controls logging level.
+*   **`debug_out`** (string): Path to save raw metadata response when `debug` is `"debug"`.
+*   **`data_type`** (string): Default data type for CLI (`"all"`, `"full_text_default"`, etc.).
+*   **`rate_limiting`** (dict): Rate limit settings.
+    *   **`max_requests_per_minute`** (int): Max RPM (e.g., `30`).
 
+*Deprecated settings (ignored): `sleep_time`, `header_type`.*
 
-### Configuration Settings
-
-The configuration file is a JSON file that can include the following settings:
-
-* **`proxy`**: Specify a proxy server to route requests.
-
-    ```json
-    {
-      "proxy": "socks5://username:password@proxy.example.com:1080"
-    }
-    ```
-
-* **`cookies`**: Specify cookies to use with requests. This can be a path to a cookies file or a cookie string.
-
-    ```json
-    {
-      "cookies": "path/to/your/cookie_file.txt"
-    }
-    ```
-
-    or
-
-    ```json
-    {
-      "cookies": "__Secure-ENID=17.SE=-dizH-; NID=511=---bcDwC4fo0--lgfi0n2-"
-    }
-    ```
-
-* **`coordinate_format`**: Set the format of output coordinates. Acceptable values are `"percent"` or `"pixels"`.
-
-    ```json
-    {
-      "coordinate_format": "pixels"
-    }
-    ```
-
-* **`debug`**: Set the logging level for CLI and API. Acceptable values are `"info"` or `"debug"`.
-
-    ```json
-    {
-      "debug": "debug"
-    }
-    ```
-
-* **`debug_out`**:  Specifies the file path to save the raw API response for debugging purposes when `debug` is set to `'debug'`.
-
-    ```json
-    {
-      "debug_out": "/path/to/response_debug.txt"
-    }
-    ```
-
-* **`data_type`**: Set the default type of [output data](#data-types) for CLI if not specified in command line.
-
-    ```json
-    {
-      "data_type": "all"
-    }
-    ```
-
-* **`sleep_time`**: Sets the default delay in milliseconds between consecutive API requests, used in batch processing and API calls if not overridden in `LensAPI` constructor.
-
-    ```json
-    {
-      "sleep_time": 500
-    }
-    ```
-
-* ~~**`header_type`**:  Selects the default set of headers to use for requests if not specified via CLI or API constructor. Acceptable values: `"default"`, `"custom"`, `"chrome"`.~~ Temporarily deleted!
-
-    ```json
-    {
-      "header_type": "chrome"
-    }
-    ```
-
-* **`rate_limiting`**: Configures rate limiting settings.
-    - **`max_requests_per_minute`**: Sets the maximum requests per minute (RPM). Value must be between 1 and 40. Overrides the `rate_limit_rpm` parameter in `LensAPI` constructor and `--rate-limit-rpm` CLI option if not specified in command line.
-
-    ```json
-    {
-      "rate_limiting": {
-        "max_requests_per_minute": 30
-      }
-    }
-    ```
-
-
-### Complete Example Configuration File
-
-Here is an example of a configuration file that includes all possible configuration parameters:
+### Example `config.json`
 
 ```json
 {
   "proxy": "socks5://username:password@proxy.example.com:1080",
   "cookies": "path/to/your/cookie_file.txt",
-  "coordinate_format": "pixels",
-  "debug": "debug",
-  "debug_out": "/path/to/response_debug.txt",
+  "coordinate_format": "percent",
+  "debug": "info",
+  "debug_out": null,
   "data_type": "all",
-  "sleep_time": 500,
-  "header_type": "chrome",
   "rate_limiting": {
-    "max_requests_per_minute": 30
+    "max_requests_per_minute": 25
   }
 }
 ```
 
-### Updating the Configuration File
+### Updating the Default Configuration File (`-uc`)
 
-* To update the default configuration file with new settings from the CLI, use the `-uc` or `--update-config` flag.
-
-    ```bash
-    lens_scan <image_source> <data_type> [options] -uc
-    ```
-
-* **Note**: The configuration file will only be updated if it's the default configuration file (i.e., not specified via `--config-file`).
-
-* Only specific settings will be updated:
-
-    * **Settings that can be updated**:
-
-        * `coordinate_format`
-        * `debug`
-        * `data_type`
-        * `sleep_time`
-        * `header_type`
-        * `rate_limiting.max_requests_per_minute`
-    * **Settings that will **not** be updated**:
-
-        * `proxy`
-        * `cookies`
-        * `image_source`
-
-* This allows you to persist certain settings across runs without affecting critical configurations like proxy settings or cookies.
-
-
-### Example Usage
-
-* **Updating the coordinate format in the default configuration file**:
-
-    ```bash
-    lens_scan path/to/image.jpg all --coordinate-format=pixels -uc
-    ```
-
-    * This command will set the coordinate format to pixels for the current run and update the default configuration file so that future runs will also use pixels as the coordinate format.
-* **Using a proxy without updating the configuration file**:
-
-    ```bash
-    lens_scan path/to/image.jpg all -p socks5://127.0.0.1:2080
-    ```
-
-    * The proxy setting will be used for this run but will not be saved to the configuration file.
-* **Specifying a custom configuration file (read-only)**:
-
-    ```bash
-    lens_scan --config-file path/to/config.json path/to/image.jpg all
-    ```
-
-    * The application will use settings from the specified configuration file but will not modify it, even if the `-uc` flag is used.
+*   Use the `-uc` or `--update-config` CLI flag to save some settings from the current run *to the default config file location only*.
+*   **Updates**: `coordinate_format`, `debug`, `data_type`, `rate_limiting.max_requests_per_minute`, `debug_out`.
+*   **Does NOT update**: `proxy`, `cookies`.
 
 ### Environment Variables
 
-You can also specify settings via environment variables:
-
-* **`LENS_SCAN_PROXY`**: Set the proxy server.
-
-    ```bash
-    export LENS_SCAN_PROXY="socks5://username:password@proxy.example.com:1080"
-    ```
-
-* **`LENS_SCAN_COOKIES`**: Provide cookies.
-
-    ```bash
-    export LENS_SCAN_COOKIES="__Secure-ENID=17.SE=-dizH-; NID=511=---"
-    ```
-
-* **`LENS_SCAN_CONFIG_PATH`**: Specify a custom configuration file.
-
-    ```bash
-    export LENS_SCAN_CONFIG_PATH="path/to/your/config.json"
-    ```
+*   `LENS_SCAN_PROXY`: Overrides proxy config/CLI.
+*   `LENS_SCAN_COOKIES`: Overrides cookies config/CLI for initial import.
+*   `LENS_SCAN_CONFIG_PATH`: Specifies config file path, overrides default location.
 
 </details>
 
 <details>
-<summary><b>Batch Processing</b></summary>
+<summary><b>Batch Processing (Directory Input)</b></summary>
 
-### Batch Processing of Multiple Images
+### Processing Multiple Images in a Directory
 
-This project supports batch processing of images when a directory path is provided instead of a single image file. The application will process all image files in the specified directory.
+Provide a directory path as the `<image_source>` to process all supported images within it using the CLI.
 
 #### CLI Usage
 
-To perform batch processing via the command line, simply provide the path to the directory containing the images instead of a single image file.
-
 ```bash
-lens_scan path/to/directory <data_type> [options]
+lens_scan path/to/directory [data_type] [options]
 ```
 
-* **`path/to/directory`**: Path to the directory containing image files.
-* **`<data_type>`**: Type of data to extract (e.g., `all`, `full_text_default`, etc.).
-* **`[options]`**: Additional options such as `--out-txt`, `--sleep-time`, etc.
+*   **`path/to/directory`**: Path to the directory containing images.
+*   **`[data_type]`**: Type of data to extract (e.g., `all`, `full_text_default`).
+*   **`[options]`**: Such as `--out-txt`, `--rate-limit-rpm`.
 
 **Example:**
 
 ```bash
-lens_scan /path/to/images all --out-txt=per_file --sleep-time=500
+lens_scan /path/to/images all --out-txt=per_file --rate-limit-rpm=20
 ```
 
-#### Output Options with `--out-txt`
+#### Output Options with `--out-txt` (for Directory Input)
 
-The `--out-txt` flag allows you to control how the output is saved when processing multiple images:
-
-* **`--out-txt=per_file`**: Outputs each result to a separate text file based on the image name within the same directory.
-* **`--out-txt=filename.txt`**: Outputs all results into a single text file with the specified name within the same directory.
-* **No `--out-txt` flag**: By default, all results are saved into a file named `output.txt` within the same directory.
+*   **`--out-txt=per_file`**: Saves each result to a separate `.txt` file named after the image in the source directory.
+*   **`--out-txt=filename.txt`**: Saves all results combined into the specified file in the source directory.
+*   **If `--out-txt` is NOT used**: Results for each file are printed to the console sequentially. No combined output file is created by default.
 
 **Examples:**
 
-1. **Output to Separate Files Per Image:**
-
+1.  **Output to Separate Files:**
     ```bash
     lens_scan /path/to/images all --out-txt=per_file
     ```
+    (Creates `image1.txt`, `image2.txt`, etc. in `/path/to/images`)
 
-    This command processes all images in `/path/to/images` and saves each result to a separate text file named after the image (e.g., `image1.txt`, `image2.txt`).
-
-2. **Output All Results to a Single File:**
-
+2.  **Output All to a Single File:**
     ```bash
-    lens_scan /path/to/images all --out-txt=results.txt
+    lens_scan /path/to/images all --out-txt=combined_results.txt
     ```
+    (Creates `combined_results.txt` in `/path/to/images`)
 
-    This command processes all images and saves all results into `results.txt` within the same directory.
-
-3. **Default Output (output.txt):**
-
+3.  **Output to Console (Default for Directory):**
     ```bash
-    lens_scan /path/to/images all
+    lens_scan /path/to/images full_text_new_method
     ```
+    (Prints results for each image to the standard output)
 
-    Without specifying `--out-txt`, the results are saved into `output.txt` within the same directory.
+#### Output Format (Combined File)
 
-
-#### Output Format
-
-When outputting to a single file (default behavior or when specifying a filename with `--out-txt`), the format of the output file is:
+When using `--out-txt=filename.txt`, the output file format is:
 
 ```plaintext
-#filename1.jpg
-Extracted text from filename1.jpg
+# --- Result for: image1.jpg ---
+{ ... JSON or text result ... }
 
-#filename2.png
-Extracted text from filename2.png
+# --- Result for: image2.png ---
+{ ... JSON or text result ... }
+
+# --- FAILED processing: image3.gif ---
 
 ...
 ```
 
-Each image's extracted text is prefixed with a `#` followed by the filename, and the text retains the original formatting, including newline characters.
+#### Rate Limiting
 
-#### Sleep Time Between Requests
+The internal rate limiter automatically manages delays between requests based on the configured RPM (`--rate-limit-rpm` or config file). The old `--sleep-time` flag is ignored.
 
-To avoid overwhelming the API and to comply with rate limiting policies, the library introduces a delay between processing each image. By default, this sleep time is set to 1000 milliseconds (1 second). You can adjust this delay using the `-st` or `--sleep-time` flag, specifying the time in milliseconds.
+#### Programmatic API Usage for Batch
 
-**Example:**
-
-```bash
-lens_scan /path/to/images all --sleep-time 500
-```
-
-This command sets the sleep time to 500 milliseconds between processing each image.
-
-#### Programmatic API Usage
-
-You can also perform batch processing using the Python API by providing a directory path to the methods. **Note that batch processing via API methods is also asynchronous and requires `await`.**
-
-**Example:**
-
-```python
-import asyncio
-from chrome_lens_py import LensAPI
-
-async def main():
-    api = LensAPI(sleep_time=500)  # Set sleep time to 500 milliseconds
-
-    # Path to the directory containing images
-    directory_path = '/path/to/images'
-
-    # Process the directory to extract full text from each image
-    results = await api.get_full_text(directory_path) # Use await!
-
-    # Iterate through the results
-    for filename, text in results.items():
-        if 'error' in text:
-            print(f"Error processing {filename}: {text['error']}")
-        else:
-            print(f"# {filename}")
-            print(text)
-            print()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
+Currently, the programmatic API (`LensAPI` methods) only accepts single image sources (path, URL, PIL, NumPy, bytes). **Batch processing logic (iterating a directory) needs to be implemented in your own code** using the single-source API methods. See the example in the previous `README.md` version or the test script for guidance.
 
 #### Notes:
 
-* **Supported Image Files**: Only image files with supported MIME types will be processed. Non-image files or unsupported formats will be ignored.
-* **Adjusting Sleep Time**: The sleep time between requests can be adjusted to meet your needs, but be cautious when reducing it to prevent being rate-limited by the API.
-* **Rate Limiting**: Be mindful of rate limits, especially when processing large batches of images. Use `--rate-limit-rpm` CLI option or `rate_limit_rpm` parameter in `LensAPI` constructor to control the request rate.
-* **Error Handling**: If an error occurs while processing an image, the error message will be stored in the results under that filename.
-* **Output Files**: When using `--out-txt=per_file`, the output text files will be saved in the same directory as the images, with the same base filename and a `.txt` extension.
+*   **Supported Files**: Only files recognized as supported image types by `filetype` are processed by the CLI directory mode.
+*   **Rate Limiting**: Ensure your RPM settings are reasonable for large directories.
+*   **Error Handling**: Errors during individual file processing are logged and typically result in an error entry if collecting results programmatically, or printed to console/file in CLI mode.
 
 </details>
-
 
 ## Project Structure
 
@@ -931,33 +686,36 @@ if __name__ == "__main__":
 ├── /src
 │   ├── /chrome_lens_py
 │   │   ├── __init__.py           # Package initialization
-│   │   ├── constants.py          # Constants used in the project
-│   │   ├── utils.py              # Utility functions
-│   │   ├── image_processing.py   # Image processing module
-│   │   ├── request_handler.py    # API request handling module
-│   │   ├── text_processing.py    # Text processing module
-│   │   ├── lens_api.py           # API interface for use in other scripts
-│   │   └── main.py               # CLI tool entry point
+│   │   ├── constants.py          # Constants (Endpoints, Headers)
+│   │   ├── exceptions.py         # Custom exceptions
+│   │   ├── utils.py              # Utility functions (mime check, path, url)
+│   │   ├── cookies_manager.py    # Cookie handling (PKL storage, import)
+│   │   ├── image_processing.py   # Image resizing, format conversion
+│   │   ├── request_handler.py    # Core async HTTP request logic (LensCore, Lens)
+│   │   ├── text_processing.py    # Parsing API response, stitching text
+│   │   ├── lens_api.py           # Public async API interface (LensAPI)
+│   │   └── main.py               # CLI tool entry point (using LensAPI)
 │
 ├── setup.py                      # Installation setup
-├── README.md                     # Project description and usage guide
+├── README.md                     # This file
+├── README_RU.md                  # Russian README
+├── LICENSE                       # MIT License file
 └── requirements.txt              # Project dependencies
 ```
 
 ## Acknowledgments
 
-Special thanks to [dimdenGD](https://github.com/dimdenGD) for the method of text extraction used in this project. You can check out their work on the [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr) repository. This project is inspired by their approach to leveraging Google Lens OCR functionality.
+Special thanks to [dimdenGD](https://github.com/dimdenGD) for the original method of text extraction used in earlier versions and inspiration. You can check out their work on the [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr) repository.
 
 ## TODO
 
-- [X] Add `scan by url`
-- [X] Add output in pixels
-- [X] Support input from PIL Image and NumPy arrays
-- [X] Implement Rate Limiting
-- [ ] Move all methods from [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr)
-  - cookie!?
-- [X] Do everything beautifully, and not like 400 lines of code, cut into modules by GPT chat
-- [ ] Something else very, very important...
+-   [X] Add `scan by url`
+-   [X] Add output in pixels
+-   [X] Support input from PIL Image and NumPy arrays
+-   [X] Implement Rate Limiting (Automatic via internal limiter)
+-   [X] Convert library to `async`/`await` using `httpx`.
+-   [X] Add angle in degrees to coordinate output.
+-   [ ] Re-evaluate cookie import/export needs (`.pkl` is primary now).
 
 ## License
 
