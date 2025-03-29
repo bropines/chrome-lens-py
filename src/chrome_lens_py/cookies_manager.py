@@ -1,6 +1,6 @@
 import logging
 import os
-import pickle
+import pickle  # nosec
 import time
 from datetime import datetime
 from http.cookies import SimpleCookie  # Keep for parsing string/dict formats if needed
@@ -78,7 +78,7 @@ class CookiesManager:
         if os.path.exists(self.cookie_file):
             try:
                 with open(self.cookie_file, "rb") as f:
-                    loaded_cookies = pickle.load(f)
+                    loaded_cookies = pickle.load(f)  # nosec
                     if isinstance(loaded_cookies, dict):
                         self.cookies = loaded_cookies
                         logging.debug(
@@ -192,7 +192,7 @@ class CookiesManager:
                         elif (
                             len(parts) == 6
                         ):  # Handle files without the initial domain flag correctly
-                            domain_implicit = parts[0]
+                            # domain_implicit = parts[0]
                             path = parts[2]
                             secure = parts[3].upper() == "TRUE"
                             expires_str = parts[4]

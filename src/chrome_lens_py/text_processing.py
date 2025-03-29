@@ -1,6 +1,7 @@
-import json  # To potentially parse the coordinate string if needed elsewhere
+# import json  # To potentially parse the coordinate string if needed elsewhere
 import logging
-import math  # For degrees conversion
+
+# import math  # For degrees conversion
 import re
 
 # Note: Stitching logic needs significant changes due to the new bbox format.

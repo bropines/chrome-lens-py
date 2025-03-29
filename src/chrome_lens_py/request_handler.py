@@ -32,10 +32,7 @@ from .constants import (
 from .cookies_manager import CookiesManager
 from .exceptions import LensAPIError, LensError, LensParsingError
 from .image_processing import resize_image, resize_image_from_buffer
-from .utils import (  # sleep might be less relevant with async/rate limiting
-    is_supported_mime,
-    sleep,
-)
+from .utils import is_supported_mime
 
 
 class LensCore:
@@ -501,7 +498,7 @@ class LensCore:
         # Cookies are handled by the client instance now, no need to manually add header
 
         filename = (
-            "".join(random.choices(string.ascii_letters, k=8))
+            "".join(random.choices(string.ascii_letters, k=8))  # nosec
             + "."
             + MIME_TO_EXT.get(mime_type, "jpg")
         )
