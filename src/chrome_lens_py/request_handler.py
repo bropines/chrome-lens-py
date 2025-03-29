@@ -357,8 +357,7 @@ class LensCore:
         filename = ''.join(random.choices(string.ascii_letters, k=8)) + '.' + MIME_TO_EXT.get(mime_type, 'jpg')
         files = {'encoded_image': (filename, image_data, mime_type)}
         params_upload = {
-            'hl': 'ru', # Make configurable?
-            're': 'av',
+            'hl': 'en', # Make configurable?
             'vpw': str(dimensions[0]), # Use resized dimensions
             'vph': str(dimensions[1]),
             'ep': 'gsbubb',
@@ -409,7 +408,6 @@ class LensCore:
             'vsrid': vsrid,
             'lsessionid': lsessionid,
             'hl': params_upload['hl'],
-            'qf': 'CAI%3D', # Query Formulation parameter? Keep as is.
             'st': str(int(time.time() * 1000)),
             'vpw': params_upload['vpw'],
             'vph': params_upload['vph'],
