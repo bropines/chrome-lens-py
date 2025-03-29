@@ -23,6 +23,9 @@ This project provides a Python library and CLI tool for interacting with Google 
 - **Proxy Support**: Supports HTTP, HTTPS, and SOCKS4/5 proxies to make requests over different networks.
 - **Rate Limiting**: Automatically controls the number of requests per minute to respect API usage limits (configurable).
 - ~~**Header Type Selection**: Choose between different sets of request headers.~~ Temporarily deleted!
+- **Multilingual**: In the updated version, if there are several languages in the image, they are now recognized. 
+> [!NOTE]
+> Unfortunately, I have not tested this before, so the final language will be the one that was last in the server response list.
 
 **Important: Asynchronous API**
 
@@ -715,6 +718,7 @@ Special thanks to [dimdenGD](https://github.com/dimdenGD) for the original metho
 -   [X] Implement Rate Limiting (Automatic via internal limiter)
 -   [X] Convert library to `async`/`await` using `httpx`.
 -   [X] Add angle in degrees to coordinate output.
+-   [ ] Add support for uploading translated images (yes, he can do that now too, in any language (almost)).
 -   [ ] Re-evaluate cookie import/export needs (`.pkl` is primary now).
 
 ## License
