@@ -21,7 +21,7 @@ setup(
         'json5',
         'rich',
         'PySocks',
-        'httpx>=0.28.0',
+        'httpx[http2]',
         'socksio',
         'numpy',
     ],
