@@ -1,12 +1,14 @@
 import logging
 import os
-import pickle  # nosec
+import pickle
 import time
-from datetime import datetime
-from http.cookies import SimpleCookie  # Keep for parsing string/dict formats if needed
+from datetime import datetime, timezone
+from http.cookies import SimpleCookie
 
-import httpx  # Import httpx to check cookie object type
+# Third-Party Imports
+from httpx import Cookies as HttpxCookies  # Keep Cookies alias
 
+# Local Application/Library Imports
 from .exceptions import LensCookieError
 from .utils import get_default_config_dir
 
@@ -16,17 +18,13 @@ class CookiesManager:
         self.cookies = {}
         self.config = config or {}
         self.logging_level = logging_level
-        # Setting level here might be overwritten; prefer setting it in the main entry point
-        # logging.getLogger().setLevel(self.logging_level)
-        self.imported_cookies = False  # Flag to check if cookies were imported directly
+        self.imported_cookies = False
 
-        # Get the cookie file path from config if not provided directly
         if cookie_file is None:
             cookie_file = self.config.get("cookie_file")
 
-        # Determine default cookie file path
         if cookie_file is None:
-            app_name = "chrome-lens-py"  # Name of your application
+            app_name = "chrome-lens-py"
             config_dir = get_default_config_dir(app_name)
             if not os.path.exists(config_dir):
                 try:
@@ -35,7 +33,6 @@ class CookiesManager:
                     logging.error(
                         f"Failed to create config directory {config_dir}: {e}"
                     )
-                    # Fallback to current directory if config dir creation fails
                     self.cookie_file = os.path.abspath("cookies.pkl")
             else:
                 self.cookie_file = os.path.join(config_dir, "cookies.pkl")
@@ -46,27 +43,19 @@ class CookiesManager:
             f"Initialized CookiesManager with cookie file: {self.cookie_file}"
         )
 
-        # Load existing cookies first
         self.load_cookies()
 
-        # If cookies are specified in the config (overrides loaded file), import them
         cookies_from_config = self.config.get("cookies")
         if cookies_from_config:
-            self.cookies = (
-                {}
-            )  # Clear previously loaded cookies if new ones are provided
+            self.cookies = {}
             if isinstance(cookies_from_config, str):
                 if os.path.isfile(cookies_from_config):
-                    self.import_cookies_from_file(
-                        cookies_from_config
-                    )  # Assumes Netscape format for file path in config
+                    self.import_cookies_from_file(cookies_from_config)
                 else:
-                    # Assume it's a cookie string header format if not a file
                     self.import_cookies_from_string(cookies_from_config)
             elif isinstance(cookies_from_config, dict):
                 self.parse_cookie_dict(cookies_from_config)
 
-            # Save the newly imported cookies from config immediately
             self.save_cookies()
             self.imported_cookies = True
             logging.debug(
@@ -78,7 +67,7 @@ class CookiesManager:
         if os.path.exists(self.cookie_file):
             try:
                 with open(self.cookie_file, "rb") as f:
-                    loaded_cookies = pickle.load(f)  # nosec
+                    loaded_cookies = pickle.load(f)
                     if isinstance(loaded_cookies, dict):
                         self.cookies = loaded_cookies
                         logging.debug(
@@ -111,7 +100,6 @@ class CookiesManager:
         logging.debug(f"Importing cookies from Netscape file: {cookie_file_path}")
         if os.path.isfile(cookie_file_path):
             self.parse_netscape_cookie_file(cookie_file_path)
-            # Save happens in the __init__ after this call if needed
         else:
             logging.warning(f"Cookie file not found during import: {cookie_file_path}")
 
@@ -119,7 +107,6 @@ class CookiesManager:
         """Imports cookies from a 'Cookie: name=value; name2=value2' string."""
         logging.debug("Importing cookies from string.")
         self.parse_cookie_string(cookie_string)
-        # Save happens in the __init__ after this call if needed
 
     def parse_cookie_string(self, cookie_string):
         """Parses a 'Cookie: name=value; name2=value2' string."""
@@ -131,8 +118,6 @@ class CookiesManager:
                     "name": key,
                     "value": morsel.value,
                     "expires": self._parse_expires(morsel.get("expires")),
-                    # Storing domain/path might be useful if httpx needs them later,
-                    # but httpx usually manages this itself based on request URL.
                     "domain": morsel.get("domain"),
                     "path": morsel.get("path"),
                 }
@@ -155,7 +140,7 @@ class CookiesManager:
                     "domain": cookie_data.get("domain"),
                     "path": cookie_data.get("path"),
                 }
-            elif isinstance(cookie_data, str):  # Allow simple key: value dict
+            elif isinstance(cookie_data, str):
                 self.cookies[key] = {
                     "name": key,
                     "value": cookie_data,
@@ -189,20 +174,6 @@ class CookiesManager:
                                 "path": path,
                                 "secure": secure.upper() == "TRUE",
                             }
-                        elif (
-                            len(parts) == 6
-                        ):  # Handle files without the initial domain flag correctly
-                            # domain_implicit = parts[0]
-                            path = parts[2]
-                            secure = parts[3].upper() == "TRUE"
-                            expires_str = parts[4]
-                            name = parts[5]
-                            value = parts[6]  # IndexError here if parts==6
-                            logging.warning(
-                                f"Cookie line has 6 parts, check format: {line}"
-                            )
-                            # Attempt to parse anyway if possible, might be incorrect
-                            # self.cookies[name] = { ... } # Decide if you want to handle 6-part lines
                         else:
                             logging.warning(
                                 f"Skipping malformed cookie line (expected 7 tab-separated parts): {line}"
@@ -225,16 +196,12 @@ class CookiesManager:
             ) from e
 
     def generate_cookie_header(self):
-        """
-        Generates a 'Cookie: name=value; name2=value2' string for potential external use.
-        Less critical now as httpx manages cookies internally for requests.
-        """
+        """Generates a 'Cookie: name=value; name2=value2' string."""
         self.filter_expired_cookies()
         if not self.cookies:
             return ""
         header_parts = []
         for cookie in self.cookies.values():
-            # Basic check if value exists
             if "name" in cookie and "value" in cookie and cookie["value"] is not None:
                 header_parts.append(f"{cookie['name']}={cookie['value']}")
             else:
@@ -265,29 +232,16 @@ class CookiesManager:
                     f"Filtered {initial_count - filtered_count} expired cookies."
                 )
         except TypeError as e:
-            # This might happen if 'expires' is not a comparable type (e.g., unexpected string)
             logging.error(
-                f"Error filtering cookies due to invalid 'expires' data: {e}. Attempting rewrite."
+                f"Error filtering cookies due to invalid 'expires' data: {e}. Attempting cleanup."
             )
-            # Consider resetting or trying to fix cookies instead of just rewriting
-            # For now, let's log the problematic cookies
-            for k, v in self.cookies.items():
-                if v.get("expires") is not None and not isinstance(
-                    v["expires"], (int, float, type(None))
-                ):
-                    logging.error(
-                        f"Problematic cookie expires value for key '{k}': {v['expires']} (type: {type(v['expires'])})"
-                    )
-            # Optional: self.rewrite_cookies() # Or maybe just clear them: self.cookies = {}
-            # Let's try removing only the bad ones
             fixed_cookies = {}
             for k, v in self.cookies.items():
                 expires = v.get("expires")
                 if (
                     expires is None
                     or expires == 0
-                    or isinstance(expires, (int, float))
-                    and expires > current_time
+                    or (isinstance(expires, (int, float)) and expires > current_time)
                 ):
                     fixed_cookies[k] = v
                 else:
@@ -305,54 +259,54 @@ class CookiesManager:
             f"Attempting to update cookies from object of type: {type(cookie_jar)}"
         )
         updated = False
-        if isinstance(cookie_jar, httpx.Cookies):
-            # Iterate through httpx.Cookies jar
+        if isinstance(cookie_jar, HttpxCookies):
             for cookie in cookie_jar:
-                # --- ADD SAFEGUARD ---
-                if not isinstance(cookie, httpx.models.Cookie):
+                # --- CORRECTED DUCK TYPING CHECK ---
+                # Check for essential attributes instead of strict type
+                if not (hasattr(cookie, "name") and hasattr(cookie, "value")):
                     logging.warning(
-                        f"Skipping unexpected item type '{type(cookie)}' found in cookie jar: {cookie}"
+                        f"Skipping unexpected item type '{type(cookie)}' found in cookie jar (missing name/value): {cookie}"
                     )
                     continue
-                # --- END SAFEGUARD ---
+                # --- END CORRECTION ---
 
-                # httpx cookie attributes: name, value, domain, path, expires (timestamp), secure, _rest
                 expires_timestamp = None
-                # Check expires attribute *after* ensuring it's a models.Cookie object
-                if cookie.expires is not None:
+                # Safely get expires attribute
+                cookie_expires = getattr(cookie, "expires", None)
+                if cookie_expires is not None:
                     try:
-                        # httpx stores expires as seconds since epoch directly (float or int)
-                        expires_timestamp = float(cookie.expires)
+                        expires_timestamp = float(cookie_expires)
                     except (ValueError, TypeError):
                         logging.warning(
-                            f"Could not parse expires timestamp '{cookie.expires}' for cookie '{cookie.name}'. Setting to None."
+                            f"Could not parse expires timestamp '{cookie_expires}' for cookie '{cookie.name}'. Setting to None."
                         )
 
-                # Check if cookie changed or is new
+                # Safely get domain and path
+                cookie_domain = getattr(cookie, "domain", None)
+                cookie_path = getattr(cookie, "path", None)
+                cookie_secure = getattr(cookie, "secure", False)  # Default to False
+
                 current_cookie = self.cookies.get(cookie.name)
                 new_value = cookie.value
-                # Compare relevant fields
                 if (
                     not current_cookie
                     or current_cookie.get("value") != new_value
                     or current_cookie.get("expires") != expires_timestamp
-                    or current_cookie.get("domain")
-                    != cookie.domain  # Also check domain/path changes
-                    or current_cookie.get("path") != cookie.path
+                    or current_cookie.get("domain") != cookie_domain
+                    or current_cookie.get("path") != cookie_path
                 ):
                     self.cookies[cookie.name] = {
                         "name": cookie.name,
                         "value": new_value,
                         "expires": expires_timestamp,
-                        "domain": cookie.domain,
-                        "path": cookie.path,
-                        "secure": cookie.secure,
-                        # Add other relevant attributes if needed from cookie._rest
+                        "domain": cookie_domain,
+                        "path": cookie_path,
+                        "secure": cookie_secure,
                     }
                     updated = True
                     logging.debug(f"Updated/added cookie: {cookie.name}")
 
-        elif isinstance(cookie_jar, str):  # Handle Set-Cookie header string
+        elif isinstance(cookie_jar, str):
             logging.debug(
                 f"Updating cookies from Set-Cookie header string: {cookie_jar[:100]}..."
             )
@@ -362,13 +316,11 @@ class CookiesManager:
                     expires_timestamp = self._parse_expires(morsel.get("expires"))
                     new_value = morsel.value
                     current_cookie = self.cookies.get(key)
-                    # Compare relevant fields
                     if (
                         not current_cookie
                         or current_cookie.get("value") != new_value
                         or current_cookie.get("expires") != expires_timestamp
                     ):
-                        # Add domain/path/secure from morsel as well if needed
                         self.cookies[key] = {
                             "name": key,
                             "value": new_value,
@@ -388,14 +340,13 @@ class CookiesManager:
             )
 
         if updated:
-            self.filter_expired_cookies()  # Clean up before saving
+            self.filter_expired_cookies()
             self.save_cookies()
         else:
             logging.debug("No cookie updates detected during this call.")
 
     def save_cookies(self):
         """Saves the current state of self.cookies to the pickle file."""
-        # Ensure the directory exists before trying to save
         cookie_dir = os.path.dirname(self.cookie_file)
         if not os.path.exists(cookie_dir):
             try:
@@ -405,7 +356,7 @@ class CookiesManager:
                 logging.error(
                     f"Failed to create directory {cookie_dir} for saving cookies: {e}. Cannot save cookies."
                 )
-                return  # Abort saving
+                return
 
         try:
             with open(self.cookie_file, "wb") as f:
@@ -422,22 +373,17 @@ class CookiesManager:
             )
 
     def rewrite_cookies(self):
-        """
-        Clears current cookies and reloads from the original config or file.
-        Use cautiously, might lose session cookies.
-        """
+        """Clears current cookies and reloads from the original config or file."""
         logging.warning(
             "Rewriting cookies: Clearing current state and reloading from config/file."
         )
         self.cookies = {}
-        self.imported_cookies = False  # Reset flag to allow reloading
-        # Re-run the initialization logic for loading/importing
+        self.imported_cookies = False
         self.__init__(
             config=self.config,
             cookie_file=self.cookie_file,
             logging_level=self.logging_level,
         )
-        # Save the reloaded state
         self.save_cookies()
 
     def _parse_expires(self, expires_input):
@@ -445,19 +391,13 @@ class CookiesManager:
         if expires_input is None or expires_input == "":
             return None
         if isinstance(expires_input, (int, float)):
-            # Assume it's already a timestamp if numeric
             return float(expires_input) if expires_input != 0 else None
         elif isinstance(expires_input, datetime):
-            # Convert datetime object to UTC timestamp
             try:
                 if expires_input.tzinfo is None:
-                    timestamp = expires_input.replace(
-                        tzinfo=datetime.timezone.utc
-                    ).timestamp()
+                    timestamp = expires_input.replace(tzinfo=timezone.utc).timestamp()
                 else:
-                    timestamp = expires_input.astimezone(
-                        datetime.timezone.utc
-                    ).timestamp()
+                    timestamp = expires_input.astimezone(timezone.utc).timestamp()
                 logging.debug(
                     f"Parsed datetime object '{expires_input}' to timestamp: {timestamp}"
                 )
@@ -469,15 +409,13 @@ class CookiesManager:
                 return None
         elif isinstance(expires_input, str):
             try:
-                # Try direct float conversion (common in Netscape files)
                 ts = float(expires_input)
                 return ts if ts != 0 else None
             except ValueError:
-                # Try parsing common date formats (e.g., from Set-Cookie headers)
                 common_formats = [
-                    "%a, %d %b %Y %H:%M:%S %Z",  # Standard GMT format
-                    "%a, %d-%b-%Y %H:%M:%S %Z",  # Variation with hyphen
-                    "%A, %d-%b-%y %H:%M:%S %Z",  # Older format
+                    "%a, %d %b %Y %H:%M:%S %Z",
+                    "%a, %d-%b-%Y %H:%M:%S %Z",
+                    "%A, %d-%b-%y %H:%M:%S %Z",
                 ]
                 tz_part = ""
                 if "GMT" in expires_input.upper():
@@ -486,12 +424,11 @@ class CookiesManager:
                         expires_input.upper().replace("GMT", "").strip()
                     )
                 elif expires_input.endswith(" Z"):
-                    tz_part = "GMT"  # Treat Zulu time as GMT for strptime
+                    tz_part = "GMT"
                     expires_input_cleaned = expires_input[:-1].strip()
                 else:
                     expires_input_cleaned = expires_input.strip()
 
-                # Removed the unused 'parsed = False' line here
                 for fmt in common_formats:
                     if "%Z" in fmt and not tz_part:
                         continue
@@ -499,20 +436,18 @@ class CookiesManager:
                         dt = datetime.strptime(
                             expires_input_cleaned, fmt.replace("%Z", tz_part).strip()
                         )
-                        timestamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+                        timestamp = dt.replace(tzinfo=timezone.utc).timestamp()
                         logging.debug(
                             f"Parsed date string '{expires_input}' to timestamp: {timestamp}"
                         )
-                        return float(timestamp)  # Return directly if successful
+                        return float(timestamp)
                     except ValueError:
-                        continue  # Try next format
+                        continue
 
-                # If all formats fail
                 logging.warning(
                     f"Failed to parse expires string '{expires_input}' into a known date format or timestamp."
                 )
                 return None
-        # If input is not a recognized type
         logging.warning(
             f"Unparseable expires value type: {type(expires_input)}, value: {expires_input}"
         )
