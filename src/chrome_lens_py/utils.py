@@ -3,7 +3,7 @@ import sys
 import time
 from urllib.parse import urlparse
 
-import filetype # type: ignore
+import filetype  # type: ignore
 
 from .constants import SUPPORTED_MIMES
 

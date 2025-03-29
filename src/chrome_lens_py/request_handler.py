@@ -23,13 +23,19 @@ except ImportError:
     logging.debug("json5 not found, using standard json module for Lens metadata.")
 
 
-from .constants import (HEADERS_DEFAULT, LENS_METADATA_ENDPOINT,
-                        LENS_UPLOAD_ENDPOINT, MIME_TO_EXT)
+from .constants import (
+    HEADERS_DEFAULT,
+    LENS_METADATA_ENDPOINT,
+    LENS_UPLOAD_ENDPOINT,
+    MIME_TO_EXT,
+)
 from .cookies_manager import CookiesManager
 from .exceptions import LensAPIError, LensError, LensParsingError
 from .image_processing import resize_image, resize_image_from_buffer
 from .utils import (  # sleep might be less relevant with async/rate limiting
-    is_supported_mime, sleep)
+    is_supported_mime,
+    sleep,
+)
 
 
 class LensCore:

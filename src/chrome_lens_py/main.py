@@ -9,10 +9,11 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 # Import exceptions
-from .exceptions import (LensAPIError, LensCookieError, LensError,
-                         LensParsingError)
+from .exceptions import LensAPIError, LensCookieError, LensError, LensParsingError
+
 # Import the *updated* LensAPI
 from .lens_api import LensAPI
+
 # Keep utils
 from .utils import get_default_config_dir, is_supported_mime, is_url
 

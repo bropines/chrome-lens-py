@@ -3,8 +3,7 @@ import os
 import pickle
 import time
 from datetime import datetime
-from http.cookies import \
-    SimpleCookie  # Keep for parsing string/dict formats if needed
+from http.cookies import SimpleCookie  # Keep for parsing string/dict formats if needed
 
 import httpx  # Import httpx to check cookie object type
 
