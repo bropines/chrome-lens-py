@@ -308,11 +308,20 @@ class CookiesManager:
         if isinstance(cookie_jar, httpx.Cookies):
             # Iterate through httpx.Cookies jar
             for cookie in cookie_jar:
+                # --- ADD SAFEGUARD ---
+                if not isinstance(cookie, httpx.models.Cookie):
+                    logging.warning(
+                        f"Skipping unexpected item type '{type(cookie)}' found in cookie jar: {cookie}"
+                    )
+                    continue
+                # --- END SAFEGUARD ---
+
                 # httpx cookie attributes: name, value, domain, path, expires (timestamp), secure, _rest
                 expires_timestamp = None
+                # Check expires attribute *after* ensuring it's a models.Cookie object
                 if cookie.expires is not None:
-                    # httpx stores expires as seconds since epoch directly
                     try:
+                        # httpx stores expires as seconds since epoch directly (float or int)
                         expires_timestamp = float(cookie.expires)
                     except (ValueError, TypeError):
                         logging.warning(
@@ -322,10 +331,14 @@ class CookiesManager:
                 # Check if cookie changed or is new
                 current_cookie = self.cookies.get(cookie.name)
                 new_value = cookie.value
+                # Compare relevant fields
                 if (
                     not current_cookie
                     or current_cookie.get("value") != new_value
                     or current_cookie.get("expires") != expires_timestamp
+                    or current_cookie.get("domain")
+                    != cookie.domain  # Also check domain/path changes
+                    or current_cookie.get("path") != cookie.path
                 ):
                     self.cookies[cookie.name] = {
                         "name": cookie.name,
@@ -339,24 +352,23 @@ class CookiesManager:
                     updated = True
                     logging.debug(f"Updated/added cookie: {cookie.name}")
 
-        elif isinstance(
-            cookie_jar, str
-        ):  # Handle Set-Cookie header string (less likely now)
+        elif isinstance(cookie_jar, str):  # Handle Set-Cookie header string
             logging.debug(
                 f"Updating cookies from Set-Cookie header string: {cookie_jar[:100]}..."
             )
             try:
-                cookie = SimpleCookie(cookie_jar)
-                for key, morsel in cookie.items():
+                simple_cookies = SimpleCookie(cookie_jar)
+                for key, morsel in simple_cookies.items():
                     expires_timestamp = self._parse_expires(morsel.get("expires"))
-                    # Check if cookie changed or is new
-                    current_cookie = self.cookies.get(key)
                     new_value = morsel.value
+                    current_cookie = self.cookies.get(key)
+                    # Compare relevant fields
                     if (
                         not current_cookie
                         or current_cookie.get("value") != new_value
                         or current_cookie.get("expires") != expires_timestamp
                     ):
+                        # Add domain/path/secure from morsel as well if needed
                         self.cookies[key] = {
                             "name": key,
                             "value": new_value,
@@ -379,7 +391,7 @@ class CookiesManager:
             self.filter_expired_cookies()  # Clean up before saving
             self.save_cookies()
         else:
-            logging.debug("No cookie updates detected.")
+            logging.debug("No cookie updates detected during this call.")
 
     def save_cookies(self):
         """Saves the current state of self.cookies to the pickle file."""
@@ -434,46 +446,67 @@ class CookiesManager:
             return None
         if isinstance(expires_input, (int, float)):
             # Assume it's already a timestamp if numeric
-            # Check for '0' which might mean session cookie or invalid Netscape format
             return float(expires_input) if expires_input != 0 else None
-        if isinstance(expires_input, str):
+        elif isinstance(expires_input, datetime):
+            # Convert datetime object to UTC timestamp
+            try:
+                if expires_input.tzinfo is None:
+                    timestamp = expires_input.replace(
+                        tzinfo=datetime.timezone.utc
+                    ).timestamp()
+                else:
+                    timestamp = expires_input.astimezone(
+                        datetime.timezone.utc
+                    ).timestamp()
+                logging.debug(
+                    f"Parsed datetime object '{expires_input}' to timestamp: {timestamp}"
+                )
+                return float(timestamp)
+            except Exception as e:
+                logging.warning(
+                    f"Failed to convert datetime object {expires_input} to timestamp: {e}"
+                )
+                return None
+        elif isinstance(expires_input, str):
             try:
                 # Try direct float conversion (common in Netscape files)
                 ts = float(expires_input)
                 return ts if ts != 0 else None
             except ValueError:
                 # Try parsing common date formats (e.g., from Set-Cookie headers)
-                # Format: Wdy, DD Mon YYYY HH:MM:SS GMT
                 common_formats = [
                     "%a, %d %b %Y %H:%M:%S %Z",  # Standard GMT format
                     "%a, %d-%b-%Y %H:%M:%S %Z",  # Variation with hyphen
                     "%A, %d-%b-%y %H:%M:%S %Z",  # Older format
-                    # Add other formats if needed
                 ]
-                # Attempt to parse with GMT timezone awareness
-                expires_input_gmt = expires_input.replace(
-                    "GMT", ""
-                ).strip()  # Remove GMT for strptime
-                if not expires_input_gmt.endswith(
-                    "Z"
-                ):  # Ensure timezone info consistency if needed
-                    expires_input_gmt += " GMT"  # Assume GMT if not specified? Risky.
+                tz_part = ""
+                if "GMT" in expires_input.upper():
+                    tz_part = "GMT"
+                    expires_input_cleaned = (
+                        expires_input.upper().replace("GMT", "").strip()
+                    )
+                elif expires_input.endswith(" Z"):
+                    tz_part = "GMT"  # Treat Zulu time as GMT for strptime
+                    expires_input_cleaned = expires_input[:-1].strip()
+                else:
+                    expires_input_cleaned = expires_input.strip()
 
+                # Removed the unused 'parsed = False' line here
                 for fmt in common_formats:
+                    if "%Z" in fmt and not tz_part:
+                        continue
                     try:
-                        # Ensure the timezone part matches exactly or handle it
-                        # For simplicity, let's assume GMT if %Z is used
                         dt = datetime.strptime(
-                            expires_input_gmt, fmt.replace("%Z", "GMT")
+                            expires_input_cleaned, fmt.replace("%Z", tz_part).strip()
                         )
-                        # Convert naive datetime assumed to be GMT to timestamp
                         timestamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
                         logging.debug(
                             f"Parsed date string '{expires_input}' to timestamp: {timestamp}"
                         )
-                        return float(timestamp)
+                        return float(timestamp)  # Return directly if successful
                     except ValueError:
                         continue  # Try next format
+
                 # If all formats fail
                 logging.warning(
                     f"Failed to parse expires string '{expires_input}' into a known date format or timestamp."

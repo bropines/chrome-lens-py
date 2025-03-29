@@ -90,36 +90,41 @@ class LensCore:
         limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
         timeout = httpx.Timeout(30.0, connect=10.0)  # Adjust timeouts as needed
 
-        # Load cookies from manager into httpx-compatible dict
-        initial_cookies = {}
+        initial_cookies_jar = httpx.Cookies()
         if self.cookies_manager.cookies:
-            initial_cookies = {
-                v["name"]: v["value"] for k, v in self.cookies_manager.cookies.items()
-            }
-            logging.debug("Loading initial cookies into httpx client.")
+            logging.debug(
+                f"Loading {len(self.cookies_manager.cookies)} initial cookies into httpx client jar."
+            )
+            for cookie_name, cookie_data in self.cookies_manager.cookies.items():
+                cookie_value = cookie_data.get("value")
+                if cookie_value is None:
+                    logging.warning(
+                        f"Skipping initial cookie '{cookie_name}' due to missing value."
+                    )
+                    continue
+
+                initial_cookies_jar.set(
+                    name=cookie_data.get("name", cookie_name),
+                    value=cookie_value,
+                    domain=cookie_data.get("domain"),  # Pass domain if available
+                    path=cookie_data.get("path"),  # Pass path if available
+                )
 
         try:
-            if self.proxy:
-                logging.debug(f"Setting up httpx client with proxy: {self.proxy}")
-                self.client = httpx.AsyncClient(
-                    proxy=self.proxy,
-                    cookies=initial_cookies,
-                    follow_redirects=True,
-                    timeout=timeout,
-                    limits=limits,
-                    http2=True,  # Enable HTTP/2
-                    verify=True,  # Enable SSL verification by default
-                )
-            else:
-                logging.debug("Setting up httpx client without proxy.")
-                self.client = httpx.AsyncClient(
-                    cookies=initial_cookies,
-                    follow_redirects=True,
-                    timeout=timeout,
-                    limits=limits,
-                    http2=True,
-                    verify=True,
-                )
+            proxy_config = {"proxy": self.proxy} if self.proxy else {}
+            logging.debug(
+                f"Setting up httpx client. Proxy configured: {bool(self.proxy)}"
+            )
+            self.client = httpx.AsyncClient(
+                # Pass the httpx.Cookies object
+                cookies=initial_cookies_jar,
+                follow_redirects=True,
+                timeout=timeout,
+                limits=limits,
+                http2=True,
+                verify=True,
+                **proxy_config,
+            )
         except Exception as e:
             logging.error(f"Failed to initialize httpx client: {e}")
             raise LensError(f"Failed to initialize httpx client: {e}") from e
