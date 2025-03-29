@@ -1,20 +1,24 @@
 class LensCookieError(Exception):
     """Custom exception for errors related to cookies."""
+
     pass
 
 
 class LensImageError(Exception):
     """Custom exception for errors related to image processing."""
+
     pass
 
 
 class LensAPIError(Exception):
     """Custom exception for errors related to the LensAPI."""
+
     pass
 
 
 class LensParsingError(Exception):
     """Custom exception for errors related to parsing Lens output."""
+
     pass
 
 
