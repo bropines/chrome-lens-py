@@ -1,8 +1,5 @@
-# import asyncio
 import logging
 import os
-
-# import time
 
 import numpy as np
 from PIL import Image
@@ -11,15 +8,12 @@ from .exceptions import (
     LensAPIError,
     LensCookieError,
     LensError,
-    # LensImageError,
     LensParsingError,
 )
 from .image_processing import image_to_jpeg_buffer, numpy_array_to_jpeg_buffer
 from .request_handler import Lens
-from .text_processing import (  # stitch_* functions are used within simplify_output
-    simplify_output,
-)
-from .utils import is_url  # is_supported_mime
+from .text_processing import simplify_output
+from .utils import is_url
 
 
 class LensAPI:
