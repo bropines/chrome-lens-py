@@ -1,56 +1,39 @@
-LENS_UPLOAD_ENDPOINT = "https://lens.google.com/v3/upload"  # New Upload Endpoint
-LENS_METADATA_ENDPOINT = "https://lens.google.com/qfmetadata"  # New Metadata Endpoint
+# API
+LENS_CRUPLOAD_ENDPOINT = "https://lensfrontend-pa.googleapis.com/v1/crupload"
+DEFAULT_API_KEY = "AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY" # Фиксированный ключ
 
-# Old endpoint, potentially keep for reference or remove later if unused
-# LENS_ENDPOINT = 'https://lens.google.com/v3/upload'
-# LENS_API_ENDPOINT = 'https://lens.google.com/uploadbyurl' # Likely unused with new method
+# Заголовки
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+DEFAULT_HEADERS = {
+    "Content-Type": "application/x-protobuf",
+    "X-Goog-Api-Key": DEFAULT_API_KEY,
+    "User-Agent": DEFAULT_USER_AGENT,
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept": "*/*",
+}
 
-SUPPORTED_MIMES = [
-    "image/x-icon",
-    "image/bmp",
+# Изображения
+SUPPORTED_MIMES_FOR_PREPARE = [
     "image/jpeg",
     "image/png",
-    "image/tiff",
     "image/webp",
-    "image/heic",
+    "image/bmp",
     "image/gif",
+    "image/tiff",
 ]
+DEFAULT_IMAGE_MAX_DIMENSION = 1500
 
-MIME_TO_EXT = {
-    "image/x-icon": "ico",
-    "image/bmp": "bmp",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/tiff": "tiff",
-    "image/webp": "webp",
-    "image/heic": "heic",
-    "image/gif": "gif",
-}
+# Локализация
+DEFAULT_CLIENT_REGION = "US"
+DEFAULT_CLIENT_TIME_ZONE = "America/New_York"
+DEFAULT_OCR_LANG = "" # Пустая строка для автоопределения OCR языка по умолчанию
 
+# Шрифты
+DEFAULT_FONT_SIZE_OVERLAY = 20
+DEFAULT_FONT_PATH_WINDOWS = "arial.ttf"
+DEFAULT_FONT_PATH_LINUX = "DejaVuSans.ttf"
+DEFAULT_FONT_PATH_MACOS = "Arial.ttf"
 
-# Replaced with Chrome Headers
-HEADERS_DEFAULT = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Cache-Control": "max-age=0",
-    "Origin": "https://lens.google.com",
-    "Referer": "https://lens.google.com/",
-    "Sec-Ch-Ua": '"Not A(Brand";v="99", "Google Chrome";v="131", "Chromium";v="131"',
-    "Sec-Ch-Ua-Arch": '"x86"',
-    "Sec-Ch-Ua-Bitness": '"64"',
-    "Sec-Ch-Ua-Full-Version": '"131.0.6778.205"',
-    "Sec-Ch-Ua-Full-Version-List": '"Not A(Brand";v="99.0.0.0", "Google Chrome";v="131", "Chromium";v="131"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Model": '""',
-    "Sec-Ch-Ua-Platform": '"Windows"',
-    "Sec-Ch-Ua-Platform-Version": '"15.0.0"',
-    "Sec-Ch-Ua-Wow64": "?0",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "X-Client-Data": "CIW2yQEIorbJAQipncoBCIH+ygEIkqHLAQiKo8sBCPWYzQEIhaDNAQji0M4BCLPTzgEI19TOAQjy1c4BCJLYzgEIwNjOAQjM2M4BGM7VzgE=",
-}
+# Конфигурация
+APP_NAME_FOR_CONFIG = "chrome-lens-py"
+DEFAULT_CONFIG_FILENAME = "config.json"

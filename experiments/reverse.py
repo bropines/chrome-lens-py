@@ -279,11 +279,9 @@ def adaptive_parse_text_and_language(metadata_json):
                         except (IndexError, TypeError):
                             pass
                 else:
-                    logging.warning(
-                        f"Word groups list structure [1] not found/invalid."
-                    )
+                    logging.warning("Word groups list structure [1] not found/invalid.")
             except (IndexError, TypeError):
-                logging.error(f"Error processing segment structure.")
+                logging.error("Error processing segment structure.")
             except Exception as e:
                 logging.error(f"Unexpected error processing segment: {e}")
 

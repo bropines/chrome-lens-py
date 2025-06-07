@@ -1,32 +1,37 @@
-class LensCookieError(Exception):
-    """Custom exception for errors related to cookies."""
-
+class LensException(Exception):
+    """Базовый класс для исключений этой библиотеки."""
     pass
 
-
-class LensImageError(Exception):
-    """Custom exception for errors related to image processing."""
-
-    pass
-
-
-class LensAPIError(Exception):
-    """Custom exception for errors related to the LensAPI."""
-
-    pass
-
-
-class LensParsingError(Exception):
-    """Custom exception for errors related to parsing Lens output."""
-
-    pass
-
-
-class LensError(Exception):
-    """Class for error handling."""
-
-    def __init__(self, message, code=None, headers=None, body=None):
+class LensAPIError(LensException):
+    """Исключение для ошибок, связанных с HTTP запросами к API Lens."""
+    def __init__(self, message, status_code=None, response_body=None):
         super().__init__(message)
-        self.code = code
-        self.headers = headers
-        self.body = body
+        self.status_code = status_code
+        self.response_body = response_body
+
+    def __str__(self):
+        msg = super().__str__()
+        if self.status_code:
+            msg += f" (Status Code: {self.status_code})"
+        if self.response_body:
+            response_body_str = str(self.response_body)
+            if len(response_body_str) > 200:
+                response_body_str = response_body_str[:200] + "..."
+            msg += f"\nResponse Body (partial): {response_body_str}"
+        return msg
+
+class LensImageError(LensException):
+    """Исключение для ошибок, связанных с обработкой изображений."""
+    pass
+
+class LensProtobufError(LensException):
+    """Исключение для ошибок, связанных с созданием или парсингом Protobuf сообщений."""
+    pass
+
+class LensFontError(LensException):
+    """Исключение для ошибок, связанных со шрифтами."""
+    pass
+
+class LensConfigError(LensException):
+    """Исключение для ошибок, связанных с конфигурацией."""
+    pass
