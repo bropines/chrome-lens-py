@@ -243,6 +243,9 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 
 </details>
 
+## Интеграция Sharex
+Посмотрите [sharex.md](docs/sharex.md) для получения дополнительной информации о том, как использовать эту библиотеку с ShareX.
+
 ## ❤️ Поддержка и благодарности
 
 -   **OWOCR** В большей степени вдохновлен и основан на [OWOCR](https://github.com/AuroraWright/owocr). Благодарю ребят, за их ресерч protobuf и реализацию OCR.
