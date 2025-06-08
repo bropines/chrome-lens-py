@@ -28,7 +28,7 @@ It's possible to use the `chrome-lens-py` package with ShareX to OCR images usin
    - Go to the **Actions** tab and check the `Override actions` box.
    - Click **Add...** and set up a new action with the following details:
 
-   ![Screenshot of ShareX Action settings]()
+   ![Screenshot of ShareX Action settings](https://github.com/user-attachments/assets/38ac5d3c-0119-496a-92ab-02a63dd2152c)
 
    - **Name:** `Lens OCR` (or any name you prefer)
    - **File path:** Paste the path you copied in step 3. For example:
