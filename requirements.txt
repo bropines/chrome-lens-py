@@ -1,8 +1,9 @@
 requests
 Pillow
 filetype
-lxml
 json5
 PySocks
-httpx[http2]
+httpx[socks]
 numpy
+rich
+betterproto >= 2.0.0b6
