@@ -149,8 +149,8 @@ def create_ocr_translate_request(
     except TypeError as te:
         logger.error(f"TypeError during Protobuf request creation: {te}", exc_info=True)
         raise LensProtobufError(
-            f"Ошибка типа при создании Protobuf запроса: {te}"
+            f"Type error when creating a Protobuf request: {te}"
         ) from te
     except Exception as e:
         logger.error(f"Error creating Protobuf request: {e}", exc_info=True)
-        raise LensProtobufError(f"Ошибка при создании Protobuf запроса: {e}") from e
+        raise LensProtobufError(f"Error while creating Protobuf request: {e}") from e
