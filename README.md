@@ -249,7 +249,7 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 -   **Chrome Lens OCR**: For the original implementation and ideas that formed the basis of this library. The update with SHAREX support was originally tested and added by me to [chrome-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr), thanks for the initial implementation and ideas.
 -   **AI Collaboration**: A significant portion of the v3.0 code, including the architectural refactor, asynchronous implementation, and Protobuf integration, was developed in collaboration with an advanced AI assistant.
 -   **GOOGLE**: For the convenient and high-quality Lens technology.
--   **Support the Author**: If you find this library useful, you can support the author - **[Boosty](boosty.to/pinus)**
+-   **Support the Author**: If you find this library useful, you can support the author - **[Boosty](https://boosty.to/pinus)**
 
 ## Star History
 
