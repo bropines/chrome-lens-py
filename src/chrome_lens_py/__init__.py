@@ -1,5 +1,5 @@
 from .api import LensAPI
-from .exceptions import LensException, LensAPIError, LensImageError, LensProtobufError
+from .exceptions import LensAPIError, LensException, LensImageError, LensProtobufError
 
 __all__ = [
     "LensAPI",

@@ -1,12 +1,13 @@
 import json
-import os
 import logging
-from typing import Dict, Any, Optional
+import os
+from typing import Any, Dict, Optional
 
 from ..constants import APP_NAME_FOR_CONFIG, DEFAULT_CONFIG_FILENAME
 from ..exceptions import LensConfigError
 
 logger = logging.getLogger(__name__)
+
 
 def get_default_config_dir(app_name: str = APP_NAME_FOR_CONFIG) -> str:
     """Returns the default configuration directory path for the application."""
@@ -27,16 +28,18 @@ def load_config(config_file_path: str) -> Dict[str, Any]:
             with open(config_file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError as e:
-            raise LensConfigError(f"Error decoding JSON from config file '{config_file_path}': {e}")
+            raise LensConfigError(
+                f"Error decoding JSON from config file '{config_file_path}': {e}"
+            )
         except IOError as e:
-            raise LensConfigError(f"I/O error reading config file '{config_file_path}': {e}")
+            raise LensConfigError(
+                f"I/O error reading config file '{config_file_path}': {e}"
+            )
     return {}
 
 
 def get_effective_config_value(
-    cli_arg_value: Optional[Any],
-    config_file_value: Optional[Any],
-    default_value: Any
+    cli_arg_value: Optional[Any], config_file_value: Optional[Any], default_value: Any
 ) -> Any:
     """Determines the effective configuration value. Priority: CLI > Config File > Default."""
     if cli_arg_value is not None:
@@ -47,63 +50,90 @@ def get_effective_config_value(
 
 
 def build_app_config(
-    cli_args: Optional[Dict[str, Any]] = None,
-    config_file_path: Optional[str] = None
+    cli_args: Optional[Dict[str, Any]] = None, config_file_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Builds the final application config by merging values from CLI args and a config file.
     """
     cli = cli_args or {}
     loaded_config = load_config(config_file_path) if config_file_path else {}
-    
+
     if loaded_config:
         logging.info("Applying settings from config file:")
         for key, value in loaded_config.items():
-            if key.lower() not in ['api_key', 'proxy']:
-                 logging.info(f"  - {key}: {value}")
+            if key.lower() not in ["api_key", "proxy"]:
+                logging.info(f"  - {key}: {value}")
 
     # Priority: CLI > Config File > Default (handled by get_effective_config_value)
     # Defaults are defined in constants.py or as literals here.
-    from ..constants import DEFAULT_API_KEY, DEFAULT_CLIENT_REGION, DEFAULT_CLIENT_TIME_ZONE
+    from ..constants import (
+        DEFAULT_API_KEY,
+        DEFAULT_CLIENT_REGION,
+        DEFAULT_CLIENT_TIME_ZONE,
+    )
 
     final_config = {
         "api_key": get_effective_config_value(
             cli.get("api_key"), loaded_config.get("api_key"), DEFAULT_API_KEY
         ),
         "client_region": get_effective_config_value(
-            cli.get("client_region"), loaded_config.get("client_region"), DEFAULT_CLIENT_REGION
+            cli.get("client_region"),
+            loaded_config.get("client_region"),
+            DEFAULT_CLIENT_REGION,
         ),
         "client_time_zone": get_effective_config_value(
-            cli.get("client_time_zone"), loaded_config.get("client_time_zone"), DEFAULT_CLIENT_TIME_ZONE
+            cli.get("client_time_zone"),
+            loaded_config.get("client_time_zone"),
+            DEFAULT_CLIENT_TIME_ZONE,
         ),
         "proxy": get_effective_config_value(
             cli.get("proxy"), loaded_config.get("proxy"), None
         ),
-        "timeout": int(get_effective_config_value(
-            cli.get("timeout"), loaded_config.get("timeout"), 60
-        )),
+        "timeout": int(
+            get_effective_config_value(
+                cli.get("timeout"), loaded_config.get("timeout"), 60
+            )
+        ),
         "font_path": get_effective_config_value(
             cli.get("font_path"), loaded_config.get("font_path"), None
         ),
-        "font_size": int(get_effective_config_value(
-            cli.get("font_size"), loaded_config.get("font_size"), 20
-        )) if get_effective_config_value(cli.get("font_size"), loaded_config.get("font_size"), None) is not None else None,
+        "font_size": (
+            int(
+                get_effective_config_value(
+                    cli.get("font_size"), loaded_config.get("font_size"), 20
+                )
+            )
+            if get_effective_config_value(
+                cli.get("font_size"), loaded_config.get("font_size"), None
+            )
+            is not None
+            else None
+        ),
         "logging_level": get_effective_config_value(
             cli.get("logging_level"), loaded_config.get("logging_level"), "WARNING"
         ).upper(),
         "ocr_preserve_line_breaks": get_effective_config_value(
-            cli.get("ocr_preserve_line_breaks"), loaded_config.get("ocr_preserve_line_breaks"), True
-        )
+            cli.get("ocr_preserve_line_breaks"),
+            loaded_config.get("ocr_preserve_line_breaks"),
+            True,
+        ),
     }
     return final_config
+
 
 def update_config_file_from_cli(cli_args: Dict[str, Any], config_file_path: str):
     """Updates the config file with values from CLI args (only safe fields)."""
     current_config = load_config(config_file_path)
 
     fields_to_update = [
-        "client_region", "client_time_zone", "proxy", "timeout",
-        "font_path", "font_size", "logging_level", "ocr_preserve_line_breaks"
+        "client_region",
+        "client_time_zone",
+        "proxy",
+        "timeout",
+        "font_path",
+        "font_size",
+        "logging_level",
+        "ocr_preserve_line_breaks",
     ]
     updated = False
     for field in fields_to_update:
@@ -111,7 +141,7 @@ def update_config_file_from_cli(cli_args: Dict[str, Any], config_file_path: str)
         if cli_value is not None and current_config.get(field) != cli_value:
             current_config[field] = cli_value
             updated = True
-    
+
     if not updated:
         logging.info("No configuration changes to save from CLI arguments.")
         return

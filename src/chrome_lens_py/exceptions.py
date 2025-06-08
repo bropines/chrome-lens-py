@@ -1,9 +1,12 @@
 class LensException(Exception):
-    """Базовый класс для исключений этой библиотеки."""
+    """Base class for exceptions of this library."""
+
     pass
 
+
 class LensAPIError(LensException):
-    """Исключение для ошибок, связанных с HTTP запросами к API Lens."""
+    """Exception for errors related to HTTP requests to the Lens API."""
+
     def __init__(self, message, status_code=None, response_body=None):
         super().__init__(message)
         self.status_code = status_code
@@ -20,18 +23,26 @@ class LensAPIError(LensException):
             msg += f"\nResponse Body (partial): {response_body_str}"
         return msg
 
+
 class LensImageError(LensException):
-    """Исключение для ошибок, связанных с обработкой изображений."""
+    """Exception for errors related to image processing."""
+
     pass
+
 
 class LensProtobufError(LensException):
-    """Исключение для ошибок, связанных с созданием или парсингом Protobuf сообщений."""
+    """Exception for errors related to the creation or parsing of Protobuf messages."""
+
     pass
+
 
 class LensFontError(LensException):
-    """Исключение для ошибок, связанных со шрифтами."""
+    """Exception for font-related errors."""
+
     pass
 
+
 class LensConfigError(LensException):
-    """Исключение для ошибок, связанных с конфигурацией."""
+    """Exception for configuration-related errors."""
+
     pass

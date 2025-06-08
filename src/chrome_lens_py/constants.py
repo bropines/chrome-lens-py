@@ -1,7 +1,7 @@
 # API
 LENS_CRUPLOAD_ENDPOINT = "https://lensfrontend-pa.googleapis.com/v1/crupload"
 DEFAULT_API_KEY = "AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY"
-#https://github.com/AuroraWright/owocr
+# https://github.com/AuroraWright/owocr
 
 
 # headers
