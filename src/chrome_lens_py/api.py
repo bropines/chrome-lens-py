@@ -1,8 +1,8 @@
+import asyncio
 import logging
-import asyncio  # Добавлен импорт
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 from math import pi
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import httpx
 from PIL import ImageFont
@@ -21,13 +21,12 @@ from .core.image_processor import (
 from .core.protobuf_builder import create_ocr_translate_request
 from .core.request_handler import LensRequestHandler
 from .exceptions import LensException
-from .utils.font_manager import FontType, get_font
 
 if TYPE_CHECKING:
     from .utils.lens_betterproto import (
         LensOverlayServerResponse,
-        TranslationDataStatusCode,
         TextLayoutParagraph,
+        TranslationDataStatusCode,
     )
 else:
     from .utils.lens_betterproto import (
@@ -35,6 +34,8 @@ else:
         TranslationDataStatusCode,
         TextLayoutParagraph,
     )
+
+from .utils.font_manager import FontType, get_font
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class LensAPI:
         timeout: int = 60,
         font_path: Optional[str] = None,
         font_size: Optional[int] = None,
-        max_concurrent: int = 10,  
+        max_concurrent: int = 10,
     ):
         """
         Initializes the LensAPI client.
