@@ -26,6 +26,7 @@ This project provides a powerful, asynchronous Python library and command-line t
 -   **Powerful OCR & Segmentation**:
     -   Extract text from images as a single string.
     -   Get text segmented into logical blocks (paragraphs, dialog bubbles) with their own coordinates.
+    -   Get individual text lines with their own precise geometry.
 -   **Built-in Translation**: Instantly translate recognized text into any supported language.
 -   **Versatile Image Sources**: Process images from a **file path**, **URL**, **bytes**, **PIL Image** object, or **NumPy array**.
 -   **Text Overlay**: Automatically generate and save images with the translated text rendered over them(works poorly, alas, no time to do better).
@@ -74,8 +75,9 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--translate <lang>` | `-t` | **Translate** the OCR text to the target language code (e.g., `en`, `ru`). |
 | `--translate-from <lang>` | | Specify the source language for translation (otherwise auto-detected). |
 | `--translate-out <path>` | `-to` | **Save** the image with the translated text overlaid to the specified file path. |
-| `--output-blocks` | `-b` | **Output OCR text as segmented blocks** (useful for comics). Incompatible with `--get-coords`.|
-| `--get-coords` | | Output recognized words and their coordinates in JSON format. Incompatible with `--output-blocks`. |
+| `--output-blocks` | `-b` | **Output OCR text as segmented blocks** (useful for comics). Incompatible with `--get-coords` and `--output-lines`.|
+| `--output-lines` | `-ol` | **Output OCR text as individual lines** with their geometry. Incompatible with `--output-blocks` and `--get-coords`.|
+| `--get-coords` | | Output recognized words and their coordinates in JSON format. Incompatible with `--output-blocks` and `--output-lines`. |
 | `--sharex` | `-sx` | **Copy** the result (translation or OCR) to the clipboard. |
 | `--ocr-single-line` | | Join all recognized OCR text into a single line, removing line breaks. |
 | `--config-file <path>`| | Path to a custom JSON configuration file. |
@@ -106,8 +108,18 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
   - `-b` is the alias for `--output-blocks`.
 
   ---
+  
+  **3. Get Individual Text Lines**
+  
+  Outputs each recognized line of text along with its geometry.
+  ```bash
+  lens_scan "path/to/document.png" --output-lines
+  ```
+  - `-ol` is the alias for `--output-lines`.
 
-  **3. Get Coordinates of All Individual Words**
+  ---
+
+  **4. Get Coordinates of All Individual Words**
   
   Outputs a detailed JSON array containing every single recognized word and its precise geometric data (center, size, angle). Useful for programmatic analysis or custom overlays.
   ```bash
@@ -116,7 +128,7 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
   
   ---
 
-  **4. Translate, Save Overlay, and Copy to Clipboard**
+  **5. Translate, Save Overlay, and Copy to Clipboard**
   
   A power-user workflow. This command will:
   1. OCR a Japanese image.
@@ -129,7 +141,7 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 
   ---
 
-  **5. Process an Image from a URL as a Single Line**
+  **6. Process an Image from a URL as a Single Line**
 
   Fetches an image directly from a URL and joins all recognized text into one continuous line, removing any line breaks.
   ```bash
@@ -138,7 +150,7 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 
   ---
 
-  **6. Use a SOCKS5 Proxy**
+  **7. Use a SOCKS5 Proxy**
   
   All requests to the Google API will be routed through the specified proxy server, which is useful for privacy or bypassing region restrictions.
   ```bash
@@ -239,6 +251,35 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
   asyncio.run(process_comics())
   ```
 
+  #### **Getting Individual Lines and their Geometry**
+
+  To get each recognized line of text as a separate item, use the `output_format='lines'` parameter.
+
+  ```python
+  import asyncio
+  from chrome_lens_py import LensAPI
+
+  async def process_document_lines():
+      api = LensAPI()
+      image_source = "path/to/document.png"
+      
+      result = await api.process_image(
+          image_path=image_source,
+          output_format='lines' # Get individual lines with their geometry
+      )
+
+      # The result now contains a 'line_blocks' key
+      line_blocks = result.get("line_blocks", [])
+      print(f"Found {len(line_blocks)} lines.")
+
+      for i, line in enumerate(line_blocks):
+          print(f"\n--- Line #{i+1} ---")
+          print(f"Text: {line['text']}")
+          print(f"Geometry: {line['geometry']}")
+  
+  asyncio.run(process_document_lines())
+  ```
+
   #### **`LensAPI` Constructor**
 
   ```python
@@ -264,15 +305,16 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
       source_translation_language: Optional[str] = None,
       output_overlay_path: Optional[str] = None,
       ocr_preserve_line_breaks: bool = True,
-      output_format: Literal['full_text', 'blocks'] = 'full_text'
+      output_format: Literal['full_text', 'blocks', 'lines'] = 'full_text'
   )
   ```
-  -   **`output_format`**: `'full_text'` (default) returns results in `ocr_text`. `'blocks'` returns a list of dictionaries in `text_blocks`.
+  -   **`output_format`**: `'full_text'` (default) returns results in `ocr_text`. `'blocks'` returns a list of dictionaries in `text_blocks`. `'lines'` returns a list of dictionaries in `line_blocks`.
   -   **`ocr_preserve_line_breaks`**: If `False` and `output_format` is `'full_text'`, joins all OCR text into a single line.
 
   **The returned `result` dictionary contains:**
   - `ocr_text` (Optional[str]): The full recognized text (if `output_format='full_text'`).
   - `text_blocks` (Optional[List[dict]]): A list of segmented text blocks (if `output_format='blocks'`). Each block is a dict with `text`, `lines`, and `geometry`.
+  - `line_blocks` (Optional[List[dict]]): A list of individual text lines (if `output_format='lines'`). Each block is a dict with `text` and `geometry`.
   - `translated_text` (Optional[str]): The translated text, if requested.
   - `word_data` (List[dict]): A list of dictionaries for every recognized word with its geometry.
   - `raw_response_objects`: The "raw" Protobuf response object for further analysis.
