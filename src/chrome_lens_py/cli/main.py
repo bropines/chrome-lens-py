@@ -305,7 +305,7 @@ async def cli_main():
             )
             if not line_blocks:
                 console.print("No lines found.")
-            
+
             for i, line in enumerate(line_blocks):
                 console.print(f"\n--- [cyan]Line #{i+1}[/cyan] ---")
                 console.print(Text(line.get("text", "")))

@@ -93,7 +93,7 @@ class LensAPI:
                 font_path_override=self.font_path, font_size_override=self.font_size
             )
         return self._font_object
-        
+
     def _parse_line(self, line: "TextLayoutLine") -> Dict[str, Any]:
         """Parses a single TextLayoutLine into a structured dictionary."""
         line_text = "".join(
@@ -108,7 +108,7 @@ class LensAPI:
             "height": l_geom.height,
             "angle_deg": l_geom.rotation_z * (180 / pi) if l_geom.rotation_z else 0.0,
         }
-        
+
         return {
             "text": line_text,
             "geometry": geometry_dict,
@@ -181,7 +181,7 @@ class LensAPI:
         logger.info(
             f"Extracted data for {len(word_data_list)} words. Detected language: {detected_lang}"
         )
-        
+
         if output_format == "lines":
             line_blocks = []
             for p in text_layout.paragraphs:
