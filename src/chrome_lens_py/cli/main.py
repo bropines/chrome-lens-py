@@ -88,6 +88,10 @@ def print_help():
         "Output OCR text as segmented blocks (useful for comics).",
     )
     table.add_row(
+        "  -ol, --output-lines",
+        "Output OCR text as individual lines with their geometry.",
+    )
+    table.add_row(
         "  --get-coords",
         "Output recognized words with their coordinates in JSON format.",
     )
@@ -150,6 +154,12 @@ async def cli_main():
         help="Output OCR text as segmented blocks.",
     )
     parser.add_argument(
+        "-ol",
+        "--output-lines",
+        action="store_true",
+        help="Output OCR text as individual lines.",
+    )
+    parser.add_argument(
         "--get-coords",
         action="store_true",
         help="Output word coordinates in JSON format.",
@@ -187,9 +197,11 @@ async def cli_main():
         print_help()
         sys.exit(1)
 
-    if args.output_blocks and args.get_coords:
+    # Validate mutually exclusive output formats
+    output_modes = [args.output_blocks, args.get_coords, args.output_lines]
+    if sum(output_modes) > 1:
         console.print(
-            "[bold red]Error:[/bold red] --output-blocks and --get-coords cannot be used together."
+            "[bold red]Error:[/bold red] --output-blocks, --output-lines, and --get-coords cannot be used together."
         )
         sys.exit(1)
 
@@ -243,7 +255,11 @@ async def cli_main():
     try:
         console.print(f"Processing image: [cyan]{args.image_source}[/cyan]...")
 
-        output_format = "blocks" if args.output_blocks else "full_text"
+        output_format = "full_text"
+        if args.output_blocks:
+            output_format = "blocks"
+        elif args.output_lines:
+            output_format = "lines"
 
         result = await api.process_image(
             image_path=args.image_source,
@@ -281,6 +297,26 @@ async def cli_main():
                 )
 
             console.print(json.dumps(processed_coords, indent=2, ensure_ascii=False))
+
+        elif args.output_lines:
+            line_blocks = result.get("line_blocks", [])
+            console.print(
+                f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
+            )
+            if not line_blocks:
+                console.print("No lines found.")
+            
+            for i, line in enumerate(line_blocks):
+                console.print(f"\n--- [cyan]Line #{i+1}[/cyan] ---")
+                console.print(Text(line.get("text", "")))
+                # Optionally print geometry
+                # geom = line.get("geometry", {})
+                # console.print(f"  [dim]Geom: {geom}[/dim]")
+
+            translated_text = result.get("translated_text")
+            if translated_text:
+                console.print("\n[bold green]Translated Text (Full):[/bold green]")
+                console.print(Text(translated_text))
 
         elif args.output_blocks:
             text_blocks = result.get("text_blocks", [])

@@ -25,14 +25,16 @@ from .exceptions import LensException
 if TYPE_CHECKING:
     from .utils.lens_betterproto import (
         LensOverlayServerResponse,
+        TextLayoutLine,
         TextLayoutParagraph,
         TranslationDataStatusCode,
     )
 else:
     from .utils.lens_betterproto import (
         LensOverlayServerResponse,
-        TranslationDataStatusCode,
+        TextLayoutLine,
         TextLayoutParagraph,
+        TranslationDataStatusCode,
     )
 
 from .utils.font_manager import FontType, get_font
@@ -91,6 +93,26 @@ class LensAPI:
                 font_path_override=self.font_path, font_size_override=self.font_size
             )
         return self._font_object
+        
+    def _parse_line(self, line: "TextLayoutLine") -> Dict[str, Any]:
+        """Parses a single TextLayoutLine into a structured dictionary."""
+        line_text = "".join(
+            word.plain_text + (word.text_separator or "") for word in line.words
+        ).strip()
+
+        l_geom = line.geometry.bounding_box
+        geometry_dict = {
+            "center_x": l_geom.center_x,
+            "center_y": l_geom.center_y,
+            "width": l_geom.width,
+            "height": l_geom.height,
+            "angle_deg": l_geom.rotation_z * (180 / pi) if l_geom.rotation_z else 0.0,
+        }
+        
+        return {
+            "text": line_text,
+            "geometry": geometry_dict,
+        }
 
     def _parse_paragraph(self, paragraph: "TextLayoutParagraph") -> Dict[str, Any]:
         """Parses a single TextLayoutParagraph into a structured dictionary."""
@@ -123,7 +145,7 @@ class LensAPI:
         self,
         response_proto: "LensOverlayServerResponse",
         preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks"] = "full_text",
+        output_format: Literal["full_text", "blocks", "lines"] = "full_text",
     ) -> Tuple[Union[str, List[Dict]], List[Dict[str, Any]]]:
         """
         Extracts OCR data from the response.
@@ -159,6 +181,13 @@ class LensAPI:
         logger.info(
             f"Extracted data for {len(word_data_list)} words. Detected language: {detected_lang}"
         )
+        
+        if output_format == "lines":
+            line_blocks = []
+            for p in text_layout.paragraphs:
+                for line in p.lines:
+                    line_blocks.append(self._parse_line(line))
+            return line_blocks, word_data_list
 
         if output_format == "blocks":
             text_blocks = [self._parse_paragraph(p) for p in text_layout.paragraphs]
@@ -206,7 +235,7 @@ class LensAPI:
         output_overlay_path: Optional[str] = None,
         new_session: bool = True,
         ocr_preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks"] = "full_text",
+        output_format: Literal["full_text", "blocks", "lines"] = "full_text",
     ) -> Dict[str, Any]:
         """
         Processes an image, performing OCR and optional translation.
@@ -219,8 +248,9 @@ class LensAPI:
         :param new_session: If True, starts a new server session for the request.
         :param ocr_preserve_line_breaks: If True and output_format is 'full_text', preserves line breaks.
         :param output_format: 'full_text' (default) returns a single string in 'ocr_text'.
-                            'blocks' returns a list of dictionaries in 'text_blocks',
-                            each representing a segmented text block.
+                            'blocks' returns a list of dictionaries in 'text_blocks'.
+                            'lines' returns a list of dictionaries in 'line_blocks',
+                            each representing a single recognized line with its geometry.
         :return: A dictionary containing the processing results.
         """
         # Acquire the semaphore before starting any processing
@@ -321,6 +351,8 @@ class LensAPI:
 
                 if output_format == "blocks":
                     final_result["text_blocks"] = ocr_result
+                elif output_format == "lines":
+                    final_result["line_blocks"] = ocr_result
                 else:
                     final_result["ocr_text"] = ocr_result
 
