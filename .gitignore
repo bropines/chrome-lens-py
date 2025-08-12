@@ -120,3 +120,6 @@ dmypy.json
 # egg-info and related files
 *.egg-info/
 src/chrome_lens_py.egg-info/
+
+# mylist
+tree.txt
