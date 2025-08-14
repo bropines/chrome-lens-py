@@ -96,6 +96,10 @@ def print_help():
         "Output recognized words with their coordinates in JSON format.",
     )
     table.add_row(
+        "  -q, --quiet",
+        "Suppress informational messages and headers, printing only the final result data.",
+    )
+    table.add_row(
         "  -sx, --sharex", "Copy the result (translation or OCR) to the clipboard."
     )
     table.add_row(
@@ -163,6 +167,12 @@ async def cli_main():
         "--get-coords",
         action="store_true",
         help="Output word coordinates in JSON format.",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress informational messages, printing only result data.",
     )
     parser.add_argument("-sx", "--sharex", action="store_true")
     parser.add_argument(
@@ -253,7 +263,11 @@ async def cli_main():
     )
 
     try:
-        console.print(f"Processing image: [cyan]{args.image_source}[/cyan]...")
+        if not args.quiet:
+            console.print(f"Processing image: [cyan]{args.image_source}[/cyan]...")
+        else:
+            logging.info(f"Processing image: {args.image_source}")
+
 
         output_format = "full_text"
         if args.output_blocks:
@@ -300,64 +314,78 @@ async def cli_main():
 
         elif args.output_lines:
             line_blocks = result.get("line_blocks", [])
-            console.print(
-                f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
-            )
-            if not line_blocks:
+            if not args.quiet:
+                console.print(
+                    f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
+                )
+            if not line_blocks and not args.quiet:
                 console.print("No lines found.")
 
             for i, line in enumerate(line_blocks):
-                console.print(f"\n--- [cyan]Line #{i+1}[/cyan] ---")
+                if not args.quiet:
+                    console.print(f"\n--- [cyan]Line #{i+1}[/cyan] ---")
                 console.print(Text(line.get("text", "")))
-                # Optionally print geometry
-                # geom = line.get("geometry", {})
-                # console.print(f"  [dim]Geom: {geom}[/dim]")
 
             translated_text = result.get("translated_text")
             if translated_text:
-                console.print("\n[bold green]Translated Text (Full):[/bold green]")
+                if not args.quiet:
+                    console.print("\n[bold green]Translated Text (Full):[/bold green]")
                 console.print(Text(translated_text))
 
         elif args.output_blocks:
             text_blocks = result.get("text_blocks", [])
-            console.print(
-                f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]"
-            )
-            if not text_blocks:
+            if not args.quiet:
+                console.print(
+                    f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]"
+                )
+            if not text_blocks and not args.quiet:
                 console.print("No text blocks found.")
 
             for i, block in enumerate(text_blocks):
-                console.print(f"\n--- [cyan]Block #{i+1}[/cyan] ---")
+                if not args.quiet:
+                    console.print(f"\n--- [cyan]Block #{i+1}[/cyan] ---")
                 console.print(Text(block.get("text", "")))
 
             translated_text = result.get("translated_text")
             if translated_text:
-                console.print("\n[bold green]Translated Text (Full):[/bold green]")
+                if not args.quiet:
+                    console.print("\n[bold green]Translated Text (Full):[/bold green]")
                 console.print(Text(translated_text))
 
-        else:
-            console.print("\n[bold green]OCR Results:[/bold green]")
+        else: # Default 'full_text' output
             ocr_text = result.get("ocr_text")
-            console.print(Text(ocr_text or "No OCR text found."))
+            if ocr_text:
+                if not args.quiet:
+                    console.print("\n[bold green]OCR Results:[/bold green]")
+                console.print(Text(ocr_text))
+            elif not args.quiet:
+                 console.print("\n[bold green]OCR Results:[/bold green]")
+                 console.print("No OCR text found.")
 
             translated_text = result.get("translated_text")
             if translated_text:
-                console.print("\n[bold green]Translated Text:[/bold green]")
+                if not args.quiet:
+                    console.print("\n[bold green]Translated Text:[/bold green]")
                 console.print(Text(translated_text))
 
         translated_text = result.get("translated_text")
-        if args.target_lang and not translated_text:
+        if args.target_lang and not translated_text and not args.quiet:
             console.print(
                 "\n[yellow]Translation was requested but not found in the response.[/yellow]"
             )
 
         if args.output_overlay_path and translated_text:
-            console.print(
-                f"\nImage with overlay saved to: [cyan]{args.output_overlay_path}[/cyan]"
-            )
+            if not args.quiet:
+                console.print(
+                    f"\nImage with overlay saved to: [cyan]{args.output_overlay_path}[/cyan]"
+                )
+            else:
+                logging.info(f"Image with overlay saved to: {args.output_overlay_path}")
+
 
         if args.sharex:
             source_for_copy, text_to_copy = ("", "")
+            # Prioritize translated text for copying
             if args.target_lang and translated_text:
                 text_to_copy, source_for_copy = translated_text, "Translated text"
             elif args.output_blocks:
@@ -372,15 +400,19 @@ async def cli_main():
 
             if text_to_copy:
                 if copy_to_clipboard(text_to_copy):
-                    console.print(
-                        f"\n[bold magenta]({source_for_copy} copied to clipboard)[/bold magenta]"
-                    )
+                    if not args.quiet:
+                        console.print(
+                            f"\n[bold magenta]({source_for_copy} copied to clipboard)[/bold magenta]"
+                        )
+                    else:
+                        logging.info(f"{source_for_copy} copied to clipboard")
                 else:
+                    # This is an error/warning, so it should probably stay visible
                     console.print(
                         "\n[bold red]Failed to copy text. Is 'pyperclip' installed? "
                         '(`pip install "chrome-lens-py[clipboard]"`)[/bold red]'
                     )
-            else:
+            elif not args.quiet:
                 console.print("\n[yellow]No text available to copy.[/yellow]")
 
     except LensException as e:
