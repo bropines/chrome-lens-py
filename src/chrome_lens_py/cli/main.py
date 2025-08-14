@@ -268,7 +268,6 @@ async def cli_main():
         else:
             logging.info(f"Processing image: {args.image_source}")
 
-
         output_format = "full_text"
         if args.output_blocks:
             output_format = "blocks"
@@ -352,15 +351,15 @@ async def cli_main():
                     console.print("\n[bold green]Translated Text (Full):[/bold green]")
                 console.print(Text(translated_text))
 
-        else: # Default 'full_text' output
+        else:  # Default 'full_text' output
             ocr_text = result.get("ocr_text")
             if ocr_text:
                 if not args.quiet:
                     console.print("\n[bold green]OCR Results:[/bold green]")
                 console.print(Text(ocr_text))
             elif not args.quiet:
-                 console.print("\n[bold green]OCR Results:[/bold green]")
-                 console.print("No OCR text found.")
+                console.print("\n[bold green]OCR Results:[/bold green]")
+                console.print("No OCR text found.")
 
             translated_text = result.get("translated_text")
             if translated_text:
@@ -381,7 +380,6 @@ async def cli_main():
                 )
             else:
                 logging.info(f"Image with overlay saved to: {args.output_overlay_path}")
-
 
         if args.sharex:
             source_for_copy, text_to_copy = ("", "")
