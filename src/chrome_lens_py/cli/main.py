@@ -122,6 +122,9 @@ def print_help():
     )
     table.add_row("  --timeout SECONDS", "Request timeout in seconds (default: 60).")
     table.add_row(
+        "  --concurrency N", "Set the maximum number of concurrent requests (default: 10)."
+    )
+    table.add_row(
         "  --client-region REGION",
         f"Client region code (default: '{DEFAULT_CLIENT_REGION}').",
     )
@@ -189,6 +192,12 @@ async def cli_main():
     parser.add_argument("--api-key")
     parser.add_argument("--proxy")
     parser.add_argument("--timeout", type=int)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=10,
+        help="Maximum number of concurrent requests.",
+    )
     parser.add_argument("--client-region")
     parser.add_argument("--client-time-zone")
     # Meta
@@ -235,7 +244,6 @@ async def cli_main():
             f"Specified config file not found: {args.config_file_path_override}"
         )
 
-    # --- Start of new logic for handling directories ---
     image_sources = []
     if os.path.isdir(args.image_source):
         if not args.quiet:
@@ -256,7 +264,6 @@ async def cli_main():
             )
             sys.exit(1)
         image_sources.append(args.image_source)
-    # --- End of new logic ---
 
     if args.update_config:
         if args.config_file_path_override:
@@ -277,6 +284,7 @@ async def cli_main():
         timeout=app_config.get("timeout", 60),
         font_path=app_config.get("font_path"),
         font_size=app_config.get("font_size"),
+        max_concurrent=args.concurrency,
     )
 
     try:
@@ -286,34 +294,69 @@ async def cli_main():
         elif args.output_lines:
             output_format = "lines"
 
-        # --- Main processing loop for all sources ---
-        for i, image_path in enumerate(image_sources):
+        results_buffer = {}
+        next_to_print = 0
+        results_ready = asyncio.Condition()
+
+        async def worker(queue):
+            while True:
+                index, path = await queue.get()
+                try:
+
+                    try:
+                        result = await api.process_image(
+                            image_path=path,
+                            ocr_language=args.ocr_lang,
+                            target_translation_language=args.target_lang,
+                            source_translation_language=args.source_lang,
+                            output_overlay_path=args.output_overlay_path,
+                            ocr_preserve_line_breaks=app_config.get(
+                                "ocr_preserve_line_breaks", True
+                            ),
+                            output_format=output_format,
+                        )
+                    except Exception as e:
+                        result = e
+
+                    async with results_ready:
+                        results_buffer[index] = result
+                        results_ready.notify()
+
+                finally:
+                    queue.task_done()
+
+        job_queue = asyncio.Queue()
+        for i, path in enumerate(image_sources):
+            job_queue.put_nowait((i, path))
+
+        worker_tasks = [
+            asyncio.create_task(worker(job_queue))
+            for _ in range(args.concurrency)
+        ]
+
+        while next_to_print < len(image_sources):
+            async with results_ready:
+                await results_ready.wait_for(lambda: next_to_print in results_buffer)
+
+            result = results_buffer.pop(next_to_print)
+            image_path = image_sources[next_to_print]
+
+            if isinstance(result, Exception):
+                console.print(f"\n--- [bold red]({next_to_print + 1}/{len(image_sources)}) Error for: {os.path.basename(image_path)}[/bold red] ---")
+                console.print(f"[red]{result}[/red]")
+                next_to_print += 1
+                continue
+
             if len(image_sources) > 1 and not args.quiet:
                 console.print(
-                    f"\n--- [bold]Processing file {i+1}/{len(image_sources)}: {os.path.basename(image_path)}[/bold] ---"
+                    f"\n--- [bold green]({next_to_print + 1}/{len(image_sources)}) Result for: {os.path.basename(image_path)}[/bold green] ---"
                 )
-
-            if not args.quiet:
-                console.print(f"Processing image: [cyan]{image_path}[/cyan]...")
-            else:
-                logging.info(f"Processing image: {image_path}")
-
-            result = await api.process_image(
-                image_path=image_path,
-                ocr_language=args.ocr_lang,
-                target_translation_language=args.target_lang,
-                source_translation_language=args.source_lang,
-                output_overlay_path=args.output_overlay_path,
-                ocr_preserve_line_breaks=app_config.get(
-                    "ocr_preserve_line_breaks", True
-                ),
-                output_format=output_format,
-            )
 
             if args.get_coords:
                 word_data = result.get("word_data")
                 if not word_data:
                     console.print("[]")
+                    next_to_print += 1
                     continue  # Continue to next image in batch
 
                 processed_coords = []
@@ -446,6 +489,13 @@ async def cli_main():
                         )
                 elif not args.quiet:
                     console.print("\n[yellow]No text available to copy.[/yellow]")
+
+            next_to_print += 1
+
+        await job_queue.join()
+        for task in worker_tasks:
+            task.cancel()
+        await asyncio.gather(*worker_tasks, return_exceptions=True)
 
     except LensException as e:
         console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
