@@ -64,7 +64,7 @@ def print_help():
     table.add_column()
     table.add_row("Usage:", "lens_scan <image_source> [ocr_lang] [options]")
     table.add_row("\n[bold]Arguments:[/bold]")
-    table.add_row("  image_source", "Path to an image file or a URL.")
+    table.add_row("  image_source", "Path to an image file, a URL, or a directory.")
     table.add_row(
         "  ocr_lang",
         "BCP 47 language code for OCR (e.g., 'en', 'ja'). If omitted, auto-detection is attempted.",
@@ -141,7 +141,7 @@ async def cli_main():
     parser = argparse.ArgumentParser(description="Google Lens CLI", add_help=False)
     # Positional
     parser.add_argument(
-        "image_source", nargs="?", help="Path to the image file or a URL."
+        "image_source", nargs="?", help="Path to the image file, a URL, or a directory."
     )
     parser.add_argument(
         "ocr_lang", nargs="?", default=None, help="BCP 47 code for OCR."
@@ -235,11 +235,28 @@ async def cli_main():
             f"Specified config file not found: {args.config_file_path_override}"
         )
 
-    if not is_image_file_supported(args.image_source):
-        console.print(
-            f"[bold red]Error:[/bold red] Source '{args.image_source}' is not a valid URL or supported image file."
-        )
-        sys.exit(1)
+    # --- Start of new logic for handling directories ---
+    image_sources = []
+    if os.path.isdir(args.image_source):
+        if not args.quiet:
+            console.print(f"Processing directory: [cyan]{args.image_source}[/cyan]")
+        for filename in sorted(os.listdir(args.image_source)):
+            full_path = os.path.join(args.image_source, filename)
+            if is_image_file_supported(full_path):
+                image_sources.append(full_path)
+        if not image_sources:
+            console.print(
+                f"[bold red]Error:[/bold red] No supported image files found in directory '{args.image_source}'."
+            )
+            sys.exit(1)
+    else:
+        if not is_image_file_supported(args.image_source):
+            console.print(
+                f"[bold red]Error:[/bold red] Source '{args.image_source}' is not a valid URL or supported image file."
+            )
+            sys.exit(1)
+        image_sources.append(args.image_source)
+    # --- End of new logic ---
 
     if args.update_config:
         if args.config_file_path_override:
@@ -263,155 +280,172 @@ async def cli_main():
     )
 
     try:
-        if not args.quiet:
-            console.print(f"Processing image: [cyan]{args.image_source}[/cyan]...")
-        else:
-            logging.info(f"Processing image: {args.image_source}")
-
         output_format = "full_text"
         if args.output_blocks:
             output_format = "blocks"
         elif args.output_lines:
             output_format = "lines"
 
-        result = await api.process_image(
-            image_path=args.image_source,
-            ocr_language=args.ocr_lang,
-            target_translation_language=args.target_lang,
-            source_translation_language=args.source_lang,
-            output_overlay_path=args.output_overlay_path,
-            ocr_preserve_line_breaks=app_config.get("ocr_preserve_line_breaks", True),
-            output_format=output_format,
-        )
-
-        if args.get_coords:
-            word_data = result.get("word_data")
-            if not word_data:
-                console.print("[]")
-                return
-
-            processed_coords = []
-            for data in word_data:
-                geom = data.get("geometry")
-                processed_coords.append(
-                    {
-                        data["word"]: (
-                            {
-                                "center_x": round(geom["center_x"], 4),
-                                "center_y": round(geom["center_y"], 4),
-                                "width": round(geom["width"], 4),
-                                "height": round(geom["height"], 4),
-                                "angle_deg": round(geom["angle_deg"], 2),
-                            }
-                            if geom
-                            else None
-                        )
-                    }
-                )
-
-            console.print(json.dumps(processed_coords, indent=2, ensure_ascii=False))
-
-        elif args.output_lines:
-            line_blocks = result.get("line_blocks", [])
-            if not args.quiet:
+        # --- Main processing loop for all sources ---
+        for i, image_path in enumerate(image_sources):
+            if len(image_sources) > 1 and not args.quiet:
                 console.print(
-                    f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
+                    f"\n--- [bold]Processing file {i+1}/{len(image_sources)}: {os.path.basename(image_path)}[/bold] ---"
                 )
-            if not line_blocks and not args.quiet:
-                console.print("No lines found.")
 
-            for i, line in enumerate(line_blocks):
-                if not args.quiet:
-                    console.print(f"\n--- [cyan]Line #{i+1}[/cyan] ---")
-                console.print(Text(line.get("text", "")))
-
-            translated_text = result.get("translated_text")
-            if translated_text:
-                if not args.quiet:
-                    console.print("\n[bold green]Translated Text (Full):[/bold green]")
-                console.print(Text(translated_text))
-
-        elif args.output_blocks:
-            text_blocks = result.get("text_blocks", [])
             if not args.quiet:
-                console.print(
-                    f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]"
-                )
-            if not text_blocks and not args.quiet:
-                console.print("No text blocks found.")
+                console.print(f"Processing image: [cyan]{image_path}[/cyan]...")
+            else:
+                logging.info(f"Processing image: {image_path}")
 
-            for i, block in enumerate(text_blocks):
-                if not args.quiet:
-                    console.print(f"\n--- [cyan]Block #{i+1}[/cyan] ---")
-                console.print(Text(block.get("text", "")))
-
-            translated_text = result.get("translated_text")
-            if translated_text:
-                if not args.quiet:
-                    console.print("\n[bold green]Translated Text (Full):[/bold green]")
-                console.print(Text(translated_text))
-
-        else:  # Default 'full_text' output
-            ocr_text = result.get("ocr_text")
-            if ocr_text:
-                if not args.quiet:
-                    console.print("\n[bold green]OCR Results:[/bold green]")
-                console.print(Text(ocr_text))
-            elif not args.quiet:
-                console.print("\n[bold green]OCR Results:[/bold green]")
-                console.print("No OCR text found.")
-
-            translated_text = result.get("translated_text")
-            if translated_text:
-                if not args.quiet:
-                    console.print("\n[bold green]Translated Text:[/bold green]")
-                console.print(Text(translated_text))
-
-        translated_text = result.get("translated_text")
-        if args.target_lang and not translated_text and not args.quiet:
-            console.print(
-                "\n[yellow]Translation was requested but not found in the response.[/yellow]"
+            result = await api.process_image(
+                image_path=image_path,
+                ocr_language=args.ocr_lang,
+                target_translation_language=args.target_lang,
+                source_translation_language=args.source_lang,
+                output_overlay_path=args.output_overlay_path,
+                ocr_preserve_line_breaks=app_config.get(
+                    "ocr_preserve_line_breaks", True
+                ),
+                output_format=output_format,
             )
 
-        if args.output_overlay_path and translated_text:
-            if not args.quiet:
+            if args.get_coords:
+                word_data = result.get("word_data")
+                if not word_data:
+                    console.print("[]")
+                    continue  # Continue to next image in batch
+
+                processed_coords = []
+                for data in word_data:
+                    geom = data.get("geometry")
+                    processed_coords.append(
+                        {
+                            data["word"]: (
+                                {
+                                    "center_x": round(geom["center_x"], 4),
+                                    "center_y": round(geom["center_y"], 4),
+                                    "width": round(geom["width"], 4),
+                                    "height": round(geom["height"], 4),
+                                    "angle_deg": round(geom["angle_deg"], 2),
+                                }
+                                if geom
+                                else None
+                            )
+                        }
+                    )
+
                 console.print(
-                    f"\nImage with overlay saved to: [cyan]{args.output_overlay_path}[/cyan]"
+                    json.dumps(processed_coords, indent=2, ensure_ascii=False)
                 )
-            else:
-                logging.info(f"Image with overlay saved to: {args.output_overlay_path}")
 
-        if args.sharex:
-            source_for_copy, text_to_copy = ("", "")
-            # Prioritize translated text for copying
-            if args.target_lang and translated_text:
-                text_to_copy, source_for_copy = translated_text, "Translated text"
-            elif args.output_blocks:
-                blocks = result.get("text_blocks", [])
-                if blocks:
-                    text_to_copy = "\n\n".join([b.get("text", "") for b in blocks])
-                    source_for_copy = "OCR text (blocks)"
-            else:
-                ocr_text = result.get("ocr_text")
-                if ocr_text:
-                    text_to_copy, source_for_copy = ocr_text, "OCR text"
+            elif args.output_lines:
+                line_blocks = result.get("line_blocks", [])
+                if not args.quiet:
+                    console.print(
+                        f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
+                    )
+                if not line_blocks and not args.quiet:
+                    console.print("No lines found.")
 
-            if text_to_copy:
-                if copy_to_clipboard(text_to_copy):
+                for j, line in enumerate(line_blocks):
+                    if not args.quiet:
+                        console.print(f"\n--- [cyan]Line #{j+1}[/cyan] ---")
+                    console.print(Text(line.get("text", "")))
+
+                translated_text = result.get("translated_text")
+                if translated_text:
                     if not args.quiet:
                         console.print(
-                            f"\n[bold magenta]({source_for_copy} copied to clipboard)[/bold magenta]"
+                            "\n[bold green]Translated Text (Full):[/bold green]"
                         )
-                    else:
-                        logging.info(f"{source_for_copy} copied to clipboard")
-                else:
-                    # This is an error/warning, so it should probably stay visible
+                    console.print(Text(translated_text))
+
+            elif args.output_blocks:
+                text_blocks = result.get("text_blocks", [])
+                if not args.quiet:
                     console.print(
-                        "\n[bold red]Failed to copy text. Is 'pyperclip' installed? "
-                        '(`pip install "chrome-lens-py[clipboard]"`)[/bold red]'
+                        f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]"
                     )
-            elif not args.quiet:
-                console.print("\n[yellow]No text available to copy.[/yellow]")
+                if not text_blocks and not args.quiet:
+                    console.print("No text blocks found.")
+
+                for j, block in enumerate(text_blocks):
+                    if not args.quiet:
+                        console.print(f"\n--- [cyan]Block #{j+1}[/cyan] ---")
+                    console.print(Text(block.get("text", "")))
+
+                translated_text = result.get("translated_text")
+                if translated_text:
+                    if not args.quiet:
+                        console.print(
+                            "\n[bold green]Translated Text (Full):[/bold green]"
+                        )
+                    console.print(Text(translated_text))
+
+            else:  # Default 'full_text' output
+                ocr_text = result.get("ocr_text")
+                if ocr_text:
+                    if not args.quiet:
+                        console.print("\n[bold green]OCR Results:[/bold green]")
+                    console.print(Text(ocr_text))
+                elif not args.quiet:
+                    console.print("\n[bold green]OCR Results:[/bold green]")
+                    console.print("No OCR text found.")
+
+                translated_text = result.get("translated_text")
+                if translated_text:
+                    if not args.quiet:
+                        console.print("\n[bold green]Translated Text:[/bold green]")
+                    console.print(Text(translated_text))
+
+            translated_text = result.get("translated_text")
+            if args.target_lang and not translated_text and not args.quiet:
+                console.print(
+                    "\n[yellow]Translation was requested but not found in the response.[/yellow]"
+                )
+
+            if args.output_overlay_path and translated_text:
+                if not args.quiet:
+                    console.print(
+                        f"\nImage with overlay saved to: [cyan]{args.output_overlay_path}[/cyan]"
+                    )
+                else:
+                    logging.info(
+                        f"Image with overlay saved to: {args.output_overlay_path}"
+                    )
+
+            if args.sharex:
+                source_for_copy, text_to_copy = ("", "")
+                # Prioritize translated text for copying
+                if args.target_lang and translated_text:
+                    text_to_copy, source_for_copy = translated_text, "Translated text"
+                elif args.output_blocks:
+                    blocks = result.get("text_blocks", [])
+                    if blocks:
+                        text_to_copy = "\n\n".join([b.get("text", "") for b in blocks])
+                        source_for_copy = "OCR text (blocks)"
+                else:
+                    ocr_text = result.get("ocr_text")
+                    if ocr_text:
+                        text_to_copy, source_for_copy = ocr_text, "OCR text"
+
+                if text_to_copy:
+                    if copy_to_clipboard(text_to_copy):
+                        if not args.quiet:
+                            console.print(
+                                f"\n[bold magenta]({source_for_copy} copied to clipboard)[/bold magenta]"
+                            )
+                        else:
+                            logging.info(f"{source_for_copy} copied to clipboard")
+                    else:
+                        # This is an error/warning, so it should probably stay visible
+                        console.print(
+                            "\n[bold red]Failed to copy text. Is 'pyperclip' installed? "
+                            '(`pip install "chrome-lens-py[clipboard]"`)[/bold red]'
+                        )
+                elif not args.quiet:
+                    console.print("\n[yellow]No text available to copy.[/yellow]")
 
     except LensException as e:
         console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
