@@ -123,7 +123,7 @@ def print_help():
     table.add_row("  --timeout SECONDS", "Request timeout in seconds (default: 60).")
     table.add_row(
         "  --concurrency N",
-        "Set the maximum number of concurrent requests (default: 10).",
+        "Set the maximum number of concurrent requests (default: 5).",
     )
     table.add_row(
         "  --client-region REGION",
