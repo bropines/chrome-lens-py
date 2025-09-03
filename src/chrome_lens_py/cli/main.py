@@ -195,7 +195,7 @@ async def cli_main():
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=10,
+        default=5,
         help="Maximum number of concurrent requests.",
     )
     parser.add_argument("--client-region")
