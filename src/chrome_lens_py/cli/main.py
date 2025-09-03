@@ -122,7 +122,8 @@ def print_help():
     )
     table.add_row("  --timeout SECONDS", "Request timeout in seconds (default: 60).")
     table.add_row(
-        "  --concurrency N", "Set the maximum number of concurrent requests (default: 10)."
+        "  --concurrency N",
+        "Set the maximum number of concurrent requests (default: 10).",
     )
     table.add_row(
         "  --client-region REGION",
@@ -205,6 +206,24 @@ async def cli_main():
     parser.add_argument("-h", "--help", action="store_true")
 
     args = parser.parse_args()
+
+    MAX_CONCURRENCY_HARD_LIMIT = 30
+    CONCURRENCY_WARNING_THRESHOLD = 20
+
+    if args.concurrency > MAX_CONCURRENCY_HARD_LIMIT:
+        console.print(
+            f"[bold red]Error:[/bold red] The concurrency value cannot be greater than {MAX_CONCURRENCY_HARD_LIMIT}."
+        )
+        console.print("This is a security measure to prevent IP blocking.")
+        sys.exit(1)
+
+    if args.concurrency > CONCURRENCY_WARNING_THRESHOLD:
+        console.print(
+            f"[bold yellow]Warning:[/bold yellow] High concurrency value ({args.concurrency}) set."
+        )
+        console.print(
+            "This may result in a temporary block by Google. Use with caution."
+        )
 
     if args.help:
         print_help()
@@ -330,8 +349,7 @@ async def cli_main():
             job_queue.put_nowait((i, path))
 
         worker_tasks = [
-            asyncio.create_task(worker(job_queue))
-            for _ in range(args.concurrency)
+            asyncio.create_task(worker(job_queue)) for _ in range(args.concurrency)
         ]
 
         while next_to_print < len(image_sources):
@@ -342,14 +360,16 @@ async def cli_main():
             image_path = image_sources[next_to_print]
 
             if isinstance(result, Exception):
-                console.print(f"\n--- [bold red]({next_to_print + 1}/{len(image_sources)}) Error for: {os.path.basename(image_path)}[/bold red] ---")
+                console.print(
+                    f"\n- [bold red]({next_to_print + 1}/{len(image_sources)}) Error for: {os.path.basename(image_path)}[/bold red] -"
+                )
                 console.print(f"[red]{result}[/red]")
                 next_to_print += 1
                 continue
 
             if len(image_sources) > 1 and not args.quiet:
                 console.print(
-                    f"\n--- [bold green]({next_to_print + 1}/{len(image_sources)}) Result for: {os.path.basename(image_path)}[/bold green] ---"
+                    f"\n- [bold green]({next_to_print + 1}/{len(image_sources)}) Result for: {os.path.basename(image_path)}[/bold green] -"
                 )
 
             if args.get_coords:
