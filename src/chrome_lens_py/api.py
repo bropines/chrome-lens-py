@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         LensOverlayServerResponse,
         TextLayoutLine,
         TextLayoutParagraph,
+        TextLayoutWord,
         TranslationDataStatusCode,
     )
 else:
@@ -34,6 +35,7 @@ else:
         LensOverlayServerResponse,
         TextLayoutLine,
         TextLayoutParagraph,
+        TextLayoutWord,
         TranslationDataStatusCode,
     )
 
@@ -145,7 +147,9 @@ class LensAPI:
         self,
         response_proto: "LensOverlayServerResponse",
         preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks", "lines"] = "full_text",
+        output_format: Literal[
+            "full_text", "blocks", "lines", "detailed"
+        ] = "full_text",
     ) -> Tuple[Union[str, List[Dict]], List[Dict[str, Any]]]:
         """
         Extracts OCR data from the response.
@@ -181,6 +185,12 @@ class LensAPI:
         logger.info(
             f"Extracted data for {len(word_data_list)} words. Detected language: {detected_lang}"
         )
+
+        if output_format == "detailed":
+            detailed_blocks = [
+                self._parse_paragraph_detailed(p) for p in text_layout.paragraphs
+            ]
+            return detailed_blocks, word_data_list
 
         if output_format == "lines":
             line_blocks = []
@@ -226,6 +236,66 @@ class LensAPI:
                         all_translations.append(gleam.translation.translation)
         return "\n".join(all_translations).strip() or None
 
+    def _parse_word_detailed(self, word: "TextLayoutWord") -> Dict[str, Any]:
+        """Parses a single TextLayoutWord into a detailed dictionary including geometry."""
+        geometry_data = (
+            get_word_geometry_data(word.geometry.bounding_box)
+            if word.geometry and word.geometry.bounding_box
+            else None
+        )
+        return {
+            "text": word.plain_text,
+            "separator": word.text_separator,
+            "geometry": geometry_data,
+        }
+
+    def _parse_line_detailed(self, line: "TextLayoutLine") -> Dict[str, Any]:
+        """Parses a TextLayoutLine into a detailed dictionary with words and geometry."""
+        line_text = "".join(
+            word.plain_text + (word.text_separator or "") for word in line.words
+        ).strip()
+
+        l_geom = line.geometry.bounding_box
+        geometry_dict = {
+            "center_x": l_geom.center_x,
+            "center_y": l_geom.center_y,
+            "width": l_geom.width,
+            "height": l_geom.height,
+            "angle_deg": l_geom.rotation_z * (180 / pi) if l_geom.rotation_z else 0.0,
+        }
+
+        return {
+            "text": line_text,
+            "geometry": geometry_dict,
+            "words": [self._parse_word_detailed(word) for word in line.words],
+        }
+
+    def _parse_paragraph_detailed(
+        self, paragraph: "TextLayoutParagraph"
+    ) -> Dict[str, Any]:
+        """Parses a TextLayoutParagraph into a detailed dictionary with lines and geometry."""
+        full_paragraph_text = "\n".join(
+            "".join(
+                word.plain_text + (word.text_separator or "") for word in line.words
+            ).strip()
+            for line in paragraph.lines
+        )
+
+        p_geom = paragraph.geometry.bounding_box
+        geometry_dict = {
+            "center_x": p_geom.center_x,
+            "center_y": p_geom.center_y,
+            "width": p_geom.width,
+            "height": p_geom.height,
+            "angle_deg": p_geom.rotation_z * (180 / pi) if p_geom.rotation_z else 0.0,
+        }
+
+        return {
+            "text": full_paragraph_text,
+            "geometry": geometry_dict,
+            "lines": [self._parse_line_detailed(line) for line in paragraph.lines],
+        }
+
     async def process_image(
         self,
         image_path: Any,
@@ -235,7 +305,9 @@ class LensAPI:
         output_overlay_path: Optional[str] = None,
         new_session: bool = True,
         ocr_preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks", "lines"] = "full_text",
+        output_format: Literal[
+            "full_text", "blocks", "lines", "detailed"
+        ] = "full_text",
     ) -> Dict[str, Any]:
         """
         Processes an image, performing OCR and optional translation.
@@ -349,7 +421,9 @@ class LensAPI:
                     "raw_response_objects": response_proto.objects_response,
                 }
 
-                if output_format == "blocks":
+                if output_format == "detailed":
+                    final_result["detailed_blocks"] = ocr_result
+                elif output_format == "blocks":
                     final_result["text_blocks"] = ocr_result
                 elif output_format == "lines":
                     final_result["line_blocks"] = ocr_result
