@@ -279,6 +279,38 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
   
   asyncio.run(process_document_lines())
   ```
+#### **Получение полностью детализированных структур текста**
+
+Чтобы получить полную, вложенную структуру из абзацев, строк и слов с геометрией на каждом уровне, используйте `output_format='detailed'`.
+
+```python
+import asyncio
+from chrome_lens_py import LensAPI
+
+async def process_with_details():
+    api = LensAPI()
+    image_source = "путь/к/документу.png"
+    
+    result = await api.process_image(
+        image_path=image_source,
+        output_format='detailed' # Получить полностью вложенную структуру
+    )
+
+    # Результат теперь содержит ключ 'detailed_blocks'
+    detailed_blocks = result.get("detailed_blocks", [])
+    print(f"Найдено {len(detailed_blocks)} детализированных блоков.")
+
+    for i, block in enumerate(detailed_blocks):
+        print(f"\n--- Блок #{i+1} ---")
+        print(f"  Геометрия: {block['geometry']}")
+        for j, line in enumerate(block['lines']):
+            print(f"    --- Строка #{j+1}: '{line['text']}' ---")
+            for k, word in enumerate(line['words']):
+                 print(f"      - Слово: '{word['text']}', Геометрия: {word['geometry']}")
+
+asyncio.run(process_with_details())
+```
+
 
   #### **Конструктор `LensAPI`**
 
@@ -305,10 +337,10 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
       source_translation_language: Optional[str] = None,
       output_overlay_path: Optional[str] = None,
       ocr_preserve_line_breaks: bool = True,
-      output_format: Literal['full_text', 'blocks', 'lines'] = 'full_text'
+      output_format: Literal['full_text', 'blocks', 'lines', 'detailed'] = 'full_text''
   )
   ```
-  -   **`output_format`**: `'full_text'` (по умолчанию) возвращает результат в `ocr_text`. `'blocks'` возвращает список словарей в `text_blocks`. `'lines'` возвращает список словарей в `line_blocks`.
+  -   **`output_format`**: Управляет структурой OCR-вывода. `'full_text'` (по умолчанию) возвращает одну строку в `ocr_text`. `'blocks'` возвращает список в `text_blocks`. `'lines'` возвращает список в `line_blocks`. `'detailed'` возвращает полностью вложенную структуру в `detailed_blocks`.`
   -   **`ocr_preserve_line_breaks`**: Если `False` и `output_format` равен `'full_text'`, объединяет весь текст OCR в одну строку.
 
   **Возвращаемый словарь `result` содержит:**
@@ -317,6 +349,7 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
   - `line_blocks` (Optional[List[dict]]): Список отдельных текстовых строк (если `output_format='lines'`). Каждый блок — это словарь с ключами `text` и `geometry`.
   - `translated_text` (Optional[str]): Переведенный текст, если был запрошен.
   - `word_data` (List[dict]): Список словарей для каждого распознанного слова с его геометрией.
+  - `detailed_blocks` (Optional[List[dict]]): Список полностью структурированных текстовых блоков (если `output_format='detailed'`). Каждый блок содержит строки, которые, в свою очередь, содержат слова, с геометрией на каждом уровне.
   - `raw_response_objects`: "Сырой" Protobuf-объект ответа для дальнейшего анализа.
 
 </details>
