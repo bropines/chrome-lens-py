@@ -1,17 +1,19 @@
+# src/chrome_lens_py/api.py
 import asyncio
 import logging
+import random
 from math import pi
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import httpx
-from PIL import ImageFont
 
 from .constants import (
     DEFAULT_API_KEY,
     DEFAULT_CLIENT_REGION,
     DEFAULT_CLIENT_TIME_ZONE,
     DEFAULT_OCR_LANG,
+    LENS_CRUPLOAD_ENDPOINT
 )
 from .core.image_processor import (
     draw_overlay_on_image,
@@ -21,35 +23,18 @@ from .core.image_processor import (
 from .core.protobuf_builder import create_ocr_translate_request
 from .core.request_handler import LensRequestHandler
 from .exceptions import LensException
-
-if TYPE_CHECKING:
-    from .utils.lens_betterproto import (
-        LensOverlayServerResponse,
-        TextLayoutLine,
-        TextLayoutParagraph,
-        TextLayoutWord,
-        TranslationDataStatusCode,
-    )
-else:
-    from .utils.lens_betterproto import (
-        LensOverlayServerResponse,
-        TextLayoutLine,
-        TextLayoutParagraph,
-        TextLayoutWord,
-        TranslationDataStatusCode,
-    )
-
+from .utils.lens_betterproto import (
+    LensOverlayServerResponse,
+    TextLayoutLine,
+    TextLayoutParagraph,
+    TextLayoutWord,
+    TranslationDataStatusCode,
+)
 from .utils.font_manager import FontType, get_font
 
 logger = logging.getLogger(__name__)
 
-
 class LensAPI:
-    """
-    Main class for interacting with the Google Lens API.
-    Provides methods for OCR, translation, and text block segmentation.
-    """
-
     def __init__(
         self,
         api_key: str = DEFAULT_API_KEY,
@@ -61,18 +46,6 @@ class LensAPI:
         font_size: Optional[int] = None,
         max_concurrent: int = 10,
     ):
-        """
-        Initializes the LensAPI client.
-
-        :param api_key: Your Google API key. Defaults to the library's built-in key.
-        :param client_region: ISO 3166-1 alpha-2 country code (e.g., 'US', 'DE').
-        :param client_time_zone: Time zone name (e.g., 'America/New_York').
-        :param proxy: Proxy server URL or a dictionary for mounting transports.
-        :param timeout: Request timeout in seconds.
-        :param font_path: Path to a custom .ttf font file for text overlays.
-        :param font_size: Font size for text overlays.
-        :param max_concurrent: The maximum number of concurrent requests to prevent API abuse. Defaults to 5.
-        """
         self.request_handler = LensRequestHandler(
             api_key=api_key, proxy=proxy, timeout=timeout
         )
@@ -82,14 +55,8 @@ class LensAPI:
         self.font_size = font_size
         self._font_object: Optional[FontType] = None
         self._semaphore = asyncio.Semaphore(max_concurrent)
-        if max_concurrent > 20:
-            logger.warning(
-                f"max_concurrent is set to {max_concurrent}, which is very high. "
-                "This may lead to IP bans. Use with caution."
-            )
 
     def _get_font(self) -> FontType:
-        """Lazily loads and returns the font object."""
         if not self._font_object:
             self._font_object = get_font(
                 font_path_override=self.font_path, font_size_override=self.font_size
@@ -97,9 +64,9 @@ class LensAPI:
         return self._font_object
 
     def _parse_line(self, line: "TextLayoutLine") -> Dict[str, Any]:
-        """Parses a single TextLayoutLine into a structured dictionary."""
+        # В стандартном protobuf строки по дефолту "", а не None
         line_text = "".join(
-            word.plain_text + (word.text_separator or "") for word in line.words
+            word.plain_text + word.text_separator for word in line.words
         ).strip()
 
         l_geom = line.geometry.bounding_box
@@ -117,12 +84,10 @@ class LensAPI:
         }
 
     def _parse_paragraph(self, paragraph: "TextLayoutParagraph") -> Dict[str, Any]:
-        """Parses a single TextLayoutParagraph into a structured dictionary."""
         paragraph_lines = []
         for line in paragraph.lines:
-            # Fixed Pylance issue: use 'or ""' to handle optional separator
             current_line_text = "".join(
-                word.plain_text + (word.text_separator or "") for word in line.words
+                word.plain_text + word.text_separator for word in line.words
             )
             paragraph_lines.append(current_line_text.strip())
 
@@ -143,104 +108,10 @@ class LensAPI:
             "geometry": geometry_dict,
         }
 
-    def _extract_ocr_data_from_response(
-        self,
-        response_proto: "LensOverlayServerResponse",
-        preserve_line_breaks: bool = True,
-        output_format: Literal[
-            "full_text", "blocks", "lines", "detailed"
-        ] = "full_text",
-    ) -> Tuple[Union[str, List[Dict]], List[Dict[str, Any]]]:
-        """
-        Extracts OCR data from the response.
-        """
-        word_data_list: List[Dict[str, Any]] = []
-        if not (
-            response_proto.objects_response
-            and response_proto.objects_response.text
-            and response_proto.objects_response.text.text_layout
-        ):
-            return ("", []) if output_format == "full_text" else ([], [])
-
-        text_layout = response_proto.objects_response.text.text_layout
-
-        for paragraph in text_layout.paragraphs:
-            for line in paragraph.lines:
-                for word in line.words:
-                    word_data_list.append(
-                        {
-                            "word": word.plain_text,
-                            "separator": word.text_separator,
-                            "geometry": (
-                                get_word_geometry_data(word.geometry.bounding_box)
-                                if word.geometry and word.geometry.bounding_box
-                                else None
-                            ),
-                        }
-                    )
-
-        detected_lang = getattr(
-            response_proto.objects_response.text, "content_language", "N/A"
-        )
-        logger.info(
-            f"Extracted data for {len(word_data_list)} words. Detected language: {detected_lang}"
-        )
-
-        if output_format == "detailed":
-            detailed_blocks = [
-                self._parse_paragraph_detailed(p) for p in text_layout.paragraphs
-            ]
-            return detailed_blocks, word_data_list
-
-        if output_format == "lines":
-            line_blocks = []
-            for p in text_layout.paragraphs:
-                for line in p.lines:
-                    line_blocks.append(self._parse_line(line))
-            return line_blocks, word_data_list
-
-        if output_format == "blocks":
-            text_blocks = [self._parse_paragraph(p) for p in text_layout.paragraphs]
-            return text_blocks, word_data_list
-        else:  # 'full_text'
-            if preserve_line_breaks:
-                full_ocr_text = "\n".join(
-                    "\n".join(self._parse_paragraph(p)["lines"])
-                    for p in text_layout.paragraphs
-                )
-            else:
-                text_parts = [
-                    data["word"] + (data["separator"] or "") for data in word_data_list
-                ]
-                full_ocr_text = "".join(text_parts).strip()
-                full_ocr_text = " ".join(full_ocr_text.split())
-
-            return full_ocr_text, word_data_list
-
-    def _extract_translation_from_response(
-        self, response_proto: "LensOverlayServerResponse"
-    ) -> Optional[str]:
-        """Extracts and consolidates all successful translations."""
-        all_translations = []
-        if (
-            response_proto.objects_response
-            and response_proto.objects_response.deep_gleams
-        ):
-            for gleam in response_proto.objects_response.deep_gleams:
-                if (
-                    gleam.translation
-                    and gleam.translation.status.code
-                    == TranslationDataStatusCode.SUCCESS
-                ):
-                    if gleam.translation.translation:
-                        all_translations.append(gleam.translation.translation)
-        return "\n".join(all_translations).strip() or None
-
     def _parse_word_detailed(self, word: "TextLayoutWord") -> Dict[str, Any]:
-        """Parses a single TextLayoutWord into a detailed dictionary including geometry."""
         geometry_data = (
             get_word_geometry_data(word.geometry.bounding_box)
-            if word.geometry and word.geometry.bounding_box
+            if word.HasField("geometry") and word.geometry.HasField("bounding_box")
             else None
         )
         return {
@@ -250,9 +121,8 @@ class LensAPI:
         }
 
     def _parse_line_detailed(self, line: "TextLayoutLine") -> Dict[str, Any]:
-        """Parses a TextLayoutLine into a detailed dictionary with words and geometry."""
         line_text = "".join(
-            word.plain_text + (word.text_separator or "") for word in line.words
+            word.plain_text + word.text_separator for word in line.words
         ).strip()
 
         l_geom = line.geometry.bounding_box
@@ -270,13 +140,10 @@ class LensAPI:
             "words": [self._parse_word_detailed(word) for word in line.words],
         }
 
-    def _parse_paragraph_detailed(
-        self, paragraph: "TextLayoutParagraph"
-    ) -> Dict[str, Any]:
-        """Parses a TextLayoutParagraph into a detailed dictionary with lines and geometry."""
+    def _parse_paragraph_detailed(self, paragraph: "TextLayoutParagraph") -> Dict[str, Any]:
         full_paragraph_text = "\n".join(
             "".join(
-                word.plain_text + (word.text_separator or "") for word in line.words
+                word.plain_text + word.text_separator for word in line.words
             ).strip()
             for line in paragraph.lines
         )
@@ -296,6 +163,78 @@ class LensAPI:
             "lines": [self._parse_line_detailed(line) for line in paragraph.lines],
         }
 
+    def _extract_ocr_data_from_response(
+        self,
+        response_proto: "LensOverlayServerResponse",
+        preserve_line_breaks: bool = True,
+        output_format: Literal["full_text", "blocks", "lines", "detailed"] = "full_text",
+    ) -> Tuple[Union[str, List[Dict]], List[Dict[str, Any]]]:
+        
+        word_data_list: List[Dict[str, Any]] = []
+        
+        # Проверка на наличие полей через HasField
+        if not response_proto.HasField("objects_response") or \
+           not response_proto.objects_response.HasField("text") or \
+           not response_proto.objects_response.text.HasField("text_layout"):
+            return ("", []) if output_format == "full_text" else ([], [])
+
+        text_layout = response_proto.objects_response.text.text_layout
+
+        for paragraph in text_layout.paragraphs:
+            for line in paragraph.lines:
+                for word in line.words:
+                    word_data_list.append(
+                        {
+                            "word": word.plain_text,
+                            "separator": word.text_separator,
+                            "geometry": (
+                                get_word_geometry_data(word.geometry.bounding_box)
+                                if word.HasField("geometry") and word.geometry.HasField("bounding_box")
+                                else None
+                            ),
+                        }
+                    )
+
+        detected_lang = response_proto.objects_response.text.content_language or "N/A"
+        
+        if output_format == "detailed":
+            detailed_blocks = [self._parse_paragraph_detailed(p) for p in text_layout.paragraphs]
+            return detailed_blocks, word_data_list
+
+        if output_format == "lines":
+            line_blocks = []
+            for p in text_layout.paragraphs:
+                for line in p.lines:
+                    line_blocks.append(self._parse_line(line))
+            return line_blocks, word_data_list
+
+        if output_format == "blocks":
+            text_blocks = [self._parse_paragraph(p) for p in text_layout.paragraphs]
+            return text_blocks, word_data_list
+        else:
+            if preserve_line_breaks:
+                full_ocr_text = "\n".join(
+                    "\n".join(self._parse_paragraph(p)["lines"])
+                    for p in text_layout.paragraphs
+                )
+            else:
+                text_parts = [data["word"] + data["separator"] for data in word_data_list]
+                full_ocr_text = "".join(text_parts).strip()
+                full_ocr_text = " ".join(full_ocr_text.split())
+
+            return full_ocr_text, word_data_list
+
+    def _extract_translation_from_response(
+        self, response_proto: "LensOverlayServerResponse"
+    ) -> Optional[str]:
+        all_translations = []
+        if response_proto.HasField("objects_response"):
+            for gleam in response_proto.objects_response.deep_gleams:
+                if gleam.HasField("translation") and gleam.translation.status.code == TranslationDataStatusCode.SUCCESS:
+                    if gleam.translation.translation:
+                        all_translations.append(gleam.translation.translation)
+        return "\n".join(all_translations).strip() or None
+
     async def process_image(
         self,
         image_path: Any,
@@ -305,42 +244,15 @@ class LensAPI:
         output_overlay_path: Optional[str] = None,
         new_session: bool = True,
         ocr_preserve_line_breaks: bool = True,
-        output_format: Literal[
-            "full_text", "blocks", "lines", "detailed"
-        ] = "full_text",
+        output_format: Literal["full_text", "blocks", "lines", "detailed"] = "full_text",
     ) -> Dict[str, Any]:
-        """
-        Processes an image, performing OCR and optional translation.
-
-        :param image_path: Path to a file (str or pathlib.Path), URL, bytes, PIL Image, or NumPy array.
-        :param ocr_language: BCP 47 language code for OCR (e.g., 'en', 'ja').
-        :param target_translation_language: BCP 47 language code for translation target.
-        :param source_translation_language: BCP 47 language code for translation source.
-        :param output_overlay_path: Path to save the image with translated text overlaid.
-        :param new_session: If True, starts a new server session for the request.
-        :param ocr_preserve_line_breaks: If True and output_format is 'full_text', preserves line breaks.
-        :param output_format: 'full_text' (default) returns a single string in 'ocr_text'.
-                            'blocks' returns a list of dictionaries in 'text_blocks'.
-                            'lines' returns a list of dictionaries in 'line_blocks',
-                            each representing a single recognized line with its geometry.
-        :return: A dictionary containing the processing results.
-        """
-        # Acquire the semaphore before starting any processing
+        
         async with self._semaphore:
             if isinstance(image_path, Path):
                 image_path = str(image_path)
 
-            if isinstance(image_path, str):
-                logger.info(f"Processing image source: {image_path[:120]}...")
-            else:
-                logger.info(
-                    f"Processing image source of type: {type(image_path).__name__}"
-                )
-
             try:
-                img_bytes, width, height, original_pil_img = (
-                    await prepare_image_for_api(image_path)
-                )
+                img_bytes, width, height, original_pil_img = await prepare_image_for_api(image_path)
 
                 if new_session:
                     self.request_handler.start_new_session()
@@ -403,17 +315,8 @@ class LensAPI:
                     )
                     try:
                         overlay_image.save(output_overlay_path)
-                        logger.info(
-                            f"Image with overlay saved to: {output_overlay_path}"
-                        )
                     except Exception as e_save:
-                        logger.error(
-                            f"Error saving overlay image to '{output_overlay_path}': {e_save}"
-                        )
-                elif output_overlay_path:
-                    logger.warning(
-                        f"Overlay output path '{output_overlay_path}' specified, but no translated text available."
-                    )
+                        logger.error(f"Error saving overlay image to '{output_overlay_path}': {e_save}")
 
                 final_result = {
                     "translated_text": translated_text,
@@ -433,8 +336,39 @@ class LensAPI:
                 return final_result
 
             except LensException as e:
-                logger.error(f"LensAPI processing error: {e}", exc_info=True)
                 raise
             except Exception as e:
-                logger.error(f"Unexpected error in LensAPI: {e}", exc_info=True)
                 raise LensException(f"Unexpected error in LensAPI: {e}") from e
+
+    async def call_raw_endpoint(
+        self, 
+        protobuf_payload: bytes, 
+        new_session: bool = False
+    ) -> bytes:
+        """
+        [TEST METHOD] Отправляет сырые байты Protobuf напрямую в эндпоинт Lens и возвращает ответ.
+        Идеально для реверс-инжиниринга и тестов новых фич (например, aim_query или gemini_mode).
+        """
+        async with self._semaphore:
+            if new_session:
+                self.request_handler.start_new_session()
+
+            session_uuid_for_request, _, _ = (
+                self.request_handler.get_next_sequence_ids_for_request(
+                    is_new_image_payload=new_session
+                )
+            )
+
+            uuid_to_use = session_uuid_for_request if session_uuid_for_request else random.randint(0, (1 << 63) - 1)
+            
+            headers = self.request_handler._get_headers()
+            
+            async with httpx.AsyncClient(**self.request_handler.proxy_settings, http2=True) as client:
+                response = await client.post(
+                    LENS_CRUPLOAD_ENDPOINT,
+                    content=protobuf_payload,
+                    headers=headers,
+                    timeout=self.request_handler.timeout,
+                )
+                response.raise_for_status()
+                return await response.aread()
