@@ -68,6 +68,7 @@ instance/
 
 # Scrapy stuff:
 .scrapy
+cobase.txt
 
 # Sphinx documentation
 docs/_build/

@@ -6,4 +6,5 @@ PySocks
 httpx[socks]
 numpy
 rich
-betterproto >= 2.0.0b6
+#betterproto >= 2.0.0b6
+protobuf

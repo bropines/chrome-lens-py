@@ -115,9 +115,7 @@ class LensRequestHandler:
 
                 logger.debug(f"Response content length: {len(response_bytes)} bytes.")
 
-                server_response_proto = LensOverlayServerResponse().parse(
-                    response_bytes
-                )
+                server_response_proto = LensOverlayServerResponse.FromString(response_bytes)
 
                 if (
                     server_response_proto.error

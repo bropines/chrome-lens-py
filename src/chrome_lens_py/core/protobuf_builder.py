@@ -136,7 +136,7 @@ def create_ocr_translate_request(
         objects_request.image_data = image_data_obj
         server_request.objects_request = objects_request
 
-        protobuf_payload_bytes = bytes(server_request)
+        protobuf_payload_bytes = server_request.SerializeToString()
         logger.debug(
             "Protobuf request created. UUID: %s, SeqID: %s, ImgSeqID: %s, Size: %d bytes.",
             uuid_to_use,
