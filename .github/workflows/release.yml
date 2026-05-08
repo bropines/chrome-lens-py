@@ -78,6 +78,12 @@ jobs:
           pip install .
           pip install nuitka zstandard
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-nuitka
+          max-size: "500M"
+
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: brew install cc65 # Nuitka might need a compiler
@@ -110,3 +116,32 @@ jobs:
         with:
           name: ${{ matrix.asset_name }}
           path: dist/${{ matrix.asset_name }}
+
+  publish-pypi:
+    name: Build and Publish Python Package
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/chrome_lens_py
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install build
+
+      - name: Build a binary wheel and a source tarball
+        run: python -m build
+
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1.12
