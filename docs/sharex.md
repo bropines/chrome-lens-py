@@ -1,52 +1,54 @@
 ## Custom ShareX OCR with Google Lens
 
-It's possible to use the `chrome-lens-py` package with ShareX to OCR images using the Google Lens API, providing a significant upgrade over the default OCR in ShareX. Here's how to set it up:
+It's possible to use the `chrome-lens-py` package with ShareX to OCR images using the Google Lens API, providing a significant upgrade over the default OCR in ShareX.
 
-0. Get [ShareX](https://getsharex.com/) if you don't have it already.
-1. Install Python 3.10+ from the [Python Official website](https://www.python.org/downloads/) or via [Pyenv-WIN](https://github.com/pyenv-win/pyenv-win).
-   **IMPORTANT:** During installation, you **must** check the "Add Python to PATH" option, otherwise this will not work.
+---
 
-2. Install the `chrome-lens-py` library with clipboard support:
-   ```bash
-   pip install "chrome-lens-py[clipboard]"
-   ```
-3. Find the path to the installed `lens_scan` executable. Run the following command in PowerShell:
-   ```powershell
-   (Get-Command lens_scan).Source
-   ```
-   You will get a path similar to this:
-   ```
-   C:\Users\bropi\.pyenv\pyenv-win\shims\lens_scan.bat
-   ```
+### 🚀 Recommended: Automated Setup (Windows)
 
-   Copy this path for the next steps.
+The easiest way to set up ShareX is to use the built-in automation command.
 
-4. Open the ShareX main window and navigate to `Hotkey settings...`. Create a new hotkey. For the task, select `Screen capture` -> `Capture region (Light)`.
+1.  **Install the library** (if you haven't already):
+    ```bash
+    pip install "chrome-lens-py[clipboard]"
+    ```
+2.  **Run the setup command**:
+    ```bash
+    lens_scan --setup-sharex
+    ```
+    *Note: If you are using the standalone `.exe` from the GitHub Releases, run `lens_scan-windows-amd64.exe --setup-sharex` instead.*
 
-5. Now, open the settings for that new hotkey (the gear icon).
-   - Under the **Tasks** tab, ensure `Capture region (Light)` is selected.
-   - Go to the **Actions** tab and check the `Override actions` box.
-   - Click **Add...** and set up a new action with the following details:
+**What this does:**
+*   Locates your ShareX configuration.
+*   Closes ShareX if it's running.
+*   Adds/updates a hotkey (**Ctrl + O**) that captures a region and sends it to Google Lens.
+*   Restarts ShareX automatically.
 
-   ![Screenshot of ShareX Action settings](https://github.com/user-attachments/assets/38ac5d3c-0119-496a-92ab-02a63dd2152c)
+---
 
-   - **Name:** `Lens OCR` (or any name you prefer)
-   - **File path:** Paste the path you copied in step 3. For example:
-     - `C:\Users\bropi\.pyenv\pyenv-win\shims\lens_scan.bat`
-   - **Arguments:** Enter `"$input" --sharex`
-   - Uncheck `Hidden window` if you need to troubleshoot later. Otherwise, leaving it checked is fine.
+### 🛠️ Manual Setup (Fallback)
 
-6. Save the action. Back in the Hotkey settings, make sure your new `Lens OCR` action is checked in the list.
+If the automated setup fails or you want custom settings, follow these steps:
 
-7. You can now close the settings windows. Use your new hotkey to capture a region of your screen. The image will be processed, and the recognized text will be automatically copied to your clipboard.
+1.  **Install Python 3.10+** and ensure "Add Python to PATH" is checked.
+2.  **Install the library**: `pip install "chrome-lens-py[clipboard]"`
+3.  **Find the path** to the `lens_scan` executable:
+    ```powershell
+    (Get-Command lens_scan).Source
+    ```
+4.  **Configure ShareX Hotkey**:
+    *   Open `Hotkey settings...` in ShareX.
+    *   Create a new hotkey for `Screen capture` -> `Capture region (Light)`.
+    *   Open its settings (gear icon) -> `Actions` tab -> check `Override actions`.
+    *   **Add** a new action:
+        *   **Name**: `Lens OCR`
+        *   **File path**: (Paste the path from step 3)
+        *   **Arguments**: `"$input" --sharex`
+        *   Check `Hidden window`.
 
-![GIF demonstrating the OCR process](https://lune.dimden.dev/1bf28abae5b0.gif)
+---
 
 ## Troubleshooting
-If it takes a long time to process the image and nothing gets copied to your clipboard, an error might be occurring in the script. To see the error, go back to your `Lens OCR` Action settings (step 5), uncheck the **"Hidden window"** option, and run the hotkey again. A console window will appear showing any error messages.
+If it takes a long time to process and nothing is copied, try unchecking **"Hidden window"** in your ShareX action settings to see the error console. 
 
-## Updating
-To update the package to the latest version, simply run the following command in your terminal:
-```bash
-pip install --upgrade "chrome-lens-py[clipboard]"
-```
+**Antivirus Warning**: Some antivirus software may flag the standalone `.exe` as a threat. This is a false positive common with compiled Python binaries. If this happens, add an exclusion or use the Python version via `pip`.

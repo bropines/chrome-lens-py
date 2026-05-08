@@ -19,6 +19,26 @@
 
 This project provides a powerful, asynchronous Python library and command-line tool for interacting with Google Lens. It allows you to perform advanced Optical Character Recognition (OCR), get segmented text blocks (e.g., for comics), translate text, and get precise word coordinates.
 
+## 🚀 Quick Start for Windows Users
+
+If you don't want to install Python, you can download the standalone **lens_scan-windows-amd64.exe** from the [Releases](https://github.com/bropines/chrome-lens-py/releases) section.
+
+> [!WARNING]
+> **Antivirus False Positives**: Some antivirus software (like Windows Defender) might flag the compiled `.exe` as a threat (e.g., `Trojan:Win32/Wacatac.H!ml`). This is a **false positive** common with Nuitka/PyInstaller binaries. The tool is open-source; you can inspect the code and build it yourself if you have concerns.
+
+### 📸 Automated ShareX Setup
+If you use **ShareX**, you can fully automate the setup with one command:
+```bash
+# Using the installed package:
+lens_scan --setup-sharex
+
+# Or using the standalone .exe:
+lens_scan-windows-amd64.exe --setup-sharex
+```
+This will automatically configure a hotkey (**Ctrl + O**) and the necessary actions to use Google Lens OCR.
+
+---
+
 ## ✨ Key Features
 
 -   **Modern Backend**: Utilizes Google's official Protobuf endpoint (`v1/crupload`) for robust and accurate results.
