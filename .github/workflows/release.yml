@@ -49,6 +49,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Only build on main branch or tags, or manual dispatch
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
