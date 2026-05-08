@@ -85,12 +85,12 @@ jobs:
       - name: Build with Nuitka (Windows)
         if: runner.os == 'Windows'
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist --output-filename=lens_scan src/chrome_lens_py/cli/main.py
+          python -m nuitka --assume-yes-for-downloads --standalone --onefile --output-dir=dist --output-filename=lens_scan src/chrome_lens_py/cli/main.py
 
       - name: Build with Nuitka (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist --output-filename=lens_scan.bin src/chrome_lens_py/cli/main.py
+          python -m nuitka --assume-yes-for-downloads --standalone --onefile --output-dir=dist --output-filename=lens_scan.bin src/chrome_lens_py/cli/main.py
 
       - name: Rename artifacts
         shell: bash
