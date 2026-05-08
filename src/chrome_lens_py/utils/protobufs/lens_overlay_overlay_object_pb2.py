@@ -4,18 +4,15 @@
 # source: lens_overlay_overlay_object.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'lens_overlay_overlay_object.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "lens_overlay_overlay_object.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,21 +21,24 @@ _sym_db = _symbol_database.Default()
 
 import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!lens_overlay_overlay_object.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\"\x8a\x04\n\rOverlayObject\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12*\n\x08geometry\x18\x02 \x01(\x0b\x32\x0e.lens.GeometryR\x08geometry\x12T\n\x12rendering_metadata\x18\x08 \x01(\x0b\x32%.lens.OverlayObject.RenderingMetadataR\x11renderingMetadata\x12`\n\x16interaction_properties\x18\x04 \x01(\x0b\x32).lens.OverlayObject.InteractionPropertiesR\x15interactionProperties\x12!\n\x0cis_fulfilled\x18\t \x01(\x08R\x0bisFulfilled\x1a\x8c\x01\n\x11RenderingMetadata\x12Q\n\x0brender_type\x18\x01 \x01(\x0e\x32\x30.lens.OverlayObject.RenderingMetadata.RenderTypeR\nrenderType\"$\n\nRenderType\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\t\n\x05GLEAM\x10\x01\x1a;\n\x15InteractionProperties\x12\"\n\rselect_on_tap\x18\x01 \x01(\x08R\x0bselectOnTapJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08\x42\x07H\x03\x92\x03\x02\x08\x02\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n!lens_overlay_overlay_object.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto"\x8a\x04\n\rOverlayObject\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12*\n\x08geometry\x18\x02 \x01(\x0b\x32\x0e.lens.GeometryR\x08geometry\x12T\n\x12rendering_metadata\x18\x08 \x01(\x0b\x32%.lens.OverlayObject.RenderingMetadataR\x11renderingMetadata\x12`\n\x16interaction_properties\x18\x04 \x01(\x0b\x32).lens.OverlayObject.InteractionPropertiesR\x15interactionProperties\x12!\n\x0cis_fulfilled\x18\t \x01(\x08R\x0bisFulfilled\x1a\x8c\x01\n\x11RenderingMetadata\x12Q\n\x0brender_type\x18\x01 \x01(\x0e\x32\x30.lens.OverlayObject.RenderingMetadata.RenderTypeR\nrenderType"$\n\nRenderType\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\t\n\x05GLEAM\x10\x01\x1a;\n\x15InteractionProperties\x12"\n\rselect_on_tap\x18\x01 \x01(\x08R\x0bselectOnTapJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08\x42\x07H\x03\x92\x03\x02\x08\x02\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_overlay_object_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_overlay_object_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003\222\003\002\010\002'
-  _globals['_OVERLAYOBJECT']._serialized_start=73
-  _globals['_OVERLAYOBJECT']._serialized_end=595
-  _globals['_OVERLAYOBJECT_RENDERINGMETADATA']._serialized_start=370
-  _globals['_OVERLAYOBJECT_RENDERINGMETADATA']._serialized_end=510
-  _globals['_OVERLAYOBJECT_RENDERINGMETADATA_RENDERTYPE']._serialized_start=474
-  _globals['_OVERLAYOBJECT_RENDERINGMETADATA_RENDERTYPE']._serialized_end=510
-  _globals['_OVERLAYOBJECT_INTERACTIONPROPERTIES']._serialized_start=512
-  _globals['_OVERLAYOBJECT_INTERACTIONPROPERTIES']._serialized_end=571
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003\222\003\002\010\002"
+    _globals["_OVERLAYOBJECT"]._serialized_start = 73
+    _globals["_OVERLAYOBJECT"]._serialized_end = 595
+    _globals["_OVERLAYOBJECT_RENDERINGMETADATA"]._serialized_start = 370
+    _globals["_OVERLAYOBJECT_RENDERINGMETADATA"]._serialized_end = 510
+    _globals["_OVERLAYOBJECT_RENDERINGMETADATA_RENDERTYPE"]._serialized_start = 474
+    _globals["_OVERLAYOBJECT_RENDERINGMETADATA_RENDERTYPE"]._serialized_end = 510
+    _globals["_OVERLAYOBJECT_INTERACTIONPROPERTIES"]._serialized_start = 512
+    _globals["_OVERLAYOBJECT_INTERACTIONPROPERTIES"]._serialized_end = 571
 # @@protoc_insertion_point(module_scope)

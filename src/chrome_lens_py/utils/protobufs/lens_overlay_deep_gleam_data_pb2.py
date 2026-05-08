@@ -4,18 +4,15 @@
 # source: lens_overlay_deep_gleam_data.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'lens_overlay_deep_gleam_data.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "lens_overlay_deep_gleam_data.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,31 +21,34 @@ _sym_db = _symbol_database.Default()
 
 import lens_overlay_text_pb2 as lens__overlay__text__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"lens_overlay_deep_gleam_data.proto\x12\x04lens\x1a\x17lens_overlay_text.proto\"\xc3\x01\n\rDeepGleamData\x12\x39\n\x0btranslation\x18\n \x01(\x0b\x32\x15.lens.TranslationDataH\x00R\x0btranslation\x12(\n\x10visual_object_id\x18\x0b \x03(\tR\x0evisualObjectIdB\x11\n\x0frendering_oneofJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\t\x10\nJ\x04\x08\x0c\x10\r\"\x91\x0c\n\x0fTranslationData\x12\x34\n\x06status\x18\x01 \x01(\x0b\x32\x1c.lens.TranslationData.StatusR\x06status\x12\'\n\x0ftarget_language\x18\x02 \x01(\tR\x0etargetLanguage\x12\'\n\x0fsource_language\x18\x03 \x01(\tR\x0esourceLanguage\x12 \n\x0btranslation\x18\x04 \x01(\tR\x0btranslation\x12.\n\x04line\x18\x05 \x03(\x0b\x32\x1a.lens.TranslationData.LineR\x04line\x12\x43\n\x11writing_direction\x18\x07 \x01(\x0e\x32\x16.lens.WritingDirectionR\x10writingDirection\x12-\n\talignment\x18\x08 \x01(\x0e\x32\x0f.lens.AlignmentR\talignment\x12\x1c\n\tjustified\x18\t \x01(\x08R\tjustified\x1a\x9d\x02\n\x06Status\x12\x35\n\x04\x63ode\x18\x01 \x01(\x0e\x32!.lens.TranslationData.Status.CodeR\x04\x63ode\"\xdb\x01\n\x04\x43ode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\x12\x10\n\x0cSERVER_ERROR\x10\x02\x12\x1d\n\x19UNSUPPORTED_LANGUAGE_PAIR\x10\x03\x12\x11\n\rSAME_LANGUAGE\x10\x04\x12\x1b\n\x17UNKNOWN_SOURCE_LANGUAGE\x10\x05\x12\x13\n\x0fINVALID_REQUEST\x10\x06\x12\x15\n\x11\x44\x45\x41\x44LINE_EXCEEDED\x10\x07\x12\x15\n\x11\x45MPTY_TRANSLATION\x10\x08\x12\x15\n\x11NO_OP_TRANSLATION\x10\t\x1ap\n\tTextStyle\x12\x1d\n\ntext_color\x18\x01 \x01(\rR\ttextColor\x12\x38\n\x18\x62\x61\x63kground_primary_color\x18\x02 \x01(\rR\x16\x62\x61\x63kgroundPrimaryColorJ\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05\x1a\xb5\x03\n\x13\x42\x61\x63kgroundImageData\x12)\n\x10\x62\x61\x63kground_image\x18\x01 \x01(\x0cR\x0f\x62\x61\x63kgroundImage\x12\x1f\n\x0bimage_width\x18\x02 \x01(\x05R\nimageWidth\x12!\n\x0cimage_height\x18\x03 \x01(\x05R\x0bimageHeight\x12)\n\x10vertical_padding\x18\x04 \x01(\x02R\x0fverticalPadding\x12-\n\x12horizontal_padding\x18\x05 \x01(\x02R\x11horizontalPadding\x12U\n\x0b\x66ile_format\x18\x06 \x01(\x0e\x32\x34.lens.TranslationData.BackgroundImageData.FileFormatR\nfileFormat\x12\x1b\n\ttext_mask\x18\x07 \x01(\x0cR\x08textMask\"a\n\nFileFormat\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x12\n\x0eRAW_BYTES_RGBA\x10\x01\x12\x0c\n\x08PNG_RGBA\x10\x02\x12\r\n\tWEBP_RGBA\x10\x03\x12\x15\n\x11JPEG_RGB_PNG_MASK\x10\x04\x1a\xc1\x02\n\x04Line\x12\x14\n\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n\x03\x65nd\x18\x02 \x01(\x05R\x03\x65nd\x12\x35\n\x05style\x18\x03 \x01(\x0b\x32\x1f.lens.TranslationData.TextStyleR\x05style\x12\x33\n\x04word\x18\x05 \x03(\x0b\x32\x1f.lens.TranslationData.Line.WordR\x04word\x12]\n\x15\x62\x61\x63kground_image_data\x18\t \x01(\x0b\x32).lens.TranslationData.BackgroundImageDataR\x13\x62\x61\x63kgroundImageData\x1a.\n\x04Word\x12\x14\n\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n\x03\x65nd\x18\x02 \x01(\x05R\x03\x65ndJ\x04\x08\x04\x10\x05J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\x06\x10\x07\x42\x07H\x03\x92\x03\x02 \x03\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n"lens_overlay_deep_gleam_data.proto\x12\x04lens\x1a\x17lens_overlay_text.proto"\xc3\x01\n\rDeepGleamData\x12\x39\n\x0btranslation\x18\n \x01(\x0b\x32\x15.lens.TranslationDataH\x00R\x0btranslation\x12(\n\x10visual_object_id\x18\x0b \x03(\tR\x0evisualObjectIdB\x11\n\x0frendering_oneofJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\t\x10\nJ\x04\x08\x0c\x10\r"\x91\x0c\n\x0fTranslationData\x12\x34\n\x06status\x18\x01 \x01(\x0b\x32\x1c.lens.TranslationData.StatusR\x06status\x12\'\n\x0ftarget_language\x18\x02 \x01(\tR\x0etargetLanguage\x12\'\n\x0fsource_language\x18\x03 \x01(\tR\x0esourceLanguage\x12 \n\x0btranslation\x18\x04 \x01(\tR\x0btranslation\x12.\n\x04line\x18\x05 \x03(\x0b\x32\x1a.lens.TranslationData.LineR\x04line\x12\x43\n\x11writing_direction\x18\x07 \x01(\x0e\x32\x16.lens.WritingDirectionR\x10writingDirection\x12-\n\talignment\x18\x08 \x01(\x0e\x32\x0f.lens.AlignmentR\talignment\x12\x1c\n\tjustified\x18\t \x01(\x08R\tjustified\x1a\x9d\x02\n\x06Status\x12\x35\n\x04\x63ode\x18\x01 \x01(\x0e\x32!.lens.TranslationData.Status.CodeR\x04\x63ode"\xdb\x01\n\x04\x43ode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\x12\x10\n\x0cSERVER_ERROR\x10\x02\x12\x1d\n\x19UNSUPPORTED_LANGUAGE_PAIR\x10\x03\x12\x11\n\rSAME_LANGUAGE\x10\x04\x12\x1b\n\x17UNKNOWN_SOURCE_LANGUAGE\x10\x05\x12\x13\n\x0fINVALID_REQUEST\x10\x06\x12\x15\n\x11\x44\x45\x41\x44LINE_EXCEEDED\x10\x07\x12\x15\n\x11\x45MPTY_TRANSLATION\x10\x08\x12\x15\n\x11NO_OP_TRANSLATION\x10\t\x1ap\n\tTextStyle\x12\x1d\n\ntext_color\x18\x01 \x01(\rR\ttextColor\x12\x38\n\x18\x62\x61\x63kground_primary_color\x18\x02 \x01(\rR\x16\x62\x61\x63kgroundPrimaryColorJ\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05\x1a\xb5\x03\n\x13\x42\x61\x63kgroundImageData\x12)\n\x10\x62\x61\x63kground_image\x18\x01 \x01(\x0cR\x0f\x62\x61\x63kgroundImage\x12\x1f\n\x0bimage_width\x18\x02 \x01(\x05R\nimageWidth\x12!\n\x0cimage_height\x18\x03 \x01(\x05R\x0bimageHeight\x12)\n\x10vertical_padding\x18\x04 \x01(\x02R\x0fverticalPadding\x12-\n\x12horizontal_padding\x18\x05 \x01(\x02R\x11horizontalPadding\x12U\n\x0b\x66ile_format\x18\x06 \x01(\x0e\x32\x34.lens.TranslationData.BackgroundImageData.FileFormatR\nfileFormat\x12\x1b\n\ttext_mask\x18\x07 \x01(\x0cR\x08textMask"a\n\nFileFormat\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x12\n\x0eRAW_BYTES_RGBA\x10\x01\x12\x0c\n\x08PNG_RGBA\x10\x02\x12\r\n\tWEBP_RGBA\x10\x03\x12\x15\n\x11JPEG_RGB_PNG_MASK\x10\x04\x1a\xc1\x02\n\x04Line\x12\x14\n\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n\x03\x65nd\x18\x02 \x01(\x05R\x03\x65nd\x12\x35\n\x05style\x18\x03 \x01(\x0b\x32\x1f.lens.TranslationData.TextStyleR\x05style\x12\x33\n\x04word\x18\x05 \x03(\x0b\x32\x1f.lens.TranslationData.Line.WordR\x04word\x12]\n\x15\x62\x61\x63kground_image_data\x18\t \x01(\x0b\x32).lens.TranslationData.BackgroundImageDataR\x13\x62\x61\x63kgroundImageData\x1a.\n\x04Word\x12\x14\n\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n\x03\x65nd\x18\x02 \x01(\x05R\x03\x65ndJ\x04\x08\x04\x10\x05J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\x06\x10\x07\x42\x07H\x03\x92\x03\x02 \x03\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_deep_gleam_data_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_deep_gleam_data_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003\222\003\002 \003'
-  _globals['_DEEPGLEAMDATA']._serialized_start=70
-  _globals['_DEEPGLEAMDATA']._serialized_end=265
-  _globals['_TRANSLATIONDATA']._serialized_start=268
-  _globals['_TRANSLATIONDATA']._serialized_end=1821
-  _globals['_TRANSLATIONDATA_STATUS']._serialized_start=652
-  _globals['_TRANSLATIONDATA_STATUS']._serialized_end=937
-  _globals['_TRANSLATIONDATA_STATUS_CODE']._serialized_start=718
-  _globals['_TRANSLATIONDATA_STATUS_CODE']._serialized_end=937
-  _globals['_TRANSLATIONDATA_TEXTSTYLE']._serialized_start=939
-  _globals['_TRANSLATIONDATA_TEXTSTYLE']._serialized_end=1051
-  _globals['_TRANSLATIONDATA_BACKGROUNDIMAGEDATA']._serialized_start=1054
-  _globals['_TRANSLATIONDATA_BACKGROUNDIMAGEDATA']._serialized_end=1491
-  _globals['_TRANSLATIONDATA_BACKGROUNDIMAGEDATA_FILEFORMAT']._serialized_start=1394
-  _globals['_TRANSLATIONDATA_BACKGROUNDIMAGEDATA_FILEFORMAT']._serialized_end=1491
-  _globals['_TRANSLATIONDATA_LINE']._serialized_start=1494
-  _globals['_TRANSLATIONDATA_LINE']._serialized_end=1815
-  _globals['_TRANSLATIONDATA_LINE_WORD']._serialized_start=1745
-  _globals['_TRANSLATIONDATA_LINE_WORD']._serialized_end=1791
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003\222\003\002 \003"
+    _globals["_DEEPGLEAMDATA"]._serialized_start = 70
+    _globals["_DEEPGLEAMDATA"]._serialized_end = 265
+    _globals["_TRANSLATIONDATA"]._serialized_start = 268
+    _globals["_TRANSLATIONDATA"]._serialized_end = 1821
+    _globals["_TRANSLATIONDATA_STATUS"]._serialized_start = 652
+    _globals["_TRANSLATIONDATA_STATUS"]._serialized_end = 937
+    _globals["_TRANSLATIONDATA_STATUS_CODE"]._serialized_start = 718
+    _globals["_TRANSLATIONDATA_STATUS_CODE"]._serialized_end = 937
+    _globals["_TRANSLATIONDATA_TEXTSTYLE"]._serialized_start = 939
+    _globals["_TRANSLATIONDATA_TEXTSTYLE"]._serialized_end = 1051
+    _globals["_TRANSLATIONDATA_BACKGROUNDIMAGEDATA"]._serialized_start = 1054
+    _globals["_TRANSLATIONDATA_BACKGROUNDIMAGEDATA"]._serialized_end = 1491
+    _globals["_TRANSLATIONDATA_BACKGROUNDIMAGEDATA_FILEFORMAT"]._serialized_start = 1394
+    _globals["_TRANSLATIONDATA_BACKGROUNDIMAGEDATA_FILEFORMAT"]._serialized_end = 1491
+    _globals["_TRANSLATIONDATA_LINE"]._serialized_start = 1494
+    _globals["_TRANSLATIONDATA_LINE"]._serialized_end = 1815
+    _globals["_TRANSLATIONDATA_LINE_WORD"]._serialized_start = 1745
+    _globals["_TRANSLATIONDATA_LINE_WORD"]._serialized_end = 1791
 # @@protoc_insertion_point(module_scope)

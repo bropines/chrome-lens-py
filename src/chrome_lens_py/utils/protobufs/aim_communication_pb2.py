@@ -4,18 +4,15 @@
 # source: aim_communication.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'aim_communication.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "aim_communication.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,63 +21,64 @@ _sym_db = _symbol_database.Default()
 
 import aim_query_pb2 as aim__query__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x61im_communication.proto\x12\x04lens\x1a\x0f\x61im_query.proto\"L\n\rHandshakePing\x12;\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapabilityR\x0c\x63\x61pabilities\";\n\x0bSubmitQuery\x12,\n\x07payload\x18\x01 \x01(\x0b\x32\x12.lens.QueryPayloadR\x07payload\"\xb9\x01\n\x1b\x43obrowsingDisplayModeParams\x12P\n\x0c\x64isplay_mode\x18\x01 \x01(\x0e\x32-.lens.CobrowsingDisplayModeParams.DisplayModeR\x0b\x64isplayMode\"H\n\x0b\x44isplayMode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x12\n\x0e\x43OBROWSING_TAB\x10\x01\x12\x18\n\x14\x43OBROWSING_SIDEPANEL\x10\x02\"U\n\x18SetCobrowsingDisplayMode\x12\x39\n\x06params\x18\x01 \x01(\x0b\x32!.lens.CobrowsingDisplayModeParamsR\x06params\"\x18\n\x16OpenThreadsViewPayload\"I\n\x0fOpenThreadsView\x12\x36\n\x07payload\x18\x01 \x01(\x0b\x32\x1c.lens.OpenThreadsViewPayloadR\x07payload\"P\n\x11HandshakeResponse\x12;\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapabilityR\x0c\x63\x61pabilities\"\xc1\x02\n\x12\x43lientToAimMessage\x12<\n\x0ehandshake_ping\x18\x01 \x01(\x0b\x32\x13.lens.HandshakePingH\x00R\rhandshakePing\x12\x36\n\x0csubmit_query\x18\x02 \x01(\x0b\x32\x11.lens.SubmitQueryH\x00R\x0bsubmitQuery\x12\x43\n\x11open_threads_view\x18\x03 \x01(\x0b\x32\x15.lens.OpenThreadsViewH\x00R\x0fopenThreadsView\x12_\n\x1bset_cobrowsing_display_mode\x18\x04 \x01(\x0b\x32\x1e.lens.SetCobrowsingDisplayModeH\x00R\x18setCobrowsingDisplayModeB\x0f\n\revent_message\"\x91\x06\n\x12\x41imToClientMessage\x12H\n\x12handshake_response\x18\x01 \x01(\x0b\x32\x17.lens.HandshakeResponseH\x00R\x11handshakeResponse\x12\x30\n\nhide_input\x18\x02 \x01(\x0b\x32\x0f.lens.HideInputH\x00R\thideInput\x12\x39\n\rrestore_input\x18\x03 \x01(\x0b\x32\x12.lens.RestoreInputH\x00R\x0crestoreInput\x12@\n\x10\x65nter_basic_mode\x18\x04 \x01(\x0b\x32\x14.lens.EnterBasicModeH\x00R\x0e\x65nterBasicMode\x12=\n\x0f\x65xit_basic_mode\x18\x05 \x01(\x0b\x32\x13.lens.ExitBasicModeH\x00R\rexitBasicMode\x12\x65\n\x1dupdate_thread_context_library\x18\x07 \x01(\x0b\x32 .lens.UpdateThreadContextLibraryH\x00R\x1aupdateThreadContextLibrary\x12\\\n\x1anotify_zero_state_rendered\x18\x08 \x01(\x0b\x32\x1d.lens.NotifyZeroStateRenderedH\x00R\x17notifyZeroStateRendered\x12\x82\x01\n,set_chrome_desktop_input_plate_configuration\x18\t \x01(\x0b\x32!.lens.InputPlateParametersRequestH\x00R\'setChromeDesktopInputPlateConfiguration\x12\x36\n\x0cunlock_input\x18\x0c \x01(\x0b\x32\x11.lens.UnlockInputH\x00R\x0bunlockInput\x12\x30\n\nlock_input\x18\r \x01(\x0b\x32\x0f.lens.LockInputH\x00R\tlockInputB\x0f\n\revent_message\"\r\n\x0bUnlockInput\"\x0b\n\tLockInput\"\x0b\n\tHideInput\"\x0e\n\x0cRestoreInput\"\x10\n\x0e\x45nterBasicMode\"\x0f\n\rExitBasicMode\"N\n\x17NotifyZeroStateRendered\x12\x33\n\x16is_zero_state_rendered\x18\x01 \x01(\x08R\x13isZeroStateRendered\"G\n\x1aUpdateThreadContextLibrary\x12)\n\x08\x63ontexts\x18\x01 \x03(\x0b\x32\r.lens.ContextR\x08\x63ontexts\"\xa8\x01\n\x07\x43ontext\x12\x1d\n\ncontext_id\x18\x01 \x01(\x03R\tcontextId\x12#\n\x05image\x18\x02 \x01(\x0b\x32\x0b.lens.ImageH\x00R\x05image\x12\x1d\n\x03pdf\x18\x03 \x01(\x0b\x32\t.lens.PdfH\x00R\x03pdf\x12)\n\x07webpage\x18\x04 \x01(\x0b\x32\r.lens.WebpageH\x00R\x07webpageB\x0f\n\rcontext_input\"/\n\x05Image\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\"-\n\x03Pdf\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\"1\n\x07Webpage\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\"\x9f\x01\n\x1bInputPlateParametersRequest\x12\x1b\n\tmax_width\x18\x01 \x01(\x05R\x08maxWidth\x12\x1d\n\nmax_height\x18\x02 \x01(\x05R\tmaxHeight\x12#\n\rmargin_bottom\x18\x03 \x01(\x05R\x0cmarginBottom\x12\x1f\n\x0bmargin_left\x18\x04 \x01(\x05R\nmarginLeft*\xed\x01\n\x11\x46\x65\x61tureCapability\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\x15\n\x11OPEN_THREADS_VIEW\x10\x0f\x12\x1e\n\x1a\x43OBROWSING_DISPLAY_CONTROL\x10\x11\x12\x1a\n\x16THREAD_CONTEXT_LIBRARY\x10\x12\x12\x1e\n\x1aNOTIFY_ZERO_STATE_RENDERED\x10\x14\x12\x30\n,SET_CHROME_DESKTOP_INPUT_PLATE_CONFIGURATION\x10\x18\x12\x10\n\x0cUNLOCK_INPUT\x10\x19\x12\x0e\n\nLOCK_INPUT\x10\x1a\x1a\x04:\x02\x10\x02\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x17\x61im_communication.proto\x12\x04lens\x1a\x0f\x61im_query.proto"L\n\rHandshakePing\x12;\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapabilityR\x0c\x63\x61pabilities";\n\x0bSubmitQuery\x12,\n\x07payload\x18\x01 \x01(\x0b\x32\x12.lens.QueryPayloadR\x07payload"\xb9\x01\n\x1b\x43obrowsingDisplayModeParams\x12P\n\x0c\x64isplay_mode\x18\x01 \x01(\x0e\x32-.lens.CobrowsingDisplayModeParams.DisplayModeR\x0b\x64isplayMode"H\n\x0b\x44isplayMode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x12\n\x0e\x43OBROWSING_TAB\x10\x01\x12\x18\n\x14\x43OBROWSING_SIDEPANEL\x10\x02"U\n\x18SetCobrowsingDisplayMode\x12\x39\n\x06params\x18\x01 \x01(\x0b\x32!.lens.CobrowsingDisplayModeParamsR\x06params"\x18\n\x16OpenThreadsViewPayload"I\n\x0fOpenThreadsView\x12\x36\n\x07payload\x18\x01 \x01(\x0b\x32\x1c.lens.OpenThreadsViewPayloadR\x07payload"P\n\x11HandshakeResponse\x12;\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapabilityR\x0c\x63\x61pabilities"\xc1\x02\n\x12\x43lientToAimMessage\x12<\n\x0ehandshake_ping\x18\x01 \x01(\x0b\x32\x13.lens.HandshakePingH\x00R\rhandshakePing\x12\x36\n\x0csubmit_query\x18\x02 \x01(\x0b\x32\x11.lens.SubmitQueryH\x00R\x0bsubmitQuery\x12\x43\n\x11open_threads_view\x18\x03 \x01(\x0b\x32\x15.lens.OpenThreadsViewH\x00R\x0fopenThreadsView\x12_\n\x1bset_cobrowsing_display_mode\x18\x04 \x01(\x0b\x32\x1e.lens.SetCobrowsingDisplayModeH\x00R\x18setCobrowsingDisplayModeB\x0f\n\revent_message"\x91\x06\n\x12\x41imToClientMessage\x12H\n\x12handshake_response\x18\x01 \x01(\x0b\x32\x17.lens.HandshakeResponseH\x00R\x11handshakeResponse\x12\x30\n\nhide_input\x18\x02 \x01(\x0b\x32\x0f.lens.HideInputH\x00R\thideInput\x12\x39\n\rrestore_input\x18\x03 \x01(\x0b\x32\x12.lens.RestoreInputH\x00R\x0crestoreInput\x12@\n\x10\x65nter_basic_mode\x18\x04 \x01(\x0b\x32\x14.lens.EnterBasicModeH\x00R\x0e\x65nterBasicMode\x12=\n\x0f\x65xit_basic_mode\x18\x05 \x01(\x0b\x32\x13.lens.ExitBasicModeH\x00R\rexitBasicMode\x12\x65\n\x1dupdate_thread_context_library\x18\x07 \x01(\x0b\x32 .lens.UpdateThreadContextLibraryH\x00R\x1aupdateThreadContextLibrary\x12\\\n\x1anotify_zero_state_rendered\x18\x08 \x01(\x0b\x32\x1d.lens.NotifyZeroStateRenderedH\x00R\x17notifyZeroStateRendered\x12\x82\x01\n,set_chrome_desktop_input_plate_configuration\x18\t \x01(\x0b\x32!.lens.InputPlateParametersRequestH\x00R\'setChromeDesktopInputPlateConfiguration\x12\x36\n\x0cunlock_input\x18\x0c \x01(\x0b\x32\x11.lens.UnlockInputH\x00R\x0bunlockInput\x12\x30\n\nlock_input\x18\r \x01(\x0b\x32\x0f.lens.LockInputH\x00R\tlockInputB\x0f\n\revent_message"\r\n\x0bUnlockInput"\x0b\n\tLockInput"\x0b\n\tHideInput"\x0e\n\x0cRestoreInput"\x10\n\x0e\x45nterBasicMode"\x0f\n\rExitBasicMode"N\n\x17NotifyZeroStateRendered\x12\x33\n\x16is_zero_state_rendered\x18\x01 \x01(\x08R\x13isZeroStateRendered"G\n\x1aUpdateThreadContextLibrary\x12)\n\x08\x63ontexts\x18\x01 \x03(\x0b\x32\r.lens.ContextR\x08\x63ontexts"\xa8\x01\n\x07\x43ontext\x12\x1d\n\ncontext_id\x18\x01 \x01(\x03R\tcontextId\x12#\n\x05image\x18\x02 \x01(\x0b\x32\x0b.lens.ImageH\x00R\x05image\x12\x1d\n\x03pdf\x18\x03 \x01(\x0b\x32\t.lens.PdfH\x00R\x03pdf\x12)\n\x07webpage\x18\x04 \x01(\x0b\x32\r.lens.WebpageH\x00R\x07webpageB\x0f\n\rcontext_input"/\n\x05Image\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url"-\n\x03Pdf\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url"1\n\x07Webpage\x12\x14\n\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url"\x9f\x01\n\x1bInputPlateParametersRequest\x12\x1b\n\tmax_width\x18\x01 \x01(\x05R\x08maxWidth\x12\x1d\n\nmax_height\x18\x02 \x01(\x05R\tmaxHeight\x12#\n\rmargin_bottom\x18\x03 \x01(\x05R\x0cmarginBottom\x12\x1f\n\x0bmargin_left\x18\x04 \x01(\x05R\nmarginLeft*\xed\x01\n\x11\x46\x65\x61tureCapability\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\x15\n\x11OPEN_THREADS_VIEW\x10\x0f\x12\x1e\n\x1a\x43OBROWSING_DISPLAY_CONTROL\x10\x11\x12\x1a\n\x16THREAD_CONTEXT_LIBRARY\x10\x12\x12\x1e\n\x1aNOTIFY_ZERO_STATE_RENDERED\x10\x14\x12\x30\n,SET_CHROME_DESKTOP_INPUT_PLATE_CONFIGURATION\x10\x18\x12\x10\n\x0cUNLOCK_INPUT\x10\x19\x12\x0e\n\nLOCK_INPUT\x10\x1a\x1a\x04:\x02\x10\x02\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'aim_communication_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "aim_communication_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_FEATURECAPABILITY']._loaded_options = None
-  _globals['_FEATURECAPABILITY']._serialized_options = b':\002\020\002'
-  _globals['_FEATURECAPABILITY']._serialized_start=2485
-  _globals['_FEATURECAPABILITY']._serialized_end=2722
-  _globals['_HANDSHAKEPING']._serialized_start=50
-  _globals['_HANDSHAKEPING']._serialized_end=126
-  _globals['_SUBMITQUERY']._serialized_start=128
-  _globals['_SUBMITQUERY']._serialized_end=187
-  _globals['_COBROWSINGDISPLAYMODEPARAMS']._serialized_start=190
-  _globals['_COBROWSINGDISPLAYMODEPARAMS']._serialized_end=375
-  _globals['_COBROWSINGDISPLAYMODEPARAMS_DISPLAYMODE']._serialized_start=303
-  _globals['_COBROWSINGDISPLAYMODEPARAMS_DISPLAYMODE']._serialized_end=375
-  _globals['_SETCOBROWSINGDISPLAYMODE']._serialized_start=377
-  _globals['_SETCOBROWSINGDISPLAYMODE']._serialized_end=462
-  _globals['_OPENTHREADSVIEWPAYLOAD']._serialized_start=464
-  _globals['_OPENTHREADSVIEWPAYLOAD']._serialized_end=488
-  _globals['_OPENTHREADSVIEW']._serialized_start=490
-  _globals['_OPENTHREADSVIEW']._serialized_end=563
-  _globals['_HANDSHAKERESPONSE']._serialized_start=565
-  _globals['_HANDSHAKERESPONSE']._serialized_end=645
-  _globals['_CLIENTTOAIMMESSAGE']._serialized_start=648
-  _globals['_CLIENTTOAIMMESSAGE']._serialized_end=969
-  _globals['_AIMTOCLIENTMESSAGE']._serialized_start=972
-  _globals['_AIMTOCLIENTMESSAGE']._serialized_end=1757
-  _globals['_UNLOCKINPUT']._serialized_start=1759
-  _globals['_UNLOCKINPUT']._serialized_end=1772
-  _globals['_LOCKINPUT']._serialized_start=1774
-  _globals['_LOCKINPUT']._serialized_end=1785
-  _globals['_HIDEINPUT']._serialized_start=1787
-  _globals['_HIDEINPUT']._serialized_end=1798
-  _globals['_RESTOREINPUT']._serialized_start=1800
-  _globals['_RESTOREINPUT']._serialized_end=1814
-  _globals['_ENTERBASICMODE']._serialized_start=1816
-  _globals['_ENTERBASICMODE']._serialized_end=1832
-  _globals['_EXITBASICMODE']._serialized_start=1834
-  _globals['_EXITBASICMODE']._serialized_end=1849
-  _globals['_NOTIFYZEROSTATERENDERED']._serialized_start=1851
-  _globals['_NOTIFYZEROSTATERENDERED']._serialized_end=1929
-  _globals['_UPDATETHREADCONTEXTLIBRARY']._serialized_start=1931
-  _globals['_UPDATETHREADCONTEXTLIBRARY']._serialized_end=2002
-  _globals['_CONTEXT']._serialized_start=2005
-  _globals['_CONTEXT']._serialized_end=2173
-  _globals['_IMAGE']._serialized_start=2175
-  _globals['_IMAGE']._serialized_end=2222
-  _globals['_PDF']._serialized_start=2224
-  _globals['_PDF']._serialized_end=2269
-  _globals['_WEBPAGE']._serialized_start=2271
-  _globals['_WEBPAGE']._serialized_end=2320
-  _globals['_INPUTPLATEPARAMETERSREQUEST']._serialized_start=2323
-  _globals['_INPUTPLATEPARAMETERSREQUEST']._serialized_end=2482
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_FEATURECAPABILITY"]._loaded_options = None
+    _globals["_FEATURECAPABILITY"]._serialized_options = b":\002\020\002"
+    _globals["_FEATURECAPABILITY"]._serialized_start = 2485
+    _globals["_FEATURECAPABILITY"]._serialized_end = 2722
+    _globals["_HANDSHAKEPING"]._serialized_start = 50
+    _globals["_HANDSHAKEPING"]._serialized_end = 126
+    _globals["_SUBMITQUERY"]._serialized_start = 128
+    _globals["_SUBMITQUERY"]._serialized_end = 187
+    _globals["_COBROWSINGDISPLAYMODEPARAMS"]._serialized_start = 190
+    _globals["_COBROWSINGDISPLAYMODEPARAMS"]._serialized_end = 375
+    _globals["_COBROWSINGDISPLAYMODEPARAMS_DISPLAYMODE"]._serialized_start = 303
+    _globals["_COBROWSINGDISPLAYMODEPARAMS_DISPLAYMODE"]._serialized_end = 375
+    _globals["_SETCOBROWSINGDISPLAYMODE"]._serialized_start = 377
+    _globals["_SETCOBROWSINGDISPLAYMODE"]._serialized_end = 462
+    _globals["_OPENTHREADSVIEWPAYLOAD"]._serialized_start = 464
+    _globals["_OPENTHREADSVIEWPAYLOAD"]._serialized_end = 488
+    _globals["_OPENTHREADSVIEW"]._serialized_start = 490
+    _globals["_OPENTHREADSVIEW"]._serialized_end = 563
+    _globals["_HANDSHAKERESPONSE"]._serialized_start = 565
+    _globals["_HANDSHAKERESPONSE"]._serialized_end = 645
+    _globals["_CLIENTTOAIMMESSAGE"]._serialized_start = 648
+    _globals["_CLIENTTOAIMMESSAGE"]._serialized_end = 969
+    _globals["_AIMTOCLIENTMESSAGE"]._serialized_start = 972
+    _globals["_AIMTOCLIENTMESSAGE"]._serialized_end = 1757
+    _globals["_UNLOCKINPUT"]._serialized_start = 1759
+    _globals["_UNLOCKINPUT"]._serialized_end = 1772
+    _globals["_LOCKINPUT"]._serialized_start = 1774
+    _globals["_LOCKINPUT"]._serialized_end = 1785
+    _globals["_HIDEINPUT"]._serialized_start = 1787
+    _globals["_HIDEINPUT"]._serialized_end = 1798
+    _globals["_RESTOREINPUT"]._serialized_start = 1800
+    _globals["_RESTOREINPUT"]._serialized_end = 1814
+    _globals["_ENTERBASICMODE"]._serialized_start = 1816
+    _globals["_ENTERBASICMODE"]._serialized_end = 1832
+    _globals["_EXITBASICMODE"]._serialized_start = 1834
+    _globals["_EXITBASICMODE"]._serialized_end = 1849
+    _globals["_NOTIFYZEROSTATERENDERED"]._serialized_start = 1851
+    _globals["_NOTIFYZEROSTATERENDERED"]._serialized_end = 1929
+    _globals["_UPDATETHREADCONTEXTLIBRARY"]._serialized_start = 1931
+    _globals["_UPDATETHREADCONTEXTLIBRARY"]._serialized_end = 2002
+    _globals["_CONTEXT"]._serialized_start = 2005
+    _globals["_CONTEXT"]._serialized_end = 2173
+    _globals["_IMAGE"]._serialized_start = 2175
+    _globals["_IMAGE"]._serialized_end = 2222
+    _globals["_PDF"]._serialized_start = 2224
+    _globals["_PDF"]._serialized_end = 2269
+    _globals["_WEBPAGE"]._serialized_start = 2271
+    _globals["_WEBPAGE"]._serialized_end = 2320
+    _globals["_INPUTPLATEPARAMETERSREQUEST"]._serialized_start = 2323
+    _globals["_INPUTPLATEPARAMETERSREQUEST"]._serialized_end = 2482
 # @@protoc_insertion_point(module_scope)

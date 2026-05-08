@@ -4,18 +4,15 @@
 # source: lens_overlay_request_id.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'lens_overlay_request_id.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "lens_overlay_request_id.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,17 +21,20 @@ _sym_db = _symbol_database.Default()
 
 import lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dlens_overlay_request_id.proto\x12\x04lens\x1a\x1flens_overlay_routing_info.proto\"\x9c\x04\n\x14LensOverlayRequestId\x12\x12\n\x04uuid\x18\x01 \x01(\x04R\x04uuid\x12\x1f\n\x0bsequence_id\x18\x02 \x01(\x05R\nsequenceId\x12*\n\x11image_sequence_id\x18\x03 \x01(\x05R\x0fimageSequenceId\x12!\n\x0c\x61nalytics_id\x18\x04 \x01(\x0cR\x0b\x61nalyticsId\x12&\n\x0flong_context_id\x18\t \x01(\x05R\rlongContextId\x12?\n\x0crouting_info\x18\x06 \x01(\x0b\x32\x1c.lens.LensOverlayRoutingInfoR\x0broutingInfo\x12\x1b\n\ttime_usec\x18\x07 \x01(\x04R\x08timeUsec\x12\x43\n\nmedia_type\x18\n \x01(\x0e\x32$.lens.LensOverlayRequestId.MediaTypeR\tmediaType\x12\x1d\n\ncontext_id\x18\x0c \x01(\x03R\tcontextId\"\x95\x01\n\tMediaType\x12\x1c\n\x18MEDIA_TYPE_DEFAULT_IMAGE\x10\x00\x12\x12\n\x0eMEDIA_TYPE_PDF\x10\x01\x12\x16\n\x12MEDIA_TYPE_WEBPAGE\x10\x02\x12\x1c\n\x18MEDIA_TYPE_PDF_AND_IMAGE\x10\x03\x12 \n\x1cMEDIA_TYPE_WEBPAGE_AND_IMAGE\x10\x04\x42\x02H\x03')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x1dlens_overlay_request_id.proto\x12\x04lens\x1a\x1flens_overlay_routing_info.proto"\x9c\x04\n\x14LensOverlayRequestId\x12\x12\n\x04uuid\x18\x01 \x01(\x04R\x04uuid\x12\x1f\n\x0bsequence_id\x18\x02 \x01(\x05R\nsequenceId\x12*\n\x11image_sequence_id\x18\x03 \x01(\x05R\x0fimageSequenceId\x12!\n\x0c\x61nalytics_id\x18\x04 \x01(\x0cR\x0b\x61nalyticsId\x12&\n\x0flong_context_id\x18\t \x01(\x05R\rlongContextId\x12?\n\x0crouting_info\x18\x06 \x01(\x0b\x32\x1c.lens.LensOverlayRoutingInfoR\x0broutingInfo\x12\x1b\n\ttime_usec\x18\x07 \x01(\x04R\x08timeUsec\x12\x43\n\nmedia_type\x18\n \x01(\x0e\x32$.lens.LensOverlayRequestId.MediaTypeR\tmediaType\x12\x1d\n\ncontext_id\x18\x0c \x01(\x03R\tcontextId"\x95\x01\n\tMediaType\x12\x1c\n\x18MEDIA_TYPE_DEFAULT_IMAGE\x10\x00\x12\x12\n\x0eMEDIA_TYPE_PDF\x10\x01\x12\x16\n\x12MEDIA_TYPE_WEBPAGE\x10\x02\x12\x1c\n\x18MEDIA_TYPE_PDF_AND_IMAGE\x10\x03\x12 \n\x1cMEDIA_TYPE_WEBPAGE_AND_IMAGE\x10\x04\x42\x02H\x03'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_request_id_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_request_id_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_LENSOVERLAYREQUESTID']._serialized_start=73
-  _globals['_LENSOVERLAYREQUESTID']._serialized_end=613
-  _globals['_LENSOVERLAYREQUESTID_MEDIATYPE']._serialized_start=464
-  _globals['_LENSOVERLAYREQUESTID_MEDIATYPE']._serialized_end=613
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_LENSOVERLAYREQUESTID"]._serialized_start = 73
+    _globals["_LENSOVERLAYREQUESTID"]._serialized_end = 613
+    _globals["_LENSOVERLAYREQUESTID_MEDIATYPE"]._serialized_start = 464
+    _globals["_LENSOVERLAYREQUESTID_MEDIATYPE"]._serialized_end = 613
 # @@protoc_insertion_point(module_scope)

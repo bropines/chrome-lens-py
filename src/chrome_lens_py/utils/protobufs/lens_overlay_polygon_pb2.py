@@ -4,40 +4,39 @@
 # source: lens_overlay_polygon.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'lens_overlay_polygon.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "lens_overlay_polygon.proto"
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1alens_overlay_polygon.proto\x12\x04lens\"\xbc\x02\n\x07Polygon\x12,\n\x06vertex\x18\x01 \x03(\x0b\x32\x14.lens.Polygon.VertexR\x06vertex\x12\x45\n\x0fvertex_ordering\x18\x02 \x01(\x0e\x32\x1c.lens.Polygon.VertexOrderingR\x0evertexOrdering\x12=\n\x0f\x63oordinate_type\x18\x03 \x01(\x0e\x32\x14.lens.CoordinateTypeR\x0e\x63oordinateType\x1a$\n\x06Vertex\x12\x0c\n\x01x\x18\x01 \x01(\x02R\x01x\x12\x0c\n\x01y\x18\x02 \x01(\x02R\x01y\"W\n\x0eVertexOrdering\x12\x1f\n\x1bVERTEX_ORDERING_UNSPECIFIED\x10\x00\x12\r\n\tCLOCKWISE\x10\x01\x12\x15\n\x11\x43OUNTER_CLOCKWISE\x10\x02*L\n\x0e\x43oordinateType\x12\x1f\n\x1b\x43OORDINATE_TYPE_UNSPECIFIED\x10\x00\x12\x0e\n\nNORMALIZED\x10\x01\x12\t\n\x05IMAGE\x10\x02\x42\x07H\x03\x92\x03\x02\x10\x02\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x1alens_overlay_polygon.proto\x12\x04lens"\xbc\x02\n\x07Polygon\x12,\n\x06vertex\x18\x01 \x03(\x0b\x32\x14.lens.Polygon.VertexR\x06vertex\x12\x45\n\x0fvertex_ordering\x18\x02 \x01(\x0e\x32\x1c.lens.Polygon.VertexOrderingR\x0evertexOrdering\x12=\n\x0f\x63oordinate_type\x18\x03 \x01(\x0e\x32\x14.lens.CoordinateTypeR\x0e\x63oordinateType\x1a$\n\x06Vertex\x12\x0c\n\x01x\x18\x01 \x01(\x02R\x01x\x12\x0c\n\x01y\x18\x02 \x01(\x02R\x01y"W\n\x0eVertexOrdering\x12\x1f\n\x1bVERTEX_ORDERING_UNSPECIFIED\x10\x00\x12\r\n\tCLOCKWISE\x10\x01\x12\x15\n\x11\x43OUNTER_CLOCKWISE\x10\x02*L\n\x0e\x43oordinateType\x12\x1f\n\x1b\x43OORDINATE_TYPE_UNSPECIFIED\x10\x00\x12\x0e\n\nNORMALIZED\x10\x01\x12\t\n\x05IMAGE\x10\x02\x42\x07H\x03\x92\x03\x02\x10\x02\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_polygon_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_polygon_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003\222\003\002\020\002'
-  _globals['_COORDINATETYPE']._serialized_start=355
-  _globals['_COORDINATETYPE']._serialized_end=431
-  _globals['_POLYGON']._serialized_start=37
-  _globals['_POLYGON']._serialized_end=353
-  _globals['_POLYGON_VERTEX']._serialized_start=228
-  _globals['_POLYGON_VERTEX']._serialized_end=264
-  _globals['_POLYGON_VERTEXORDERING']._serialized_start=266
-  _globals['_POLYGON_VERTEXORDERING']._serialized_end=353
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003\222\003\002\020\002"
+    _globals["_COORDINATETYPE"]._serialized_start = 355
+    _globals["_COORDINATETYPE"]._serialized_end = 431
+    _globals["_POLYGON"]._serialized_start = 37
+    _globals["_POLYGON"]._serialized_end = 353
+    _globals["_POLYGON_VERTEX"]._serialized_start = 228
+    _globals["_POLYGON_VERTEX"]._serialized_end = 264
+    _globals["_POLYGON_VERTEXORDERING"]._serialized_start = 266
+    _globals["_POLYGON_VERTEXORDERING"]._serialized_end = 353
 # @@protoc_insertion_point(module_scope)

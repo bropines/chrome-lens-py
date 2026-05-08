@@ -8,11 +8,12 @@ from ..constants import DEFAULT_HEADERS, LENS_CRUPLOAD_ENDPOINT
 from ..exceptions import LensAPIError, LensProtobufError
 from ..utils.lens_betterproto import (
     LensOverlayClusterInfo,
+    LensOverlayServerError,
     LensOverlayServerResponse,
-    LensOverlayServerError
 )
 
 logger = logging.getLogger(__name__)
+
 
 class LensRequestHandler:
     def __init__(
@@ -33,7 +34,9 @@ class LensRequestHandler:
                 self.proxy_settings["mounts"] = proxy
                 logger.info(f"Using proxy mounts configuration: {proxy}")
             else:
-                logger.warning(f"Invalid proxy type: {type(proxy)}. Proxy will not be used.")
+                logger.warning(
+                    f"Invalid proxy type: {type(proxy)}. Proxy will not be used."
+                )
 
         self.current_session_uuid: Optional[int] = None
         self.current_sequence_id: int = 0
@@ -94,9 +97,14 @@ class LensRequestHandler:
                 response.raise_for_status()
 
                 # Парсинг через стандартный метод FromString
-                server_response_proto = LensOverlayServerResponse.FromString(response_bytes)
+                server_response_proto = LensOverlayServerResponse.FromString(
+                    response_bytes
+                )
 
-                if server_response_proto.HasField("error") and server_response_proto.error.error_type != 0:
+                if (
+                    server_response_proto.HasField("error")
+                    and server_response_proto.error.error_type != 0
+                ):
                     error_msg = f"Lens API server error. Type: {server_response_proto.error.error_type}"
                     logger.error(error_msg)
                     raise LensAPIError(
@@ -105,8 +113,12 @@ class LensRequestHandler:
                         response_body=response_bytes.decode(errors="replace"),
                     )
 
-                if server_response_proto.HasField("objects_response") and server_response_proto.objects_response.HasField("cluster_info"):
-                    self.last_cluster_info = server_response_proto.objects_response.cluster_info
+                if server_response_proto.HasField(
+                    "objects_response"
+                ) and server_response_proto.objects_response.HasField("cluster_info"):
+                    self.last_cluster_info = (
+                        server_response_proto.objects_response.cluster_info
+                    )
                 else:
                     self.last_cluster_info = None
 
@@ -122,7 +134,9 @@ class LensRequestHandler:
             except httpx.RequestError as e_req:
                 raise LensAPIError(f"Network error: {e_req}") from e_req
             except Exception as e_parse:
-                decoded_for_error = response_bytes.decode(errors="replace") if response_bytes else ""
+                decoded_for_error = (
+                    response_bytes.decode(errors="replace") if response_bytes else ""
+                )
                 raise LensProtobufError(
                     f"Protobuf response parsing error: {e_parse}",
                     response_body=decoded_for_error,

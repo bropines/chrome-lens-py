@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 import sys
 
 from rich.console import Console
@@ -25,6 +26,7 @@ from ..utils.config_manager import (
 )
 from ..utils.general import is_image_file_supported
 from ..utils.sharex import copy_to_clipboard
+from ..utils.sharex_setup import setup_sharex_config
 
 console = Console()
 
@@ -150,6 +152,12 @@ async def cli_main():
     parser.add_argument(
         "ocr_lang", nargs="?", default=None, help="BCP 47 code for OCR."
     )
+    # ShareX Setup
+    parser.add_argument(
+        "--setup-sharex",
+        action="store_true",
+        help="Automatically configure ShareX to use lens_scan for OCR/Translation.",
+    )
     # Translation
     parser.add_argument("-t", "--translate", dest="target_lang")
     parser.add_argument("--translate-from", dest="source_lang")
@@ -206,6 +214,10 @@ async def cli_main():
     parser.add_argument("-h", "--help", action="store_true")
 
     args = parser.parse_args()
+
+    if args.setup_sharex:
+        setup_sharex_config()
+        return
 
     MAX_CONCURRENCY_HARD_LIMIT = 30
     CONCURRENCY_WARNING_THRESHOLD = 20
@@ -525,7 +537,7 @@ async def cli_main():
 def run():
     if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
         try:
-            os.system("chcp 65001 > nul")
+            subprocess.run(["chcp", "65001"], shell=True, capture_output=True)
             logging.debug("Set Windows console to chcp 65001 (UTF-8)")
         except Exception as e:
             print(f"Warning: Failed to set console to UTF-8 (chcp 65001). Error: {e}")

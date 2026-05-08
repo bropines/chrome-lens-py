@@ -13,7 +13,7 @@ from .constants import (
     DEFAULT_CLIENT_REGION,
     DEFAULT_CLIENT_TIME_ZONE,
     DEFAULT_OCR_LANG,
-    LENS_CRUPLOAD_ENDPOINT
+    LENS_CRUPLOAD_ENDPOINT,
 )
 from .core.image_processor import (
     draw_overlay_on_image,
@@ -23,6 +23,7 @@ from .core.image_processor import (
 from .core.protobuf_builder import create_ocr_translate_request
 from .core.request_handler import LensRequestHandler
 from .exceptions import LensException
+from .utils.font_manager import FontType, get_font
 from .utils.lens_betterproto import (
     LensOverlayServerResponse,
     TextLayoutLine,
@@ -30,9 +31,9 @@ from .utils.lens_betterproto import (
     TextLayoutWord,
     TranslationDataStatusCode,
 )
-from .utils.font_manager import FontType, get_font
 
 logger = logging.getLogger(__name__)
+
 
 class LensAPI:
     def __init__(
@@ -140,7 +141,9 @@ class LensAPI:
             "words": [self._parse_word_detailed(word) for word in line.words],
         }
 
-    def _parse_paragraph_detailed(self, paragraph: "TextLayoutParagraph") -> Dict[str, Any]:
+    def _parse_paragraph_detailed(
+        self, paragraph: "TextLayoutParagraph"
+    ) -> Dict[str, Any]:
         full_paragraph_text = "\n".join(
             "".join(
                 word.plain_text + word.text_separator for word in line.words
@@ -167,15 +170,19 @@ class LensAPI:
         self,
         response_proto: "LensOverlayServerResponse",
         preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks", "lines", "detailed"] = "full_text",
+        output_format: Literal[
+            "full_text", "blocks", "lines", "detailed"
+        ] = "full_text",
     ) -> Tuple[Union[str, List[Dict]], List[Dict[str, Any]]]:
-        
+
         word_data_list: List[Dict[str, Any]] = []
-        
+
         # Проверка на наличие полей через HasField
-        if not response_proto.HasField("objects_response") or \
-           not response_proto.objects_response.HasField("text") or \
-           not response_proto.objects_response.text.HasField("text_layout"):
+        if (
+            not response_proto.HasField("objects_response")
+            or not response_proto.objects_response.HasField("text")
+            or not response_proto.objects_response.text.HasField("text_layout")
+        ):
             return ("", []) if output_format == "full_text" else ([], [])
 
         text_layout = response_proto.objects_response.text.text_layout
@@ -189,16 +196,20 @@ class LensAPI:
                             "separator": word.text_separator,
                             "geometry": (
                                 get_word_geometry_data(word.geometry.bounding_box)
-                                if word.HasField("geometry") and word.geometry.HasField("bounding_box")
+                                if word.HasField("geometry")
+                                and word.geometry.HasField("bounding_box")
                                 else None
                             ),
                         }
                     )
 
         detected_lang = response_proto.objects_response.text.content_language or "N/A"
-        
+        logger.debug(f"Detected language: {detected_lang}")
+
         if output_format == "detailed":
-            detailed_blocks = [self._parse_paragraph_detailed(p) for p in text_layout.paragraphs]
+            detailed_blocks = [
+                self._parse_paragraph_detailed(p) for p in text_layout.paragraphs
+            ]
             return detailed_blocks, word_data_list
 
         if output_format == "lines":
@@ -218,7 +229,9 @@ class LensAPI:
                     for p in text_layout.paragraphs
                 )
             else:
-                text_parts = [data["word"] + data["separator"] for data in word_data_list]
+                text_parts = [
+                    data["word"] + data["separator"] for data in word_data_list
+                ]
                 full_ocr_text = "".join(text_parts).strip()
                 full_ocr_text = " ".join(full_ocr_text.split())
 
@@ -230,7 +243,11 @@ class LensAPI:
         all_translations = []
         if response_proto.HasField("objects_response"):
             for gleam in response_proto.objects_response.deep_gleams:
-                if gleam.HasField("translation") and gleam.translation.status.code == TranslationDataStatusCode.SUCCESS:
+                if (
+                    gleam.HasField("translation")
+                    and gleam.translation.status.code
+                    == TranslationDataStatusCode.SUCCESS
+                ):
                     if gleam.translation.translation:
                         all_translations.append(gleam.translation.translation)
         return "\n".join(all_translations).strip() or None
@@ -244,15 +261,19 @@ class LensAPI:
         output_overlay_path: Optional[str] = None,
         new_session: bool = True,
         ocr_preserve_line_breaks: bool = True,
-        output_format: Literal["full_text", "blocks", "lines", "detailed"] = "full_text",
+        output_format: Literal[
+            "full_text", "blocks", "lines", "detailed"
+        ] = "full_text",
     ) -> Dict[str, Any]:
-        
+
         async with self._semaphore:
             if isinstance(image_path, Path):
                 image_path = str(image_path)
 
             try:
-                img_bytes, width, height, original_pil_img = await prepare_image_for_api(image_path)
+                img_bytes, width, height, original_pil_img = (
+                    await prepare_image_for_api(image_path)
+                )
 
                 if new_session:
                     self.request_handler.start_new_session()
@@ -316,7 +337,9 @@ class LensAPI:
                     try:
                         overlay_image.save(output_overlay_path)
                     except Exception as e_save:
-                        logger.error(f"Error saving overlay image to '{output_overlay_path}': {e_save}")
+                        logger.error(
+                            f"Error saving overlay image to '{output_overlay_path}': {e_save}"
+                        )
 
                 final_result = {
                     "translated_text": translated_text,
@@ -335,15 +358,13 @@ class LensAPI:
 
                 return final_result
 
-            except LensException as e:
+            except LensException:
                 raise
             except Exception as e:
                 raise LensException(f"Unexpected error in LensAPI: {e}") from e
 
     async def call_raw_endpoint(
-        self, 
-        protobuf_payload: bytes, 
-        new_session: bool = False
+        self, protobuf_payload: bytes, new_session: bool = False
     ) -> bytes:
         """
         [TEST METHOD] Отправляет сырые байты Protobuf напрямую в эндпоинт Lens и возвращает ответ.
@@ -353,17 +374,11 @@ class LensAPI:
             if new_session:
                 self.request_handler.start_new_session()
 
-            session_uuid_for_request, _, _ = (
-                self.request_handler.get_next_sequence_ids_for_request(
-                    is_new_image_payload=new_session
-                )
-            )
-
-            uuid_to_use = session_uuid_for_request if session_uuid_for_request else random.randint(0, (1 << 63) - 1)
-            
             headers = self.request_handler._get_headers()
-            
-            async with httpx.AsyncClient(**self.request_handler.proxy_settings, http2=True) as client:
+
+            async with httpx.AsyncClient(
+                **self.request_handler.proxy_settings, http2=True
+            ) as client:
                 response = await client.post(
                     LENS_CRUPLOAD_ENDPOINT,
                     content=protobuf_payload,

@@ -4,18 +4,15 @@
 # source: aim_query.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'aim_query.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "aim_query.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -27,33 +24,34 @@ import lens_overlay_request_id_pb2 as lens__overlay__request__id__pb2
 import lens_overlay_visual_input_type_pb2 as lens__overlay__visual__input__type__pb2
 import lens_overlay_visual_search_interaction_data_pb2 as lens__overlay__visual__search__interaction__data__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x61im_query.proto\x12\x04lens\x1a\x12\x61\x64\x64\x65\x64_inputs.proto\x1a\x1dlens_overlay_request_id.proto\x1a$lens_overlay_visual_input_type.proto\x1a\x31lens_overlay_visual_search_interaction_data.proto\".\n\x0f\x43ontextMetadata\x12\x1b\n\tpdf_title\x18\x01 \x01(\tR\x08pdfTitle\"\x8a\x03\n\x12LensImageQueryData\x12*\n\x11search_session_id\x18\x01 \x01(\tR\x0fsearchSessionId\x12\x39\n\nrequest_id\x18\x02 \x01(\x0b\x32\x1a.lens.LensOverlayRequestIdR\trequestId\x12L\n\x11visual_input_type\x18\x04 \x01(\x0e\x32 .lens.LensOverlayVisualInputTypeR\x0fvisualInputType\x12q\n\x1evisual_search_interaction_data\x18\x07 \x01(\x0b\x32,.lens.LensOverlayVisualSearchInteractionDataR\x1bvisualSearchInteractionData\x12@\n\x10\x63ontext_metadata\x18\x08 \x01(\x0b\x32\x15.lens.ContextMetadataR\x0f\x63ontextMetadataJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06\"\xbf\x01\n\x13\x43ontextTurnMetadata\x12\x1d\n\ncontext_id\x18\x01 \x01(\x03R\tcontextId\x12J\n\x0ctab_metadata\x18\x02 \x01(\x0b\x32%.lens.ContextTurnMetadata.TabMetadataH\x00R\x0btabMetadata\x1a\x31\n\x0bTabMetadata\x12\"\n\ris_active_tab\x18\x01 \x01(\x08R\x0bisActiveTabB\n\n\x08metadata\"\x93\x06\n\x0cQueryPayload\x12\x1d\n\nquery_text\x18\x01 \x01(\tR\tqueryText\x12N\n\x11query_text_source\x18\x03 \x01(\x0e\x32\".lens.QueryPayload.QueryTextSourceR\x0fqueryTextSource\x12K\n\x15lens_image_query_data\x18\x02 \x03(\x0b\x32\x18.lens.LensImageQueryDataR\x12lensImageQueryData\x12,\n\x12use_research_agent\x18\x04 \x01(\x08R\x10useResearchAgent\x12\x1d\n\nuse_canvas\x18\x0b \x01(\x08R\tuseCanvas\x12\x30\n\x14use_image_generation\x18\x0c \x01(\x08R\x12useImageGeneration\x12\x34\n\x0c\x61\x64\x64\x65\x64_inputs\x18\x08 \x01(\x0b\x32\x11.lens.AddedInputsR\x0b\x61\x64\x64\x65\x64Inputs\x12@\n\ncgi_params\x18\t \x03(\x0b\x32!.lens.QueryPayload.CgiParamsEntryR\tcgiParams\x12M\n\x15\x63ontext_turn_metadata\x18\x0e \x03(\x0b\x32\x19.lens.ContextTurnMetadataR\x13\x63ontextTurnMetadata\x12.\n\nmodel_mode\x18\r \x01(\x0e\x32\x0f.lens.ModelModeR\tmodelMode\x12+\n\ttool_mode\x18\x0f \x01(\x0e\x32\x0e.lens.ToolModeR\x08toolMode\x1a<\n\x0e\x43giParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"Z\n\x0fQueryTextSource\x12!\n\x1dQUERY_TEXT_SOURCE_UNSPECIFIED\x10\x00\x12$\n QUERY_TEXT_SOURCE_KEYBOARD_INPUT\x10\x01J\x04\x08\x05\x10\x06J\x04\x08\x07\x10\x08*\x86\x01\n\tModelMode\x12\x1a\n\x16MODEL_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19MODEL_MODE_GEMINI_REGULAR\x10\x01\x12\x19\n\x15MODEL_MODE_GEMINI_PRO\x10\x02\x12#\n\x1fMODEL_MODE_GEMINI_PRO_AUTOROUTE\x10\x03*\x8f\x01\n\x08ToolMode\x12\x19\n\x15TOOL_MODE_UNSPECIFIED\x10\x00\x12\x19\n\x15TOOL_MODE_DEEP_SEARCH\x10\x01\x12\x14\n\x10TOOL_MODE_CANVAS\x10\x02\x12\x17\n\x13TOOL_MODE_IMAGE_GEN\x10\x04\x12\x1e\n\x1aTOOL_MODE_IMAGE_GEN_UPLOAD\x10\x07\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x0f\x61im_query.proto\x12\x04lens\x1a\x12\x61\x64\x64\x65\x64_inputs.proto\x1a\x1dlens_overlay_request_id.proto\x1a$lens_overlay_visual_input_type.proto\x1a\x31lens_overlay_visual_search_interaction_data.proto".\n\x0f\x43ontextMetadata\x12\x1b\n\tpdf_title\x18\x01 \x01(\tR\x08pdfTitle"\x8a\x03\n\x12LensImageQueryData\x12*\n\x11search_session_id\x18\x01 \x01(\tR\x0fsearchSessionId\x12\x39\n\nrequest_id\x18\x02 \x01(\x0b\x32\x1a.lens.LensOverlayRequestIdR\trequestId\x12L\n\x11visual_input_type\x18\x04 \x01(\x0e\x32 .lens.LensOverlayVisualInputTypeR\x0fvisualInputType\x12q\n\x1evisual_search_interaction_data\x18\x07 \x01(\x0b\x32,.lens.LensOverlayVisualSearchInteractionDataR\x1bvisualSearchInteractionData\x12@\n\x10\x63ontext_metadata\x18\x08 \x01(\x0b\x32\x15.lens.ContextMetadataR\x0f\x63ontextMetadataJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06"\xbf\x01\n\x13\x43ontextTurnMetadata\x12\x1d\n\ncontext_id\x18\x01 \x01(\x03R\tcontextId\x12J\n\x0ctab_metadata\x18\x02 \x01(\x0b\x32%.lens.ContextTurnMetadata.TabMetadataH\x00R\x0btabMetadata\x1a\x31\n\x0bTabMetadata\x12"\n\ris_active_tab\x18\x01 \x01(\x08R\x0bisActiveTabB\n\n\x08metadata"\x93\x06\n\x0cQueryPayload\x12\x1d\n\nquery_text\x18\x01 \x01(\tR\tqueryText\x12N\n\x11query_text_source\x18\x03 \x01(\x0e\x32".lens.QueryPayload.QueryTextSourceR\x0fqueryTextSource\x12K\n\x15lens_image_query_data\x18\x02 \x03(\x0b\x32\x18.lens.LensImageQueryDataR\x12lensImageQueryData\x12,\n\x12use_research_agent\x18\x04 \x01(\x08R\x10useResearchAgent\x12\x1d\n\nuse_canvas\x18\x0b \x01(\x08R\tuseCanvas\x12\x30\n\x14use_image_generation\x18\x0c \x01(\x08R\x12useImageGeneration\x12\x34\n\x0c\x61\x64\x64\x65\x64_inputs\x18\x08 \x01(\x0b\x32\x11.lens.AddedInputsR\x0b\x61\x64\x64\x65\x64Inputs\x12@\n\ncgi_params\x18\t \x03(\x0b\x32!.lens.QueryPayload.CgiParamsEntryR\tcgiParams\x12M\n\x15\x63ontext_turn_metadata\x18\x0e \x03(\x0b\x32\x19.lens.ContextTurnMetadataR\x13\x63ontextTurnMetadata\x12.\n\nmodel_mode\x18\r \x01(\x0e\x32\x0f.lens.ModelModeR\tmodelMode\x12+\n\ttool_mode\x18\x0f \x01(\x0e\x32\x0e.lens.ToolModeR\x08toolMode\x1a<\n\x0e\x43giParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01"Z\n\x0fQueryTextSource\x12!\n\x1dQUERY_TEXT_SOURCE_UNSPECIFIED\x10\x00\x12$\n QUERY_TEXT_SOURCE_KEYBOARD_INPUT\x10\x01J\x04\x08\x05\x10\x06J\x04\x08\x07\x10\x08*\x86\x01\n\tModelMode\x12\x1a\n\x16MODEL_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19MODEL_MODE_GEMINI_REGULAR\x10\x01\x12\x19\n\x15MODEL_MODE_GEMINI_PRO\x10\x02\x12#\n\x1fMODEL_MODE_GEMINI_PRO_AUTOROUTE\x10\x03*\x8f\x01\n\x08ToolMode\x12\x19\n\x15TOOL_MODE_UNSPECIFIED\x10\x00\x12\x19\n\x15TOOL_MODE_DEEP_SEARCH\x10\x01\x12\x14\n\x10TOOL_MODE_CANVAS\x10\x02\x12\x17\n\x13TOOL_MODE_IMAGE_GEN\x10\x04\x12\x1e\n\x1aTOOL_MODE_IMAGE_GEN_UPLOAD\x10\x07\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'aim_query_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "aim_query_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_QUERYPAYLOAD_CGIPARAMSENTRY']._loaded_options = None
-  _globals['_QUERYPAYLOAD_CGIPARAMSENTRY']._serialized_options = b'8\001'
-  _globals['_MODELMODE']._serialized_start=1595
-  _globals['_MODELMODE']._serialized_end=1729
-  _globals['_TOOLMODE']._serialized_start=1732
-  _globals['_TOOLMODE']._serialized_end=1875
-  _globals['_CONTEXTMETADATA']._serialized_start=165
-  _globals['_CONTEXTMETADATA']._serialized_end=211
-  _globals['_LENSIMAGEQUERYDATA']._serialized_start=214
-  _globals['_LENSIMAGEQUERYDATA']._serialized_end=608
-  _globals['_CONTEXTTURNMETADATA']._serialized_start=611
-  _globals['_CONTEXTTURNMETADATA']._serialized_end=802
-  _globals['_CONTEXTTURNMETADATA_TABMETADATA']._serialized_start=741
-  _globals['_CONTEXTTURNMETADATA_TABMETADATA']._serialized_end=790
-  _globals['_QUERYPAYLOAD']._serialized_start=805
-  _globals['_QUERYPAYLOAD']._serialized_end=1592
-  _globals['_QUERYPAYLOAD_CGIPARAMSENTRY']._serialized_start=1428
-  _globals['_QUERYPAYLOAD_CGIPARAMSENTRY']._serialized_end=1488
-  _globals['_QUERYPAYLOAD_QUERYTEXTSOURCE']._serialized_start=1490
-  _globals['_QUERYPAYLOAD_QUERYTEXTSOURCE']._serialized_end=1580
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_QUERYPAYLOAD_CGIPARAMSENTRY"]._loaded_options = None
+    _globals["_QUERYPAYLOAD_CGIPARAMSENTRY"]._serialized_options = b"8\001"
+    _globals["_MODELMODE"]._serialized_start = 1595
+    _globals["_MODELMODE"]._serialized_end = 1729
+    _globals["_TOOLMODE"]._serialized_start = 1732
+    _globals["_TOOLMODE"]._serialized_end = 1875
+    _globals["_CONTEXTMETADATA"]._serialized_start = 165
+    _globals["_CONTEXTMETADATA"]._serialized_end = 211
+    _globals["_LENSIMAGEQUERYDATA"]._serialized_start = 214
+    _globals["_LENSIMAGEQUERYDATA"]._serialized_end = 608
+    _globals["_CONTEXTTURNMETADATA"]._serialized_start = 611
+    _globals["_CONTEXTTURNMETADATA"]._serialized_end = 802
+    _globals["_CONTEXTTURNMETADATA_TABMETADATA"]._serialized_start = 741
+    _globals["_CONTEXTTURNMETADATA_TABMETADATA"]._serialized_end = 790
+    _globals["_QUERYPAYLOAD"]._serialized_start = 805
+    _globals["_QUERYPAYLOAD"]._serialized_end = 1592
+    _globals["_QUERYPAYLOAD_CGIPARAMSENTRY"]._serialized_start = 1428
+    _globals["_QUERYPAYLOAD_CGIPARAMSENTRY"]._serialized_end = 1488
+    _globals["_QUERYPAYLOAD_QUERYTEXTSOURCE"]._serialized_start = 1490
+    _globals["_QUERYPAYLOAD_QUERYTEXTSOURCE"]._serialized_end = 1580
 # @@protoc_insertion_point(module_scope)

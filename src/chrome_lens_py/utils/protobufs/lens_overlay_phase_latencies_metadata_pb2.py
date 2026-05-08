@@ -4,44 +4,58 @@
 # source: lens_overlay_phase_latencies_metadata.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
     _runtime_version.Domain.PUBLIC,
     6,
     33,
     4,
-    '',
-    'lens_overlay_phase_latencies_metadata.proto'
+    "",
+    "lens_overlay_phase_latencies_metadata.proto",
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+lens_overlay_phase_latencies_metadata.proto\x12\x04lens\"\xd6\x05\n!LensOverlayPhaseLatenciesMetadata\x12\x43\n\x05phase\x18\x01 \x03(\x0b\x32-.lens.LensOverlayPhaseLatenciesMetadata.PhaseR\x05phase\x1a\xae\x04\n\x05Phase\x12t\n\x14image_downscale_data\x18\x03 \x01(\x0b\x32@.lens.LensOverlayPhaseLatenciesMetadata.Phase.ImageDownscaleDataH\x00R\x12imageDownscaleData\x12k\n\x11image_encode_data\x18\x04 \x01(\x0b\x32=.lens.LensOverlayPhaseLatenciesMetadata.Phase.ImageEncodeDataH\x00R\x0fimageEncodeData\x1ax\n\x12ImageDownscaleData\x12.\n\x13original_image_size\x18\x01 \x01(\x03R\x11originalImageSize\x12\x32\n\x15\x64ownscaled_image_size\x18\x02 \x01(\x03R\x13\x64ownscaledImageSize\x1a\xad\x01\n\x0fImageEncodeData\x12\x61\n\x13original_image_type\x18\x01 \x01(\x0e\x32\x31.lens.LensOverlayPhaseLatenciesMetadata.ImageTypeR\x11originalImageType\x12\x37\n\x18\x65ncoded_image_size_bytes\x18\x02 \x01(\x03R\x15\x65ncodedImageSizeBytesB\x0c\n\nphase_dataJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03\";\n\tImageType\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x08\n\x04JPEG\x10\x01\x12\x07\n\x03PNG\x10\x02\x12\x08\n\x04WEBP\x10\x03\x1a\x04:\x02\x10\x02\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n+lens_overlay_phase_latencies_metadata.proto\x12\x04lens"\xd6\x05\n!LensOverlayPhaseLatenciesMetadata\x12\x43\n\x05phase\x18\x01 \x03(\x0b\x32-.lens.LensOverlayPhaseLatenciesMetadata.PhaseR\x05phase\x1a\xae\x04\n\x05Phase\x12t\n\x14image_downscale_data\x18\x03 \x01(\x0b\x32@.lens.LensOverlayPhaseLatenciesMetadata.Phase.ImageDownscaleDataH\x00R\x12imageDownscaleData\x12k\n\x11image_encode_data\x18\x04 \x01(\x0b\x32=.lens.LensOverlayPhaseLatenciesMetadata.Phase.ImageEncodeDataH\x00R\x0fimageEncodeData\x1ax\n\x12ImageDownscaleData\x12.\n\x13original_image_size\x18\x01 \x01(\x03R\x11originalImageSize\x12\x32\n\x15\x64ownscaled_image_size\x18\x02 \x01(\x03R\x13\x64ownscaledImageSize\x1a\xad\x01\n\x0fImageEncodeData\x12\x61\n\x13original_image_type\x18\x01 \x01(\x0e\x32\x31.lens.LensOverlayPhaseLatenciesMetadata.ImageTypeR\x11originalImageType\x12\x37\n\x18\x65ncoded_image_size_bytes\x18\x02 \x01(\x03R\x15\x65ncodedImageSizeBytesB\x0c\n\nphase_dataJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03";\n\tImageType\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x08\n\x04JPEG\x10\x01\x12\x07\n\x03PNG\x10\x02\x12\x08\n\x04WEBP\x10\x03\x1a\x04:\x02\x10\x02\x42\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_phase_latencies_metadata_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_phase_latencies_metadata_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE']._loaded_options = None
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE']._serialized_options = b':\002\020\002'
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA']._serialized_start=54
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA']._serialized_end=780
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE']._serialized_start=161
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE']._serialized_end=719
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEDOWNSCALEDATA']._serialized_start=397
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEDOWNSCALEDATA']._serialized_end=517
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEENCODEDATA']._serialized_start=520
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEENCODEDATA']._serialized_end=693
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE']._serialized_start=721
-  _globals['_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE']._serialized_end=780
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE"]._loaded_options = None
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE"]._serialized_options = (
+        b":\002\020\002"
+    )
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA"]._serialized_start = 54
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA"]._serialized_end = 780
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_PHASE"]._serialized_start = 161
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_PHASE"]._serialized_end = 719
+    _globals[
+        "_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEDOWNSCALEDATA"
+    ]._serialized_start = 397
+    _globals[
+        "_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEDOWNSCALEDATA"
+    ]._serialized_end = 517
+    _globals[
+        "_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEENCODEDATA"
+    ]._serialized_start = 520
+    _globals[
+        "_LENSOVERLAYPHASELATENCIESMETADATA_PHASE_IMAGEENCODEDATA"
+    ]._serialized_end = 693
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE"]._serialized_start = 721
+    _globals["_LENSOVERLAYPHASELATENCIESMETADATA_IMAGETYPE"]._serialized_end = 780
 # @@protoc_insertion_point(module_scope)

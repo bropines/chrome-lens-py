@@ -4,18 +4,15 @@
 # source: lens_overlay_message_set.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'lens_overlay_message_set.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "lens_overlay_message_set.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,15 +21,18 @@ _sym_db = _symbol_database.Default()
 
 import lens_overlay_knowledge_query_pb2 as lens__overlay__knowledge__query__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1elens_overlay_message_set.proto\x12\x04lens\x1a\"lens_overlay_knowledge_query.proto\"P\n\nMessageSet\x12\x42\n\x15message_set_extension\x18\xe9\xf8\xde\x13 \x01(\x0b\x32\x0b.lens.QueryR\x13messageSetExtensionB\x02H\x03')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x1elens_overlay_message_set.proto\x12\x04lens\x1a"lens_overlay_knowledge_query.proto"P\n\nMessageSet\x12\x42\n\x15message_set_extension\x18\xe9\xf8\xde\x13 \x01(\x0b\x32\x0b.lens.QueryR\x13messageSetExtensionB\x02H\x03'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'lens_overlay_message_set_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    DESCRIPTOR, "lens_overlay_message_set_pb2", _globals
+)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_MESSAGESET']._serialized_start=76
-  _globals['_MESSAGESET']._serialized_end=156
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_MESSAGESET"]._serialized_start = 76
+    _globals["_MESSAGESET"]._serialized_end = 156
 # @@protoc_insertion_point(module_scope)

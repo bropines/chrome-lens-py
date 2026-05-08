@@ -4,18 +4,15 @@
 # source: added_inputs.proto
 # Protobuf Python Version: 6.33.4
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    33,
-    4,
-    '',
-    'added_inputs.proto'
+    _runtime_version.Domain.PUBLIC, 6, 33, 4, "", "added_inputs.proto"
 )
 # @@protoc_insertion_point(imports)
 
@@ -24,17 +21,18 @@ _sym_db = _symbol_database.Default()
 
 import lens_overlay_lens_file_pb2 as lens__overlay__lens__file__pb2
 
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12\x61\x64\x64\x65\x64_inputs.proto\x12\x04lens\x1a\x1clens_overlay_lens_file.proto\"R\n\nAddedInput\x12\x38\n\tlens_file\x18\x01 \x01(\x0b\x32\x19.lens.LensOverlayLensFileH\x00R\x08lensFileB\n\n\x08\x61\x64\x64ition\"B\n\x0b\x41\x64\x64\x65\x64Inputs\x12\x33\n\x0c\x61\x64\x64\x65\x64_inputs\x18\x01 \x03(\x0b\x32\x10.lens.AddedInputR\x0b\x61\x64\x64\x65\x64InputsB\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x12\x61\x64\x64\x65\x64_inputs.proto\x12\x04lens\x1a\x1clens_overlay_lens_file.proto"R\n\nAddedInput\x12\x38\n\tlens_file\x18\x01 \x01(\x0b\x32\x19.lens.LensOverlayLensFileH\x00R\x08lensFileB\n\n\x08\x61\x64\x64ition"B\n\x0b\x41\x64\x64\x65\x64Inputs\x12\x33\n\x0c\x61\x64\x64\x65\x64_inputs\x18\x01 \x03(\x0b\x32\x10.lens.AddedInputR\x0b\x61\x64\x64\x65\x64InputsB\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'added_inputs_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "added_inputs_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'H\003'
-  _globals['_ADDEDINPUT']._serialized_start=58
-  _globals['_ADDEDINPUT']._serialized_end=140
-  _globals['_ADDEDINPUTS']._serialized_start=142
-  _globals['_ADDEDINPUTS']._serialized_end=208
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"H\003"
+    _globals["_ADDEDINPUT"]._serialized_start = 58
+    _globals["_ADDEDINPUT"]._serialized_end = 140
+    _globals["_ADDEDINPUTS"]._serialized_start = 142
+    _globals["_ADDEDINPUTS"]._serialized_end = 208
 # @@protoc_insertion_point(module_scope)
