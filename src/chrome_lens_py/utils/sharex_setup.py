@@ -17,7 +17,7 @@ def is_sharex_running() -> bool:
     """Checks if ShareX.exe is currently running."""
     try:
         output = subprocess.check_output(
-            'tasklist /FI "IMAGENAME eq ShareX.exe" /NH', shell=True
+            ["tasklist", "/FI", "IMAGENAME eq ShareX.exe", "/NH"]
         ).decode("utf-8", errors="ignore")
         return "ShareX.exe" in output
     except Exception:
@@ -27,7 +27,9 @@ def is_sharex_running() -> bool:
 def terminate_sharex():
     """Closes ShareX to prevent it from overwriting the config on exit."""
     if is_sharex_running():
-        console.print("[yellow]ShareX is running. Closing it to apply changes...[/yellow]")
+        console.print(
+            "[yellow]ShareX is running. Closing it to apply changes...[/yellow]"
+        )
         try:
             subprocess.run(["taskkill", "/F", "/IM", "ShareX.exe"], capture_output=True)
             # Give it a moment to release file handles
@@ -52,8 +54,12 @@ def get_sharex_executable_path() -> Optional[Path]:
 
     # Common installation paths
     common_paths = [
-        Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "ShareX" / "ShareX.exe",
-        Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "ShareX" / "ShareX.exe",
+        Path(os.environ.get("ProgramFiles", "C:/Program Files"))
+        / "ShareX"
+        / "ShareX.exe",
+        Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"))
+        / "ShareX"
+        / "ShareX.exe",
         Path(os.environ.get("LocalAppData", "")) / "ShareX" / "ShareX.exe",
     ]
     for p in common_paths:
@@ -201,7 +207,9 @@ def setup_sharex_config():
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
-        console.print("\n[bold green]Success![/bold green] ShareX configuration updated.")
+        console.print(
+            "\n[bold green]Success![/bold green] ShareX configuration updated."
+        )
 
         # 6. Restart ShareX
         sharex_exe = get_sharex_executable_path()
@@ -221,7 +229,7 @@ def setup_sharex_config():
 
         if sharex_exe:
             console.print(f"[yellow]Restarting ShareX from: {sharex_exe}[/yellow]")
-            subprocess.Popen([str(sharex_exe)], shell=True, start_new_session=True)
+            subprocess.Popen([str(sharex_exe)], start_new_session=True)
         else:
             console.print(
                 "[yellow]Skipping ShareX restart. Please start it manually.[/yellow]"

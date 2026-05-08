@@ -537,7 +537,7 @@ async def cli_main():
 def run():
     if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
         try:
-            subprocess.run(["chcp", "65001"], shell=True, capture_output=True)
+            subprocess.run(["chcp", "65001"], capture_output=True)
             logging.debug("Set Windows console to chcp 65001 (UTF-8)")
         except Exception as e:
             print(f"Warning: Failed to set console to UTF-8 (chcp 65001). Error: {e}")
