@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: lens_scan.exe
+            asset_name: lens_scan-windows-amd64.exe
+          - os: ubuntu-latest
+            artifact_name: lens_scan.bin
+            asset_name: lens_scan-linux-amd64
+          - os: macos-latest
+            artifact_name: lens_scan.bin
+            asset_name: lens_scan-macos-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install nuitka zstandard
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cc65 # Nuitka might need a compiler
+
+      - name: Build with Nuitka (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m nuitka --standalone --onefile --output-dir=dist --output-filename=lens_scan src/chrome_lens_py/cli/main.py
+
+      - name: Build with Nuitka (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          python -m nuitka --standalone --onefile --output-dir=dist --output-filename=lens_scan.bin src/chrome_lens_py/cli/main.py
+
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+
+      - name: Upload Artifacts to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload as GitHub Artifact (for manual runs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
