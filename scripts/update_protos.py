@@ -28,14 +28,27 @@ def download_protos(proto_files):
 def compile_protos(proto_files):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     print("Compiling protos using protoc...")
+    skipped = []
     for proto in proto_files:
-        subprocess.run([
-            "protoc",
-            f"--proto_path={PROTO_TEMP_DIR}",
-            f"--python_out={OUTPUT_DIR}",
-            PROTO_TEMP_DIR / proto
-        ], check=True)
-    
+        result = subprocess.run(
+            [
+                "protoc",
+                f"--proto_path={PROTO_TEMP_DIR}",
+                f"--python_out={OUTPUT_DIR}",
+                PROTO_TEMP_DIR / proto,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"  [WARNING] Skipping {proto} (protoc error):\n{result.stderr.strip()}")
+            skipped.append(proto)
+        else:
+            print(f"  Compiled {proto}")
+
+    if skipped:
+        print(f"\nSkipped {len(skipped)} file(s) that failed to compile: {', '.join(skipped)}")
+
     # Create __init__.py if missing
     (OUTPUT_DIR / "__init__.py").touch(exist_ok=True)
 
