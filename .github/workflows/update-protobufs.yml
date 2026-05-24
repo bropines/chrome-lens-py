@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,12 +32,10 @@ jobs:
       - name: Run update script
         run: python scripts/update_protos.py
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: auto-update protobufs from chromium"
-          title: "Auto-update Protobufs"
-          body: "This PR updates the generated protobuf files from the latest Chromium source."
-          branch: auto-update-protos
-          base: main
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/chrome_lens_py/utils/protobufs/
+          git diff --cached --quiet || git commit -m "chore: auto-update protobufs from chromium"
+          git push
