@@ -56,14 +56,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: lens_scan.exe
             asset_name: lens_scan-windows-amd64.exe
+            output_file: main.exe
           - os: ubuntu-latest
-            artifact_name: lens_scan.bin
             asset_name: lens_scan-linux-amd64
+            output_file: main.bin
           - os: macos-latest
-            artifact_name: lens_scan.bin
             asset_name: lens_scan-macos-arm64
+            output_file: main.bin
 
     steps:
       - name: Checkout code
@@ -73,34 +73,39 @@ jobs:
         uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.10'
-          # No pip cache here — avoids restoring corrupt cache entries across runs
 
-      - name: Install dependencies
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/Library/Caches/pip
+            ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('setup.cfg') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install package
         run: |
           python -m pip install --upgrade pip
           pip install .
-          pip install nuitka zstandard
 
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: brew install cc65 # Nuitka might need a compiler
+      - name: Build with Nuitka
+        uses: Nuitka/Nuitka-Action@v1.1
+        with:
+          nuitka-version: latest
+          script-name: src/chrome_lens_py/cli/main.py
+          onefile: true
+          output-dir: dist
+          output-file: ${{ matrix.output_file }}
+          assume-yes-for-downloads: true
+          enable-cache: true
 
-      - name: Build with Nuitka (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -m nuitka --assume-yes-for-downloads --standalone --onefile --output-dir=dist --output-filename=lens_scan src/chrome_lens_py/cli/main.py
-
-      - name: Build with Nuitka (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          python -m nuitka --assume-yes-for-downloads --standalone --onefile --output-dir=dist --output-filename=lens_scan.bin src/chrome_lens_py/cli/main.py
-
-      - name: Rename artifacts
+      - name: Rename artifact
         shell: bash
-        run: |
-          mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+        run: mv dist/${{ matrix.output_file }} dist/${{ matrix.asset_name }}
 
-      - name: Upload Artifacts to Release
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2.3.2
         if: startsWith(github.ref, 'refs/tags/')
         with:
