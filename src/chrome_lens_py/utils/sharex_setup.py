@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -114,28 +115,29 @@ def setup_sharex_config():
         console.print("Make sure ShareX is installed and has been run at least once.")
         return
 
-    # 2. Determine the path to the lens_scan executable/script
-    # If we are running as a Nuitka/PyInstaller binary, sys.executable is the .exe
-    # If running via pip, we might be a .exe shim in the Scripts folder.
-    executable_path = sys.executable
-    is_python = executable_path.lower().endswith(("python.exe", "pythonw.exe"))
+    # 2. Determine the path to the lens_scan executable/script.
+    # ShareX requires a full absolute path — it cannot resolve bare command names.
+    # Priority:
+    #   a) shutil.which("lens_scan") — resolves via PATH (covers pip-installed shims,
+    #      pyenv, venv, etc.)
+    #   b) If sys.executable is NOT python itself (i.e. a compiled binary), use it directly.
+    #   c) Hard fail with a clear message so the user knows what to fix.
+    found_via_which = shutil.which("lens_scan")
 
-    if is_python:
-        # If running via python, try to find 'lens_scan.bat' or 'lens_scan.exe' in the same directory (Scripts)
-        scripts_dir = Path(executable_path).parent
-        potential_shims = ["lens_scan.bat", "lens_scan.exe", "lens_scan"]
-        found_path = None
-        for shim in potential_shims:
-            p = scripts_dir / shim
-            if p.exists():
-                found_path = str(p)
-                break
-
-        if found_path:
-            executable_path = found_path
+    if found_via_which:
+        executable_path = str(Path(found_via_which).resolve())
+    else:
+        # Maybe we're running as a compiled binary (Nuitka/PyInstaller)
+        se = sys.executable
+        if not se.lower().endswith(("python.exe", "pythonw.exe", "python", "pythonw")):
+            executable_path = se
         else:
-            # Fallback: assume 'lens_scan' is in PATH
-            executable_path = "lens_scan"
+            console.print(
+                "[bold red]Error:[/bold red] Could not locate the [cyan]lens_scan[/cyan] executable.\n"
+                "Make sure the package is installed (e.g. [bold]pip install chrome-lens-py[/bold]) "
+                "and that the Scripts directory is in your PATH."
+            )
+            return
 
     console.print(f"Detected executable path: [cyan]{executable_path}[/cyan]")
 
