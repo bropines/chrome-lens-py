@@ -53,6 +53,7 @@ jobs:
     permissions:
       contents: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -93,13 +94,11 @@ jobs:
       - name: Build with Nuitka
         uses: Nuitka/Nuitka-Action@v1.1
         with:
-          nuitka-version: latest
           script-name: src/chrome_lens_py/cli/main.py
           onefile: true
           output-dir: dist
           output-file: ${{ matrix.output_file }}
           assume-yes-for-downloads: true
-          enable-cache: true
 
       - name: Rename artifact
         shell: bash
