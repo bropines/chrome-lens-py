@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n#lens_overlay_content_metadata.proto\x12\x04lens"\x85\x01\n\x1aLensOverlayContentMetadata\x12\x15\n\rcontent_title\x18\x01 \x01(\t\x12\x11\n\tfile_name\x18\x02 \x01(\t\x12+\n\x0e\x64rive_metadata\x18\x06 \x01(\x0b\x32\x13.lens.DriveMetadataJ\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06"7\n\rDriveMetadata\x12\x10\n\x08\x64rive_id\x18\x01 \x01(\t\x12\x14\n\x0cresource_key\x18\x02 \x01(\tB\x02H\x03\x62\x06proto3'
+    b'\n#lens_overlay_content_metadata.proto\x12\x04lens"\x85\x01\n\x1aLensOverlayContentMetadata\x12\x15\n\rcontent_title\x18\x01 \x01(\t\x12\x11\n\tfile_name\x18\x02 \x01(\t\x12+\n\x0e\x64rive_metadata\x18\x06 \x01(\x0b\x32\x13.lens.DriveMetadataJ\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06";\n\rDriveMetadata\x12\x10\n\x08\x64rive_id\x18\x01 \x01(\t\x12\x18\n\x0cresource_key\x18\x02 \x01(\tB\x02\x18\x01\x42\x02H\x03\x62\x06proto3'
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
@@ -25,8 +25,10 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"H\003"
+    _DRIVEMETADATA.fields_by_name["resource_key"]._options = None
+    _DRIVEMETADATA.fields_by_name["resource_key"]._serialized_options = b"\030\001"
     _LENSOVERLAYCONTENTMETADATA._serialized_start = 46
     _LENSOVERLAYCONTENTMETADATA._serialized_end = 179
     _DRIVEMETADATA._serialized_start = 181
-    _DRIVEMETADATA._serialized_end = 236
+    _DRIVEMETADATA._serialized_end = 240
 # @@protoc_insertion_point(module_scope)
