@@ -421,9 +421,23 @@ lens_scan --serve --port 9000 --token secret
 | `POST /v1/region` | the same, plus `"region": [center_x, center_y, width, height]` normalized 0..1 |
 | `GET /health` | liveness check |
 
-Measured here: **0.37 s** per request against the daemon versus **1.53 s** for a
-cold CLI invocation. It binds to loopback and sends CORS headers, so a
-Tampermonkey userscript can use it directly.
+Measured here, same work each time:
+
+| | median |
+|---|---|
+| daemon | **0.37 s** |
+| `python -m`, from source | 1.53 s |
+| Nuitka onefile binary | 2.00 s |
+
+The binary being the slowest is not a typo. Onefile extracts its payload to a
+temporary directory on every run, which costs more than importing the modules
+did: startup alone is 1.67 s against 0.52 s from source. Freezing is for
+distribution, not for speed - if startup is what you care about, the daemon is
+the answer, and `--standalone` rather than `--onefile` would at least stop the
+binary making it worse.
+
+The daemon binds to loopback and sends CORS headers, so a Tampermonkey
+userscript can use it directly.
 
 ## 🔍 Region queries
 
