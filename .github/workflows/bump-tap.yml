@@ -1,0 +1,85 @@
+name: Bump Homebrew tap
+
+# Two ways in: the release workflow calls this once every platform has
+# uploaded, and it can be run by hand against any published tag - useful if the
+# formula ever drifts, or to re-point it at an older release.
+#
+# Needs a token that can write to bropines/homebrew-tap, since GITHUB_TOKEN is
+# scoped to this repository: a fine-grained PAT with contents:write, stored as
+# the TAP_TOKEN secret. Without it this warns and stops rather than failing.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag the formula should point at
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v3.5.2 (blank uses the latest release)'
+        required: false
+        type: string
+
+jobs:
+  bump:
+    name: Bump the formula
+    runs-on: ubuntu-latest
+    steps:
+      - name: Work out which tag, and whether we have a token
+        id: gate
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          REQUESTED: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::TAP_TOKEN is not set; leaving the Homebrew formula alone."
+            exit 0
+          fi
+
+          tag="$REQUESTED"
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)
+            echo "No tag given; using the latest release: $tag"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check out this repository (for the bump script)
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4.2.2
+        with:
+          path: source
+
+      - name: Check out the tap
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: bropines/homebrew-tap
+          token: ${{ secrets.TAP_TOKEN }}
+          path: tap
+
+      - name: Rewrite the formula
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          python3 source/scripts/bump_tap_formula.py \
+            "${{ steps.gate.outputs.tag }}" tap/Formula/lens-scan.rb
+          grep -E 'url |sha256 ' tap/Formula/lens-scan.rb
+
+      - name: Commit and push
+        if: steps.gate.outputs.ok == 'true'
+        working-directory: tap
+        env:
+          TAG: ${{ steps.gate.outputs.tag }}
+        run: |
+          if git diff --quiet; then
+            echo "Formula already current; nothing to push."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "lens-scan ${TAG#v}"
+          git push

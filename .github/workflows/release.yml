@@ -166,61 +166,13 @@ jobs:
             dist/${{ matrix.asset_name }}.zip.sha256
 
 
-  # Keeps bropines/homebrew-tap pointing at the release that was just built.
-  # Runs only after every platform has uploaded, so the formula never names an
-  # asset that failed to build.
-  #
-  # Needs a token that can write to the other repository, since GITHUB_TOKEN is
-  # scoped to this one: create a fine-grained PAT with contents:write on
-  # bropines/homebrew-tap and store it as the TAP_TOKEN secret. Without it this
-  # job warns and stops rather than failing the release.
+  # The formula bump lives in its own reusable workflow so it can also be run
+  # by hand. Called here rather than duplicated.
   bump-homebrew-tap:
     name: Bump the Homebrew tap
     needs: build
-    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - name: Check for the token
-        id: gate
-        env:
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-        run: |
-          if [ -n "$TAP_TOKEN" ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::TAP_TOKEN is not set; leaving the Homebrew formula alone."
-          fi
-
-      - name: Check out this repository (for the bump script)
-        if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4.2.2
-        with:
-          path: source
-
-      - name: Check out the tap
-        if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4.2.2
-        with:
-          repository: bropines/homebrew-tap
-          token: ${{ secrets.TAP_TOKEN }}
-          path: tap
-
-      - name: Bump the formula
-        if: steps.gate.outputs.ok == 'true'
-        run: |
-          python3 source/scripts/bump_tap_formula.py             "${{ github.ref_name }}" tap/Formula/lens-scan.rb
-          grep -E 'version |url |sha256 ' tap/Formula/lens-scan.rb
-
-      - name: Commit and push
-        if: steps.gate.outputs.ok == 'true'
-        working-directory: tap
-        run: |
-          if git diff --quiet; then
-            echo "Formula already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "lens-scan ${GITHUB_REF_NAME#v}"
-          git push
+    uses: ./.github/workflows/bump-tap.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
