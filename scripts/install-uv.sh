@@ -22,6 +22,19 @@ PACKAGE='chrome-lens-py[clipboard]'
 step() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 
+# uv may be installed and simply not on PATH: its own installer writes to the
+# shell profile, and a non-interactive shell never reads that. Look where it
+# puts things before concluding it is missing, or we reinstall it needlessly.
+if ! command -v uv >/dev/null 2>&1; then
+  for candidate in "$HOME/.local/bin" "${XDG_BIN_HOME:-}" "${CARGO_HOME:-$HOME/.cargo}/bin"; do
+    if [ -n "$candidate" ] && [ -x "$candidate/uv" ]; then
+      PATH="$candidate:$PATH"
+      export PATH
+      break
+    fi
+  done
+fi
+
 if command -v uv >/dev/null 2>&1; then
   step "uv is already installed ($(uv --version))"
 else

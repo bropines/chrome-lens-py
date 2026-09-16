@@ -26,6 +26,15 @@ $Package = 'chrome-lens-py[clipboard]'
 
 function Write-Step($message) { Write-Host "==> $message" -ForegroundColor Cyan }
 
+# uv may be installed and simply not on PATH: its own installer edits the
+# persisted PATH, which a shell that is already running never picks up. Look
+# where it puts things before concluding it is missing, or we reinstall it
+# needlessly.
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    $known = Join-Path $env:USERPROFILE '.local\bin'
+    if (Test-Path (Join-Path $known 'uv.exe')) { $env:Path = "$known;$env:Path" }
+}
+
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Step "uv is already installed ($(uv --version))"
 } else {

@@ -63,5 +63,9 @@ profile = "black"
 line-length = 88
 
 [tool.pytest.ini_options]
+# So the suite runs straight from a checkout, with no install step. The
+# package lives under src/, which is otherwise only importable once
+# something has been pip-installed.
+pythonpath = ["src"]
 testpaths = ["tests"]
 markers = ["network: test requires live access to the Lens API"]

@@ -807,18 +807,33 @@ async def cli_main():
         await api.aclose()
 
 
+def force_utf8_streams(streams=None):
+    """Make stdout/stderr able to carry the text we are about to print.
+
+    This was once guarded by sys.platform == "win32", because the console code
+    page is where it was first noticed. That was too narrow: a Unix process
+    started without LANG gets an ASCII stdout too, and the first non-Latin
+    character then raises UnicodeEncodeError and takes the run down with it.
+    Every way this tool is actually automated does exactly that - launchd,
+    cron, an Automator Quick Action, Karabiner's shell_command, a plain
+    non-interactive ssh command. Caught on macOS, where translating into
+    Russian died inside rich's writer.
+
+    Reconfiguring the stream directly rather than shelling out to chcp: chcp is
+    a console builtin that is not always resolvable (it fails outright under
+    Git Bash / MSYS), and it does nothing for a piped stdout, which is exactly
+    how ShareX invokes us.
+    """
+    for stream in streams if streams is not None else (sys.stdout, sys.stderr):
+        try:
+            if getattr(stream, "encoding", "").lower().replace("-", "") != "utf8":
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception as e:  # pragma: no cover - very old/odd streams
+            logging.debug("Could not reconfigure stream to UTF-8: %s", e)
+
+
 def run():
-    if sys.platform == "win32":
-        # Reconfigure the streams directly instead of shelling out to chcp:
-        # chcp is a console builtin that is not always resolvable (it fails
-        # outright under Git Bash / MSYS), and it does nothing for a piped
-        # stdout, which is exactly how ShareX invokes us.
-        for stream in (sys.stdout, sys.stderr):
-            try:
-                if getattr(stream, "encoding", "").lower() not in ("utf-8", "utf8"):
-                    stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception as e:  # pragma: no cover - very old/odd streams
-                logging.debug("Could not reconfigure stream to UTF-8: %s", e)
+    force_utf8_streams()
     try:
         asyncio.run(cli_main())
     except KeyboardInterrupt:

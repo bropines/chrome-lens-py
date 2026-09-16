@@ -7,6 +7,7 @@ test_api.py and are marked `network`.
 import pytest
 from PIL import Image
 
+from chrome_lens_py.cli.main import force_utf8_streams
 from chrome_lens_py.core.image_processor import (
     _is_numpy_array,
     _preferred_size,
@@ -362,3 +363,49 @@ def test_number_rejects_non_numbers():
     # bool is an int in Python; it is still not a scale factor.
     with pytest.raises(ValueError, match="must be a number"):
         _number({"outline_scale": True}, "outline_scale", 1.0)
+
+
+# ------------------------------------------------------------- stream encoding
+
+
+class _FakeStream:
+    """Stands in for sys.stdout with a chosen encoding."""
+
+    def __init__(self, encoding):
+        self.encoding = encoding
+        self.reconfigured_to = None
+
+    def reconfigure(self, encoding, errors=None):
+        self.reconfigured_to = encoding
+        self.encoding = encoding
+
+
+@pytest.mark.parametrize(
+    "encoding,expected",
+    [
+        # A process started without LANG - launchd, cron, a Quick Action,
+        # Karabiner's shell_command, a non-interactive ssh command.
+        ("ANSI_X3.4-1968", "utf-8"),
+        ("ascii", "utf-8"),
+        ("cp1251", "utf-8"),
+        # Already fine: leave it alone rather than churn the stream.
+        ("utf-8", None),
+        ("UTF-8", None),
+        ("utf8", None),
+    ],
+)
+def test_force_utf8_streams(encoding, expected):
+    stream = _FakeStream(encoding)
+    force_utf8_streams([stream])
+    assert stream.reconfigured_to == expected
+
+
+def test_force_utf8_streams_survives_a_stream_that_cannot_reconfigure():
+    class Stubborn:
+        encoding = "ascii"
+
+        def reconfigure(self, **kwargs):
+            raise AttributeError("no")
+
+    # Printing degraded is bad; refusing to start is worse.
+    force_utf8_streams([Stubborn()])
