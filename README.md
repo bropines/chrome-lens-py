@@ -86,6 +86,26 @@ lens_scan --help
 If you have no Python at all, `uv` will fetch one for you (`uv python install`),
 which is still smaller and quieter than a frozen binary.
 
+### One-line install of the standalone build
+
+Downloads the latest release, unpacks it, puts `lens_scan` on your PATH, and
+checks it starts before declaring victory.
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.ps1 | iex
+```
+
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.sh | sh
+```
+
+Installs to `%LOCALAPPDATA%\Programs\lens-scan` or `~/.local/share/lens-scan`;
+re-running replaces the existing install. Both scripts refuse to install a
+pre-standalone release rather than quietly handing you the self-extracting build
+that caused the antivirus reports.
+
 ## 🚀 Installation
 
 You can install the package using `pip`:
