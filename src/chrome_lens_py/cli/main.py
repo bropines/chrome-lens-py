@@ -133,6 +133,10 @@ def print_help():
         "Proxy server URL (e.g., http://user:pass@host:port, socks5://host:port).",
     )
     table.add_row(
+        "  --region CX,CY,W,H",
+        "Re-read one region at native resolution (values normalized 0..1).",
+    )
+    table.add_row(
         "  --no-env-proxy",
         "Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment and connect directly.",
     )
@@ -385,6 +389,43 @@ async def cli_main():
         max_concurrent=args.concurrency,
         trust_env=not args.no_env_proxy,
     )
+
+    if args.region:
+        try:
+            region = tuple(float(v) for v in args.region.split(","))
+            if len(region) != 4:
+                raise ValueError
+        except ValueError:
+            console.print(
+                "[bold red]Error:[/bold red] --region takes four numbers: "
+                "center_x,center_y,width,height (normalized 0..1)."
+            )
+            await api.aclose()
+            sys.exit(1)
+
+        try:
+            result = await api.process_region(
+                image_sources[0],
+                region=region,
+                ocr_language=args.ocr_lang,
+                ocr_preserve_line_breaks=app_config.get(
+                    "ocr_preserve_line_breaks", True
+                ),
+            )
+            if not args.quiet:
+                console.print(
+                    f"\n[bold green]Region OCR[/bold green] "
+                    f"(crop sent at {result['crop_size'][0]}x{result['crop_size'][1]}):"
+                )
+            console.print(Text(result["ocr_text"]))
+            if args.sharex and result["ocr_text"]:
+                copy_to_clipboard(result["ocr_text"])
+        except LensException as e:
+            console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
+            sys.exit(1)
+        finally:
+            await api.aclose()
+        return
 
     try:
         output_format = "full_text"
