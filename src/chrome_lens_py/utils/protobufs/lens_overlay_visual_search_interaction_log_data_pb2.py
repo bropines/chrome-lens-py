@@ -24,9 +24,9 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_client_platform_pb2 as lens__overlay__client__platform__pb2
-import lens_overlay_filters_pb2 as lens__overlay__filters__pb2
-import lens_overlay_selection_type_pb2 as lens__overlay__selection__type__pb2
+from . import lens_overlay_client_platform_pb2 as lens__overlay__client__platform__pb2
+from . import lens_overlay_filters_pb2 as lens__overlay__filters__pb2
+from . import lens_overlay_selection_type_pb2 as lens__overlay__selection__type__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n5lens_overlay_visual_search_interaction_log_data.proto\x12\x04lens\x1a"lens_overlay_client_platform.proto\x1a\x1alens_overlay_filters.proto\x1a!lens_overlay_selection_type.proto"\x8e\x02\n)LensOverlayVisualSearchInteractionLogData\x12\x31\n\x0b\x66ilter_data\x18\x01 \x01(\x0b\x32\x10.lens.FilterDataR\nfilterData\x12G\n\x13user_selection_data\x18\x02 \x01(\x0b\x32\x17.lens.UserSelectionDataR\x11userSelectionData\x12&\n\x0fis_parent_query\x18\x03 \x01(\x08R\risParentQuery\x12=\n\x0f\x63lient_platform\x18\x04 \x01(\x0e\x32\x14.lens.ClientPlatformR\x0e\x63lientPlatform"J\n\nFilterData\x12<\n\x0b\x66ilter_type\x18\x01 \x01(\x0e\x32\x1b.lens.LensOverlayFilterTypeR\nfilterType"Z\n\x11UserSelectionData\x12\x45\n\x0eselection_type\x18\x01 \x01(\x0e\x32\x1e.lens.LensOverlaySelectionTypeR\rselectionTypeB\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'

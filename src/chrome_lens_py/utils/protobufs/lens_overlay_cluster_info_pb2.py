@@ -19,7 +19,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
+from . import lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x1flens_overlay_cluster_info.proto\x12\x04lens\x1a\x1flens_overlay_routing_info.proto"\xb1\x01\n\x16LensOverlayClusterInfo\x12*\n\x11server_session_id\x18\x01 \x01(\tR\x0fserverSessionId\x12*\n\x11search_session_id\x18\x02 \x01(\tR\x0fsearchSessionId\x12?\n\x0crouting_info\x18\x06 \x01(\x0b\x32\x1c.lens.LensOverlayRoutingInfoR\x0broutingInfoB\x07H\x03\x92\x03\x02 \x03\x62\x08\x65\x64itionsp\xe8\x07'

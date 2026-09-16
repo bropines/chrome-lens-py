@@ -19,7 +19,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n!lens_overlay_overlay_object.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto"\x8a\x04\n\rOverlayObject\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12*\n\x08geometry\x18\x02 \x01(\x0b\x32\x0e.lens.GeometryR\x08geometry\x12T\n\x12rendering_metadata\x18\x08 \x01(\x0b\x32%.lens.OverlayObject.RenderingMetadataR\x11renderingMetadata\x12`\n\x16interaction_properties\x18\x04 \x01(\x0b\x32).lens.OverlayObject.InteractionPropertiesR\x15interactionProperties\x12!\n\x0cis_fulfilled\x18\t \x01(\x08R\x0bisFulfilled\x1a\x8c\x01\n\x11RenderingMetadata\x12Q\n\x0brender_type\x18\x01 \x01(\x0e\x32\x30.lens.OverlayObject.RenderingMetadata.RenderTypeR\nrenderType"$\n\nRenderType\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\t\n\x05GLEAM\x10\x01\x1a;\n\x15InteractionProperties\x12"\n\rselect_on_tap\x18\x01 \x01(\x08R\x0bselectOnTapJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08\x42\x07H\x03\x92\x03\x02\x08\x02\x62\x08\x65\x64itionsp\xe8\x07'

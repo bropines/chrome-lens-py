@@ -1,10 +1,7 @@
-import os
-import sys
-
-# Тот самый костыль для protobuf. Оставляем, чтобы импорты внутри сгенерированных файлов не ломались.
-protobufs_dir = os.path.join(os.path.dirname(__file__), "protobufs")
-if protobufs_dir not in sys.path:
-    sys.path.insert(0, protobufs_dir)
+# The generated modules used to import each other by bare top-level name, which
+# needed this directory on sys.path. scripts/fix_proto_imports.py rewrites those
+# to relative imports, so the hack is gone - and with it the reason the frozen
+# binaries could not import their own protobufs.
 
 from .protobufs.aim_query_pb2 import ModelMode, QueryPayload, ToolMode
 from .protobufs.lens_overlay_client_context_pb2 import (

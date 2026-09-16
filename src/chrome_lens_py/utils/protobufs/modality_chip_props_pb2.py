@@ -19,7 +19,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import added_inputs_pb2 as added__inputs__pb2
+from . import added_inputs_pb2 as added__inputs__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x19modality_chip_props.proto\x12\x04lens\x1a\x12\x61\x64\x64\x65\x64_inputs.proto"V\n\x11ModalityChipProps\x12\x31\n\x0b\x61\x64\x64\x65\x64_input\x18\n \x01(\x0b\x32\x10.lens.AddedInputR\naddedInput\x12\x0e\n\x02id\x18\x0b \x01(\tR\x02idB\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'

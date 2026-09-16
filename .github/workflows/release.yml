@@ -97,14 +97,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
+      # lens_scan.py, not src/chrome_lens_py/cli/main.py: building a module file
+      # directly leaves its relative imports without a package to resolve
+      # against, and every binary died on startup with "attempted relative
+      # import with no known parent package".
       - name: Build with Nuitka
         uses: Nuitka/Nuitka-Action@v1.1
         with:
-          script-name: src/chrome_lens_py/cli/main.py
+          script-name: lens_scan.py
           onefile: true
           output-dir: dist
           output-file: ${{ matrix.output_file }}
+          include-package: chrome_lens_py
           assume-yes-for-downloads: true
+
+      - name: Smoke-test the binary
+        shell: bash
+        run: |
+          chmod +x dist/${{ matrix.output_file }} || true
+          ./dist/${{ matrix.output_file }} --help > /dev/null
+          echo "binary starts and prints help"
 
       - name: Rename artifact
         shell: bash

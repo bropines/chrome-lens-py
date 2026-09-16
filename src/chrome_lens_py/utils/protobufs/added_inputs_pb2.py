@@ -19,7 +19,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_lens_file_pb2 as lens__overlay__lens__file__pb2
+from . import lens_overlay_lens_file_pb2 as lens__overlay__lens__file__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x12\x61\x64\x64\x65\x64_inputs.proto\x12\x04lens\x1a\x1clens_overlay_lens_file.proto"R\n\nAddedInput\x12\x38\n\tlens_file\x18\x01 \x01(\x0b\x32\x19.lens.LensOverlayLensFileH\x00R\x08lensFileB\n\n\x08\x61\x64\x64ition"B\n\x0b\x41\x64\x64\x65\x64Inputs\x12\x33\n\x0c\x61\x64\x64\x65\x64_inputs\x18\x01 \x03(\x0b\x32\x10.lens.AddedInputR\x0b\x61\x64\x64\x65\x64InputsB\x02H\x03\x62\x08\x65\x64itionsp\xe8\x07'

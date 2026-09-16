@@ -24,7 +24,9 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_translate_stickiness_signals_pb2 as lens__overlay__translate__stickiness__signals__pb2
+from . import (
+    lens_overlay_translate_stickiness_signals_pb2 as lens__overlay__translate__stickiness__signals__pb2,
+)
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n)lens_overlay_knowledge_intent_query.proto\x12\x04lens\x1a/lens_overlay_translate_stickiness_signals.proto"\x83\x01\n\x0c\x46unctionCall\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12*\n\x08\x61rgument\x18\x02 \x03(\x0b\x32\x0e.lens.ArgumentR\x08\x61rgument\x12\x33\n\x07signals\x18\x04 \x01(\x0b\x32\x19.lens.FunctionCallSignalsR\x07signals"}\n\x13\x46unctionCallSignals\x12\x66\n\x1ctranslate_stickiness_signals\x18\xe6\x81\xbd\x94\x01 \x01(\x0b\x32 .lens.TranslateStickinessSignalsR\x1atranslateStickinessSignals"I\n\x08\x41rgument\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x13.lens.ArgumentValueR\x05value"P\n\rArgumentValue\x12\x36\n\x0csimple_value\x18\x03 \x01(\x0b\x32\x11.lens.SimpleValueH\x00R\x0bsimpleValueB\x07\n\x05value";\n\x0bSimpleValue\x12#\n\x0cstring_value\x18\x01 \x01(\tH\x00R\x0bstringValueB\x07\n\x05valueB\x02H\x03'

@@ -19,7 +19,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x1dlens_overlay_image_data.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto"\xbc\x01\n\tImageData\x12,\n\x07payload\x18\x01 \x01(\x0b\x32\x12.lens.ImagePayloadR\x07payload\x12:\n\x0eimage_metadata\x18\x03 \x01(\x0b\x32\x13.lens.ImageMetadataR\rimageMetadata\x12?\n\x13significant_regions\x18\x04 \x03(\x0b\x32\x0e.lens.GeometryR\x12significantRegionsJ\x04\x08\x02\x10\x03"5\n\x0cImagePayload\x12\x1f\n\x0bimage_bytes\x18\x01 \x01(\x0cR\nimageBytesJ\x04\x08\x02\x10\x03"C\n\rImageMetadata\x12\x14\n\x05width\x18\x01 \x01(\x05R\x05width\x12\x16\n\x06height\x18\x02 \x01(\x05R\x06heightJ\x04\x08\x06\x10\x07\x42\x07H\x03\x92\x03\x02\x08\x02\x62\x08\x65\x64itionsp\xe8\x07'
