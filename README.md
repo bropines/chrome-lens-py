@@ -23,8 +23,15 @@ This project provides a powerful, asynchronous Python library and command-line t
 
 If you don't want to install Python, you can download the standalone **lens_scan-windows-amd64.exe** from the [Releases](https://github.com/bropines/chrome-lens-py/releases) section.
 
-> [!WARNING]
-> **Antivirus False Positives**: Some antivirus software (like Windows Defender) might flag the compiled `.exe` as a threat (e.g., `Trojan:Win32/Wacatac.H!ml`). This is a **false positive** common with Nuitka/PyInstaller binaries. The tool is open-source; you can inspect the code and build it yourself if you have concerns.
+> [!NOTE]
+> **About the antivirus warnings.** Earlier releases shipped a single-file
+> binary, which unpacks an executable payload into `%TEMP%` and runs it on every
+> launch. That is packer behaviour, and it is what Defender's ML heuristic
+> reacted to with `Trojan:Win32/Wacatac.H!ml` - a verdict on *behaviour*, not a
+> signature, which is why it fired on user machines while a local scan came back
+> clean. The builds are now a plain folder that does none of that. If you would
+> rather avoid a binary entirely, `uv tool install` below installs the real
+> Python package and has nothing for a heuristic to object to.
 
 ### 📸 Automated ShareX Setup
 If you use **ShareX**, you can fully automate the setup with one command:
@@ -56,6 +63,28 @@ This will automatically configure a hotkey (**Ctrl + O**) and the necessary acti
 -   **Proxy Support**: Full support for HTTP, HTTPS, and SOCKS proxies, plus `--no-env-proxy` when you want to bypass the proxy your environment sets.
 -   **Clipboard Integration**: Instantly copy OCR or translation results to your clipboard with the `--sharex` flag.
 -   **Flexible Configuration**: Manage settings via a `config.json` file, CLI arguments, or environment variables.
+
+## 📦 Which install to pick
+
+| | startup | download | notes |
+|---|---|---|---|
+| **`uv tool install`** | 488 ms | ~10 MB | no binary at all, so nothing for antivirus heuristics to flag; updates with one command |
+| **standalone zip** | **202 ms** | 25 MB | no Python needed; a folder, not a single file |
+| ~~onefile `.exe`~~ | 1782 ms | 18 MB | no longer built: self-extracts on every run, which is both the antivirus trigger and the startup cost |
+
+Measured on the same machine, `--help` only, median of six runs.
+
+The standalone build starts fastest of the three because Nuitka has compiled the
+imports away; the one-file variant lost to both by unpacking itself first.
+
+```bash
+# Python users - no binary, no antivirus noise
+uv tool install chrome-lens-py       # or: pipx install chrome-lens-py
+lens_scan --help
+```
+
+If you have no Python at all, `uv` will fetch one for you (`uv python install`),
+which is still smaller and quieter than a frozen binary.
 
 ## 🚀 Installation
 
