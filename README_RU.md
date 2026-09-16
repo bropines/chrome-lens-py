@@ -56,10 +56,44 @@ lens_scan-windows-amd64.exe --setup-sharex
 
 ## 🚀 Установка
 
+Три пути, отличаются тем, что требуют от вас:
+
+| | нужен Python? | однострочник | обновление |
+|---|---|---|---|
+| **uv** (рекомендуется) | нет — uv притащит свой | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
+| **standalone zip** | нет | `install.ps1` / `install.sh` | перезапустить установщик |
+| **pip** | да, свой | — | `pip install -U chrome-lens-py` |
+
+### Однострочник через uv
+
+Ставит uv, если его нет, затем ставит `lens_scan` как uv-инструмент и кладёт в
+PATH. Ничего не заморожено в исполняемый файл — значит, эвристикам антивируса
+не на что реагировать; Python заранее не нужен, uv принесёт свой.
+
+```powershell
+irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install-uv.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install-uv.sh | sh
+```
+
+Ставится вместе с extra `[clipboard]`, чтобы `--sharex` работал сразу.
+
+```bash
+uv tool upgrade chrome-lens-py      # обновиться потом
+uv tool uninstall chrome-lens-py
+```
+
+> **Если `lens_scan` на PATH уже есть** — например, pip-установка за шимом
+> pyenv или старая standalone-сборка — она может стоять раньше и продолжит
+> выигрывать после установки. Установщик предупредит, если это заметит.
+> `lens_scan --version` печатает путь, откуда он реально запустился.
+
 ### Если Python уже есть
 
 ```bash
-uv tool install chrome-lens-py     # рекомендуется: обновляется одной командой
+uv tool install "chrome-lens-py[clipboard]"
 pip install chrome-lens-py
 ```
 

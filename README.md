@@ -77,14 +77,45 @@ Measured on the same machine, `--help` only, median of six runs.
 The standalone build starts fastest of the three because Nuitka has compiled the
 imports away; the one-file variant lost to both by unpacking itself first.
 
+There are three ways in, and they differ in what they need from you:
+
+| | needs Python? | one-liner | update with |
+|---|---|---|---|
+| **uv** (recommended) | no — uv fetches one | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
+| **standalone zip** | no | `install.ps1` / `install.sh` | re-run the installer |
+| **pip** | yes, your own | — | `pip install -U chrome-lens-py` |
+
 ```bash
-# Python users - no binary, no antivirus noise
-uv tool install chrome-lens-py       # or: pipx install chrome-lens-py
-lens_scan --help
+uv tool install "chrome-lens-py[clipboard]"   # or: pipx install chrome-lens-py
+pip install chrome-lens-py                    # if you manage Python yourself
 ```
 
-If you have no Python at all, `uv` will fetch one for you (`uv python install`),
-which is still smaller and quieter than a frozen binary.
+### One-line install with uv
+
+Installs uv if you do not have it, then installs `lens_scan` as a uv tool and
+puts it on PATH. Nothing is frozen into an executable, so there is nothing for
+antivirus heuristics to react to, and no Python is needed beforehand — uv
+brings its own.
+
+```powershell
+irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install-uv.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install-uv.sh | sh
+```
+
+Installs the `[clipboard]` extra too, so `--sharex` works out of the box.
+
+```bash
+uv tool upgrade chrome-lens-py      # later
+uv tool uninstall chrome-lens-py
+```
+
+> **If another `lens_scan` is already on your PATH** — a pip install behind a
+> pyenv shim, say, or an older standalone build — that one may come first and
+> keep winning after this install. The installer warns you when it spots this.
+> `lens_scan --version` prints the path it actually ran from, which settles it.
 
 ### One-line install of the standalone build
 
