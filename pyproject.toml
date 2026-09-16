@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chrome_lens_py"
-version = "3.5.0"
+dynamic = ["version"]
 description = "Python library for Google Lens OCR and Translation using the crupload endpoint."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,6 +45,9 @@ rtl = ["python-bidi>=0.4", "arabic-reshaper>=3.0"]
 fonts = ["fonttools>=4.0"]
 numpy = ["numpy"]
 dev = ["black", "isort", "flake8", "mypy", "pytest", "pytest-asyncio"]
+
+[tool.setuptools.dynamic]
+version = { attr = "chrome_lens_py.__about__.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

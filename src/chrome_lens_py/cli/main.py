@@ -5,12 +5,14 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
 
+from .. import __version__
 from ..api import LensAPI
 from ..constants import (
     DEFAULT_API_KEY,
@@ -57,6 +59,32 @@ def setup_logging(level_str: str = "WARNING"):
     if log_level > logging.DEBUG:
         logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.debug(f"Logging level set to {level_str.upper()}")
+
+
+def print_version():
+    """Report the version and, just as usefully, which copy is running.
+
+    With a pip install, a uv tool install, an editable checkout and a
+    standalone build all able to own the name `lens_scan`, "which one did I
+    just run?" is a real question. Printing the paths answers it on the spot.
+    """
+    console.print(f"[bold cyan]chrome-lens-py[/bold cyan] {__version__}")
+
+    if getattr(sys, "frozen", False) or "__compiled__" in globals():
+        flavour = "standalone build"
+    elif any(part == "site-packages" for part in Path(__file__).parts):
+        flavour = "installed package"
+    else:
+        flavour = "source checkout (editable or run in place)"
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column(style="green")
+    table.add_column(overflow="fold")
+    table.add_row("Running from", flavour)
+    table.add_row("Executable", sys.executable)
+    table.add_row("Package", str(Path(__file__).resolve().parent.parent))
+    table.add_row("Python", sys.version.split()[0])
+    console.print(table)
 
 
 def print_help():
@@ -141,6 +169,21 @@ def print_help():
     table.add_row("  --text-align SIDE", "auto (follow source), left, center or right.")
     table.add_row("  --font FONT_PATH", "Path to a .ttf font file for the overlay.")
     table.add_row("  --font-size SIZE", "Font size for the overlay (default: 20).")
+    table.add_row("\n[bold]Daemon Options:[/bold]")
+    table.add_row(
+        "  --serve", "Run as a local HTTP daemon instead of processing one image."
+    )
+    table.add_row("  --host ADDR", "Address to bind (default: 127.0.0.1).")
+    table.add_row("  --port N", "Port to bind (default: 8765).")
+    table.add_row(
+        "  --token TOKEN",
+        "Require this bearer token. Mandatory when --host is not loopback.",
+    )
+    table.add_row(
+        "  --allow-origin ORIGIN",
+        "Let one browser origin call the daemon (repeatable). None by default, "
+        "so no web page can reach it.",
+    )
     table.add_row("\n[bold]Advanced & Debug Options:[/bold]")
     table.add_row("  --api-key KEY", "Google Cloud API key (overrides config).")
     table.add_row(
@@ -151,6 +194,7 @@ def print_help():
         "  --region CX,CY,W,H",
         "Re-read one region at native resolution (values normalized 0..1).",
     )
+    table.add_row("  --text-query TEXT", "Text to send alongside --region.")
     table.add_row(
         "  --no-env-proxy",
         "Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment and connect directly.",
@@ -171,6 +215,9 @@ def print_help():
     table.add_row(
         "  -l, --logging-level LEVEL",
         "Set logging level (DEBUG, INFO, WARNING, ERROR).",
+    )
+    table.add_row(
+        "  -V, --version", "Show the version and which copy of it is running."
     )
     table.add_row("  -h, --help", "Show this help message and exit.")
     console.print(table)
@@ -245,8 +292,22 @@ async def cli_main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", help="Require this bearer token on daemon requests.")
     parser.add_argument(
+        "--allow-origin",
+        action="append",
+        default=[],
+        metavar="ORIGIN",
+        help="Let this browser origin call the daemon (repeatable). Without "
+        "it no web page can, which is the point: otherwise any site you "
+        "visit could spend your API key or read your files through it.",
+    )
+    parser.add_argument(
         "--region",
         help="Re-read one region at native resolution: cx,cy,w,h normalized 0..1.",
+    )
+    parser.add_argument(
+        "--text-query",
+        help="Text to send alongside --region, the way the overlay does when "
+        "you select a region and type a question about it.",
     )
     parser.add_argument(
         "--vertical-text",
@@ -314,8 +375,13 @@ async def cli_main():
     # Meta
     parser.add_argument("-l", "--logging-level", dest="logging_level")
     parser.add_argument("-h", "--help", action="store_true")
+    parser.add_argument("-V", "--version", action="store_true")
 
     args = parser.parse_args()
+
+    if args.version:
+        print_version()
+        return
 
     if args.setup_sharex:
         setup_sharex_config()
@@ -323,22 +389,46 @@ async def cli_main():
 
     if args.serve:
         setup_logging(args.logging_level or "INFO")
-        from ..server import run_server
+        from ..server import is_loopback, run_server
+
+        if not is_loopback(args.host) and not args.token:
+            console.print(
+                f"[bold red]Error:[/bold red] refusing to listen on {args.host} "
+                "without --token."
+            )
+            console.print(
+                "Anyone who could reach that address would be able to spend your "
+                "API key on Google requests."
+            )
+            console.print("Either bind 127.0.0.1, or pass --token.")
+            sys.exit(1)
 
         console.print(
             f"[bold green]chrome-lens-py daemon[/bold green] on "
             f"[cyan]http://{args.host}:{args.port}[/cyan]  "
             f"(POST /v1/ocr, POST /v1/region, GET /health)"
         )
-        await run_server(
-            host=args.host,
-            port=args.port,
-            token=args.token,
-            api_key=args.api_key or DEFAULT_API_KEY,
-            proxy=args.proxy,
-            trust_env=not args.no_env_proxy,
-            font_path=args.font_path,
-        )
+        if args.allow_origin:
+            console.print(f"Allowed browser origins: {', '.join(args.allow_origin)}")
+        else:
+            console.print(
+                "[dim]Local programs only; no web page can reach it. "
+                "Use --allow-origin to permit one.[/dim]"
+            )
+        try:
+            await run_server(
+                host=args.host,
+                port=args.port,
+                token=args.token,
+                allowed_origins=frozenset(args.allow_origin),
+                api_key=args.api_key or DEFAULT_API_KEY,
+                proxy=args.proxy,
+                trust_env=not args.no_env_proxy,
+                font_path=args.font_path,
+            )
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            sys.exit(1)
         return
 
     MAX_CONCURRENCY_HARD_LIMIT = 30
@@ -459,6 +549,7 @@ async def cli_main():
                 image_sources[0],
                 region=region,
                 ocr_language=args.ocr_lang,
+                text_query=args.text_query,
                 ocr_preserve_line_breaks=app_config.get(
                     "ocr_preserve_line_breaks", True
                 ),
