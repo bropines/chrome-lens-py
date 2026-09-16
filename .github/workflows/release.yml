@@ -133,11 +133,27 @@ jobs:
           cd dist && 7z a -tzip ${{ matrix.asset_name }}.zip ${{ matrix.asset_name }} > /dev/null
           ls -la ${{ matrix.asset_name }}.zip
 
+      # Published next to the zip so the installers can tell a good download
+      # from a truncated or tampered one. sha256sum's own format, so
+      # `sha256sum -c lens_scan-linux-amd64.zip.sha256` verifies it by hand.
+      - name: Checksum the archive
+        shell: bash
+        working-directory: dist
+        run: |
+          if command -v sha256sum > /dev/null; then
+            sha256sum ${{ matrix.asset_name }}.zip > ${{ matrix.asset_name }}.zip.sha256
+          else
+            shasum -a 256 ${{ matrix.asset_name }}.zip > ${{ matrix.asset_name }}.zip.sha256
+          fi
+          cat ${{ matrix.asset_name }}.zip.sha256
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2.3.2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/${{ matrix.asset_name }}.zip
+          files: |
+            dist/${{ matrix.asset_name }}.zip
+            dist/${{ matrix.asset_name }}.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -145,5 +161,7 @@ jobs:
         uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ matrix.asset_name }}
-          path: dist/${{ matrix.asset_name }}.zip
+          path: |
+            dist/${{ matrix.asset_name }}.zip
+            dist/${{ matrix.asset_name }}.zip.sha256
 

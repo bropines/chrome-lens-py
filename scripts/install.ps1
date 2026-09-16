@@ -45,6 +45,38 @@ New-Item -ItemType Directory -Path $temp -Force | Out-Null
 $zip = Join-Path $temp $Asset
 Invoke-WebRequest $download.browser_download_url -OutFile $zip -UseBasicParsing
 
+# The checksum ships as its own release asset. Worth being clear about what
+# that buys: it catches a truncated or corrupted download, and a CDN serving
+# something other than what was uploaded. It is not a signature - anyone able
+# to rewrite the release could rewrite this too.
+$sumAsset = $release.assets | Where-Object { $_.name -eq "$Asset.sha256" } | Select-Object -First 1
+if ($sumAsset) {
+    Write-Step 'Verifying the checksum'
+    $line = (Invoke-WebRequest $sumAsset.browser_download_url -UseBasicParsing).Content
+    # Pull the digest out by shape rather than by position: GNU sha256sum
+    # prefixes the line with a backslash when the filename contains one, so
+    # "first whitespace-delimited field" is not always the hash.
+    if ($line -notmatch '([0-9a-fA-F]{64})') {
+        Remove-Item $temp -Recurse -Force
+        Write-Error "Could not read a SHA-256 out of the checksum file: $line"
+    }
+    $expected = $Matches[1].ToLowerInvariant()
+    # Get-FileHash returns uppercase, sha256sum lowercase; compare one case.
+    $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) {
+        Remove-Item $temp -Recurse -Force
+        Write-Error @"
+Checksum mismatch - not installing.
+  expected $expected
+  got      $actual
+Try again; if it keeps failing, open an issue at
+https://github.com/$Repo/issues rather than running the file.
+"@
+    }
+} else {
+    Write-Host "  note: $($release.tag_name) publishes no checksum, so the download was not verified." -ForegroundColor DarkYellow
+}
+
 Write-Step 'Unpacking'
 Expand-Archive -Path $zip -DestinationPath $temp -Force
 

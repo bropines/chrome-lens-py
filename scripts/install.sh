@@ -53,6 +53,41 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 curl -fsSL "$url" -o "$tmp/payload.zip"
 
+# The checksum ships as its own release asset. Worth being clear about what it
+# buys: it catches a truncated or corrupted download, and a CDN serving
+# something other than what was uploaded. It is not a signature - anyone able
+# to rewrite the release could rewrite this too.
+sum_url=$(printf '%s' "$release" \
+  | tr ',' '\n' \
+  | grep 'browser_download_url' \
+  | grep "$asset.sha256" \
+  | sed -n 's/.*"\(https[^"]*\)".*/\1/p' \
+  | head -1)
+
+if [ -n "${sum_url:-}" ]; then
+  step 'Verifying the checksum'
+  # Pull the digest out by shape rather than by position: GNU sha256sum
+  # prefixes the line with a backslash when the filename contains one, so the
+  # first whitespace-delimited field is not always the hash.
+  hex='[0-9a-f]\{64\}'
+  expected=$(curl -fsSL "$sum_url" | tr 'A-F' 'a-f' | grep -o "$hex" | head -1)
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$tmp/payload.zip" | tr 'A-F' 'a-f' | grep -o "$hex" | head -1)
+  else
+    actual=$(shasum -a 256 "$tmp/payload.zip" | tr 'A-F' 'a-f' | grep -o "$hex" | head -1)
+  fi
+  [ -n "$expected" ] || die 'Could not read a SHA-256 out of the checksum file.'
+  if [ "$expected" != "$actual" ]; then
+    die "Checksum mismatch - not installing.
+  expected $expected
+  got      $actual
+Try again; if it keeps failing, open an issue at
+https://github.com/$REPO/issues rather than running the file."
+  fi
+else
+  printf '  note: %s publishes no checksum, so the download was not verified.\n' "$tag"
+fi
+
 step 'Unpacking'
 unzip -q "$tmp/payload.zip" -d "$tmp/out"
 # The archive holds one folder; its name has changed before, so find it.
