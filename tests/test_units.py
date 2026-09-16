@@ -26,7 +26,13 @@ from chrome_lens_py.core.text_renderer import (
     wraps_per_character,
 )
 from chrome_lens_py.exceptions import LensImageError, LensProtobufError
-from chrome_lens_py.server import json_safe
+from chrome_lens_py.server import (
+    LensServer,
+    _choice,
+    _number,
+    is_loopback,
+    json_safe,
+)
 
 # --------------------------------------------------------------- downscaling
 
@@ -279,3 +285,80 @@ def test_json_safe_encodes_bytes_and_drops_raw_protobuf():
     assert result["image"] == "AQI="
     assert result["nested"][0]["more"] == "/w=="
     assert result["text"] == "ok"
+
+
+# ------------------------------------------------------------ daemon exposure
+#
+# These guard a property rather than a behaviour: the daemon carries an API key
+# and will call Google for whoever reaches it, so it must not be reachable from
+# a web page that the user merely happens to be visiting, and must not read
+# this machine's disk for a remote caller. Both were true of an earlier build.
+
+
+@pytest.mark.parametrize(
+    "host,expected",
+    [
+        ("127.0.0.1", True),
+        ("localhost", True),
+        ("::1", True),
+        ("0.0.0.0", False),
+        ("192.168.1.10", False),
+    ],
+)
+def test_is_loopback(host, expected):
+    assert is_loopback(host) is expected
+
+
+def _server(**kwargs):
+    return LensServer(api=None, **kwargs)
+
+
+def test_public_bind_requires_a_token():
+    with pytest.raises(ValueError, match="without --token"):
+        _server(host="0.0.0.0")
+    # With one, it is allowed.
+    assert _server(host="0.0.0.0", token="s3cret").local_only is False
+
+
+def test_no_cors_headers_without_an_allowed_origin():
+    server = _server()
+    assert server._cors_headers("https://evil.example") == {}
+    assert server._cors_headers(None) == {}
+
+
+def test_cors_echoes_only_the_origin_that_was_allowed():
+    server = _server(allowed_origins=frozenset({"https://mine.example"}))
+    assert server._cors_headers("https://evil.example") == {}
+    headers = server._cors_headers("https://mine.example")
+    # Never a wildcard: the echo has to be the exact origin we vetted.
+    assert headers["Access-Control-Allow-Origin"] == "https://mine.example"
+    assert headers["Vary"] == "Origin"
+
+
+def test_remote_daemon_refuses_paths_and_urls():
+    server = _server(host="0.0.0.0", token="s3cret")
+    for source in ("C:/Users/me/secrets.png", "https://internal.corp/private.png"):
+        with pytest.raises(ValueError, match="only accepts"):
+            server._resolve_source({"image": source})
+    # Inline pixels remain fine - those the caller already had.
+    assert server._resolve_source({"image_b64": "AQI="}) == b"\x01\x02"
+
+
+def test_local_daemon_still_accepts_a_path():
+    assert _server()._resolve_source({"image": "shot.png"}) == "shot.png"
+
+
+def test_choice_rejects_values_off_the_list():
+    assert _choice({"erase_mode": "hull"}, "erase_mode", ("patch", "hull"), "patch")
+    assert _choice({}, "erase_mode", ("patch", "hull"), "patch") == "patch"
+    with pytest.raises(ValueError, match="must be one of"):
+        _choice({"erase_mode": "rm -rf"}, "erase_mode", ("patch", "hull"), "patch")
+
+
+def test_number_rejects_non_numbers():
+    assert _number({"outline_scale": 3}, "outline_scale", 1.0) == 3.0
+    with pytest.raises(ValueError, match="must be a number"):
+        _number({"outline_scale": "8x"}, "outline_scale", 1.0)
+    # bool is an int in Python; it is still not a scale factor.
+    with pytest.raises(ValueError, match="must be a number"):
+        _number({"outline_scale": True}, "outline_scale", 1.0)
