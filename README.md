@@ -88,8 +88,8 @@ which is still smaller and quieter than a frozen binary.
 
 ### One-line install of the standalone build
 
-Downloads the latest release, unpacks it, puts `lens_scan` on your PATH, and
-checks it starts before declaring victory.
+Downloads the latest release, verifies its SHA-256, unpacks it, puts `lens_scan`
+on your PATH, and checks it starts before declaring victory.
 
 ```powershell
 # Windows
@@ -105,6 +105,22 @@ Installs to `%LOCALAPPDATA%\Programs\lens-scan` or `~/.local/share/lens-scan`;
 re-running replaces the existing install. Both scripts refuse to install a
 pre-standalone release rather than quietly handing you the self-extracting build
 that caused the antivirus reports.
+
+Every release publishes a `.sha256` next to each archive, and the installers
+check it before unpacking. Verify one by hand with:
+
+```bash
+sha256sum -c lens_scan-linux-amd64.zip.sha256
+```
+
+Be clear about what that buys: it catches a corrupted or truncated download and
+a CDN serving something other than what was uploaded. It is not a signature —
+anyone able to rewrite the release could rewrite the checksum with it.
+
+Not sure which copy you are running? `lens_scan --version` prints the version
+along with the path it was loaded from, which settles the usual confusion
+between a pip install, a `uv tool` install, an editable checkout and a
+standalone build all owning the same name.
 
 ## 🚀 Installation
 
@@ -156,7 +172,28 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--font <path>` | | Path to a `.ttf` font file for the text overlay. |
 | `--font-size <size>` | | Font size for the text overlay (default: 20). |
 | `--proxy <url>` | | Proxy server URL (e.g., `socks5://127.0.0.1:9050`). |
+| `--no-env-proxy` | | Ignore `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` and connect directly. |
+| `--concurrency <N>` | | Maximum concurrent requests (default 5, hard limit 30). |
+| `--timeout <sec>` | | Request timeout in seconds (default 60). |
+| `--overlay-mode <mode>`| | `chromium` (default) or `legacy`, the old white-box overlay. |
+| `--vertical-text <mode>`| | Vertical CJK source: `auto`, `keep` or `horizontal`. |
+| `--erase-mode <mode>` | | `patch` (server inpaint) or `hull` (cover the whole area). |
+| `--hull-padding <N>` | | How far the hull reaches past the text, in line heights. |
+| `--outline <N>` | | Multiplier on the outline behind translated text; `0` removes it. |
+| `--min-text-size <px>` | | Floor on rendered text size, for readability. |
+| `--text-align <side>` | | `auto`, `left`, `center` or `right`. |
+| `--manga` | | Preset for vertical Japanese pages (see the rendering section). |
+| `--manga-growth <N>` | | How much wider than the detected box to lay out in manga mode. |
+| `--region <cx,cy,w,h>` | | Re-read one region at native resolution (normalized 0..1). |
+| `--text-query <text>` | | Text to send alongside `--region`. |
+| `--serve` | | Run as a local HTTP daemon instead of processing one image. |
+| `--host <addr>` | | Address for the daemon (default `127.0.0.1`). |
+| `--port <N>` | | Port for the daemon (default `8765`). |
+| `--token <token>` | | Require a bearer token. Mandatory when `--host` is not loopback. |
+| `--allow-origin <origin>`| | Let one browser origin call the daemon (repeatable). None by default. |
+| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically. |
 | `--logging-level <lvl>`| `-l` | Set logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `--version` | `-V` | Show the version and which copy of it is running. |
 | `--help` | `-h` | Show this help message and exit. |
 
   #### **Examples**
@@ -395,12 +432,23 @@ asyncio.run(process_with_details())
       timeout: int = 60,
       font_path: Optional[str] = None,
       font_size: Optional[int] = None,
-      max_concurrent: int = 5
+      max_concurrent: int = 5,
+      trust_env: bool = True,
   )
   ```
-  
+  -   **`trust_env`**: Whether to honour `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` from the environment. Set `False` if a stale proxy variable is making requests hang — that was the cause of the "it only works with a proxy on" reports.
+
+  `LensAPI` is an async context manager, and closing it returns the pooled
+  connections:
+
+  ```python
+  async with LensAPI() as api:
+      ...
+  # or: api = LensAPI(); ...; await api.aclose()
+  ```
+
   #### **`process_image` Method**
-  
+
   ```python
   result: dict = await api.process_image(
       image_path: Any,
@@ -408,12 +456,26 @@ asyncio.run(process_with_details())
       target_translation_language: Optional[str] = None,
       source_translation_language: Optional[str] = None,
       output_overlay_path: Optional[str] = None,
+      new_session: bool = True,
       ocr_preserve_line_breaks: bool = True,
-      output_format: Literal['full_text', 'blocks', 'lines', 'detailed'] = 'full_text'
+      output_format: Literal['full_text', 'blocks', 'lines', 'detailed'] = 'full_text',
+      # overlay rendering; see the rendering section for what each one is for
+      overlay_mode: Literal['chromium', 'legacy'] = 'chromium',
+      vertical_text: Literal['keep', 'auto', 'horizontal'] = 'auto',
+      erase_mode: Literal['patch', 'hull'] = 'patch',
+      hull_padding: float = 0.45,
+      outline_scale: float = 1.0,
+      min_readable_px: float = 0.0,
+      text_align: Literal['auto', 'left', 'center', 'right'] = 'auto',
+      manga_mode: bool = False,
+      manga_box_growth: float = 1.45,
+      include_raw_response: bool = False,
   )
   ```
   -   **`output_format`**: Controls the structure of the OCR output. `'full_text'` (default) returns a single string in `ocr_text`. `'blocks'` returns a list in `text_blocks`. `'lines'` returns a list in `line_blocks`. `'detailed'` returns a fully nested structure in `detailed_blocks`.
   -   **`ocr_preserve_line_breaks`**: If `False` and `output_format` is `'full_text'`, joins all OCR text into a single line.
+  -   **`include_raw_response`**: Off by default. The raw protobuf objects are large and not serializable, so they are only attached when you ask.
+  -   The rendering parameters only matter when `output_overlay_path` is set. Each one has a CLI flag of the same name — see [Overlay rendering](#-overlay-rendering).
 
   **The returned `result` dictionary contains:**
   - `ocr_text` (Optional[str]): The full recognized text (if `output_format='full_text'`).
@@ -422,7 +484,20 @@ asyncio.run(process_with_details())
   - `translated_text` (Optional[str]): The translated text, if requested.
   - `word_data` (List[dict]): A list of dictionaries for every recognized word with its geometry.
   - `detailed_blocks` (Optional[List[dict]]): A list of fully structured text blocks (if `output_format='detailed'`). Each block contains lines, which in turn contain words, with geometry at every level.
-  - `raw_response_objects`: The "raw" Protobuf response object for further analysis.
+  - `raw_response_objects`: The "raw" Protobuf response object — **only when `include_raw_response=True`**.
+
+  #### **`process_region` Method**
+
+  ```python
+  result: dict = await api.process_region(
+      image_path: Any,
+      region: Tuple[float, float, float, float],   # center_x, center_y, w, h
+      ocr_language: Optional[str] = None,
+      text_query: Optional[str] = None,
+      ocr_preserve_line_breaks: bool = True,
+  )
+  ```
+  Re-reads one region at native resolution. See [Region queries](#-region-queries).
 
 </details>
 
@@ -466,9 +541,42 @@ lens_scan --serve --port 9000 --token secret
 
 | route | body |
 |---|---|
-| `POST /v1/ocr` | `{"image": "<path or URL>"}` or `{"image_b64": "..."}`, plus `translate_to`, `ocr_language`, `output_format`, `vertical_text`, `overlay_mode` |
-| `POST /v1/region` | the same, plus `"region": [center_x, center_y, width, height]` normalized 0..1 |
-| `GET /health` | liveness check |
+| `POST /v1/ocr` | `{"image": "<path or URL>"}` or `{"image_b64": "..."}`, plus any of `translate_to`, `translate_from`, `ocr_language`, `ocr_preserve_line_breaks`, `output_format`, `overlay_path`, `overlay_mode`, `vertical_text`, `erase_mode`, `hull_padding`, `outline_scale`, `min_readable_px`, `text_align`, `manga_mode`, `manga_box_growth` |
+| `POST /v1/region` | the same source, plus `"region": [center_x, center_y, width, height]` normalized 0..1, and optionally `text_query` |
+| `GET /health` | liveness check; reports the version |
+
+Every rendering option the CLI has is accepted here under the same name, so
+`--erase-mode hull --outline 3` on the command line is `"erase_mode": "hull",
+"outline_scale": 3` in the body. Requests must be `Content-Type:
+application/json`.
+
+### What can reach it
+
+This daemon holds an API key and will call Google for anyone who reaches it, so
+the defaults are deliberately closed:
+
+- **No web page can use it.** A request carrying an `Origin` header is refused
+  unless you named that origin with `--allow-origin`. The check is on the
+  *request*, not the response, because a page can send a POST it is forbidden to
+  read and still get the side effect it wanted — a Google call billed to your
+  key, or a file opened off your disk.
+- **`--host` anywhere but loopback requires `--token`**, and then the daemon
+  accepts only `image_b64`. A path or a URL is something it would go and open
+  itself, which on a network listener means reading your disk, or fetching a
+  host of the caller's choosing.
+- Tokens are compared in constant time.
+
+```bash
+# let one page you control use it
+lens_scan --serve --allow-origin https://yoursite.example
+
+# on the network: token required, pixels only
+lens_scan --serve --host 0.0.0.0 --token "$(openssl rand -hex 24)"
+```
+
+The Tampermonkey userscript does **not** need any of this — it talks to Google
+directly through `GM_xmlhttpRequest`, which is not subject to CORS. Opening the
+daemon to a browser origin is only for pages you write yourself.
 
 Measured here, same work each time:
 
@@ -485,9 +593,6 @@ distribution, not for speed - if startup is what you care about, the daemon is
 the answer, and `--standalone` rather than `--onefile` would at least stop the
 binary making it worse.
 
-The daemon binds to loopback and sends CORS headers, so a Tampermonkey
-userscript can use it directly.
-
 ## 🔍 Region queries
 
 The full-image pass downscales anything over 1600px, which is exactly when small
@@ -498,6 +603,11 @@ async with LensAPI() as api:
     # (center_x, center_y, width, height), normalized against the full image
     result = await api.process_region("page.png", (0.8, 0.82, 0.35, 0.06))
     print(result["ocr_text"])
+```
+
+```bash
+lens_scan page.png --region 0.8,0.82,0.35,0.06
+lens_scan page.png --region 0.8,0.82,0.35,0.06 --text-query "what does this say"
 ```
 
 Geometry comes back in full-image coordinates, so it lines up with
@@ -518,6 +628,27 @@ lens_scan page.png  -t ru -to out.png --overlay-mode legacy
 | `auto` (default) | stays vertical only when translating into a CJK language |
 | `keep` | always vertical, exactly like Chromium |
 | `horizontal` | reflows the paragraph into horizontal wrapped lines |
+
+### Making the result readable
+
+Chromium repaints each line into the box the original occupied. That is right
+for a street sign and wrong for a manga bubble, where the translation is far
+longer than the Japanese it replaces. These knobs exist for that gap:
+
+| flag | API parameter | what it does |
+|---|---|---|
+| `--erase-mode patch\|hull` | `erase_mode` | `patch` uses the server's inpainted background, like Chromium. `hull` wraps the text area in a convex hull and fills it with the surrounding colour — cleaner, but only where that colour is flat. |
+| `--hull-padding N` | `hull_padding` | How far past the text the hull reaches, in fractions of line height (default `0.45`). |
+| `--outline N` | `outline_scale` | Multiplier on the outline drawn behind translated text; `0` removes it. Drawn with a real stroke, so it stays clean up to `8`. |
+| `--min-text-size PX` | `min_readable_px` | Floor on rendered text size. Enlarging the text does *not* enlarge the erased area — that is measured from the text as actually drawn. |
+| `--text-align auto\|left\|center\|right` | `text_align` | `auto` follows the source line. |
+| `--manga` | `manga_mode` | Preset for pages of vertical Japanese: always reflow, lay out wider than the detected box, erase by hull, bigger minimum size. |
+| `--manga-growth N` | `manga_box_growth` | How much wider than the detected box to lay out in manga mode (default `1.45`). |
+
+```bash
+lens_scan page.png -t en -to out.png --manga
+lens_scan page.png -t en -to out.png --erase-mode hull --outline 3 --min-text-size 18
+```
 
 Right-to-left targets (Arabic, Hebrew, Persian…) need shaping that Pillow's
 published wheels cannot do, since they are built without libraqm:

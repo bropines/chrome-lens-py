@@ -48,7 +48,7 @@ lens_scan-windows-amd64.exe --setup-sharex
     -   Получайте отдельные строки текста с их собственной точной геометрией.
 -   **Встроенный перевод**: Мгновенно переводите распознанный текст на любой поддерживаемый язык.
 -   **Разные источники изображений**: Обрабатывайте изображения из **файла**, по **URL**, из **байтов**, объекта **PIL Image** или массива **NumPy**.
--   **Наложение текста**: Автоматически генерируйте и сохраняйте изображения с наложенным на них переводом(работает плохо, увы нет времени сделать лучше).
+-   **Наложение текста**: Рендер перевода прямо на картинку по тому же алгоритму, что и оверлей Google Lens в Chromium: подбор кегля бинарным поиском по боксу шрифта, геометрия строки берётся у исходной строки, фон — серверный inpaint. Плюс вертикальный японский, режим для манги, обводка и выравнивание.
 -   **Функциональный CLI**: Простой, но мощный интерфейс командной строки (`lens_scan`) для быстрого использования.
 -   **Поддержка прокси**: Полная поддержка HTTP, HTTPS и SOCKS прокси.
 -   **Интеграция с буфером обмена**: Мгновенно копируйте результаты OCR или перевода в буфер обмена с помощью флага `--sharex`.
@@ -56,22 +56,63 @@ lens_scan-windows-amd64.exe --setup-sharex
 
 ## 🚀 Установка
 
-Вы можете установить пакет с помощью `pip`:
+### Если Python уже есть
 
 ```bash
+uv tool install chrome-lens-py     # рекомендуется: обновляется одной командой
 pip install chrome-lens-py
 ```
 
-Чтобы включить функцию копирования в буфер обмена (флаг `--sharex`), установите библиотеку с `[clipboard]` extra:
+Дополнительные extras:
 
 ```bash
-pip install "chrome-lens-py[clipboard]"
+pip install "chrome-lens-py[clipboard]"  # буфер обмена, флаг --sharex
+pip install "chrome-lens-py[rtl]"        # арабский/иврит: шейпинг и bidi
+pip install "chrome-lens-py[fonts]"      # fontTools, подбор шрифта по символам
 ```
 
-Или установите последнюю версию напрямую с GitHub:
+Или последняя версия прямо с GitHub:
 ```bash
 pip install git+https://github.com/bropines/chrome-lens-py.git
 ```
+
+### Если Python нет: standalone одной строкой
+
+Скачивает последний релиз, **проверяет SHA-256**, распаковывает, кладёт
+`lens_scan` в PATH и убеждается, что бинарь стартует.
+
+```powershell
+irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.sh | sh
+```
+
+Ставится в `%LOCALAPPDATA%\Programs\lens-scan` или `~/.local/share/lens-scan`.
+
+К каждому архиву в релизе лежит `.sha256`, установщики сверяют его до
+распаковки. Проверить руками:
+
+```bash
+sha256sum -c lens_scan-linux-amd64.zip.sha256
+```
+
+Стоит понимать, что именно это даёт: ловит битую или недокачанную загрузку и
+CDN, отдавший не то, что загружали. Это не подпись — тот, кто может переписать
+релиз, перепишет и контрольную сумму.
+
+### Какая копия запускается
+
+Имя `lens_scan` могут занимать сразу несколько установок — pip, `uv tool`,
+editable-чекаут и standalone-сборка. Чтобы не гадать:
+
+```bash
+lens_scan --version
+```
+
+Печатает версию, откуда она загружена (пакет, исходники, standalone), путь до
+интерпретатора и до самого пакета.
 ## 🚀 Использование
 
 
@@ -104,7 +145,28 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--font <путь>` | | Путь к файлу шрифта `.ttf` для наложения текста. |
 | `--font-size <размер>` | | Размер шрифта для наложения (по умолчанию: 20). |
 | `--proxy <url>` | | URL прокси-сервера (например, `socks5://127.0.0.1:9050`). |
+| `--no-env-proxy` | | Игнорировать `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` из окружения и идти напрямую. |
+| `--concurrency <N>` | | Максимум одновременных запросов (по умолчанию 5, потолок 30). |
+| `--timeout <сек>` | | Таймаут запроса в секундах (по умолчанию 60). |
+| `--overlay-mode <режим>`| | `chromium` (по умолчанию) или `legacy` — старое наложение белым боксом. |
+| `--vertical-text <режим>`| | Вертикальный CJK: `auto`, `keep` или `horizontal`. |
+| `--erase-mode <режим>` | | `patch` (серверный inpaint) или `hull` (залить область целиком). |
+| `--hull-padding <N>` | | Отступ оболочки за текст, в долях высоты строки. |
+| `--outline <N>` | | Множитель обводки под текстом; `0` убирает. |
+| `--min-text-size <px>` | | Нижняя граница кегля для читаемости. |
+| `--text-align <сторона>`| | `auto`, `left`, `center` или `right`. |
+| `--manga` | | Пресет для вертикальной манги (см. раздел о рендеринге). |
+| `--manga-growth <N>` | | Насколько шире бокса раскладывать в режиме манги. |
+| `--region <cx,cy,w,h>` | | Перечитать одну область в исходном разрешении (доли 0..1). |
+| `--text-query <текст>` | | Текст-вопрос вместе с `--region`. |
+| `--serve` | | Запустить локальный HTTP-демон вместо обработки картинки. |
+| `--host <адрес>` | | Адрес для демона (по умолчанию `127.0.0.1`). |
+| `--port <N>` | | Порт для демона (по умолчанию `8765`). |
+| `--token <токен>` | | Требовать bearer-токен. Обязателен, если `--host` не loopback. |
+| `--allow-origin <origin>`| | Пустить один браузерный origin к демону (можно повторять). По умолчанию ни одного. |
+| `--setup-sharex` | | Автоматически прописать `lens_scan` в ShareX. |
 | `--logging-level <ур>`| `-l` | Установить уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `--version` | `-V` | Показать версию и то, какая именно копия запускается. |
 | `--help` | `-h` | Показать это справочное сообщение. |
 
   #### **Примеры**
@@ -343,12 +405,23 @@ asyncio.run(process_with_details())
       timeout: int = 60,
       font_path: Optional[str] = None,
       font_size: Optional[int] = None,
-      max_concurrent: int = 5
+      max_concurrent: int = 5,
+      trust_env: bool = True,
   )
+  ```
+  -   **`trust_env`**: Учитывать ли `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` из окружения. Поставьте `False`, если запросы намертво виснут из-за забытой переменной прокси — именно это было причиной жалоб «работает только с включённым прокси».
+
+  `LensAPI` — асинхронный контекстный менеджер, закрытие возвращает соединения
+  из пула:
+
+  ```python
+  async with LensAPI() as api:
+      ...
+  # либо: api = LensAPI(); ...; await api.aclose()
   ```
 
   #### **Метод `process_image`**
-  
+
   ```python
   result: dict = await api.process_image(
       image_path: Any,
@@ -356,12 +429,26 @@ asyncio.run(process_with_details())
       target_translation_language: Optional[str] = None,
       source_translation_language: Optional[str] = None,
       output_overlay_path: Optional[str] = None,
+      new_session: bool = True,
       ocr_preserve_line_breaks: bool = True,
-      output_format: Literal['full_text', 'blocks', 'lines', 'detailed'] = 'full_text''
+      output_format: Literal['full_text', 'blocks', 'lines', 'detailed'] = 'full_text',
+      # рендер наложения; за что отвечает каждый — в разделе о рендеринге
+      overlay_mode: Literal['chromium', 'legacy'] = 'chromium',
+      vertical_text: Literal['keep', 'auto', 'horizontal'] = 'auto',
+      erase_mode: Literal['patch', 'hull'] = 'patch',
+      hull_padding: float = 0.45,
+      outline_scale: float = 1.0,
+      min_readable_px: float = 0.0,
+      text_align: Literal['auto', 'left', 'center', 'right'] = 'auto',
+      manga_mode: bool = False,
+      manga_box_growth: float = 1.45,
+      include_raw_response: bool = False,
   )
   ```
-  -   **`output_format`**: Управляет структурой OCR-вывода. `'full_text'` (по умолчанию) возвращает одну строку в `ocr_text`. `'blocks'` возвращает список в `text_blocks`. `'lines'` возвращает список в `line_blocks`. `'detailed'` возвращает полностью вложенную структуру в `detailed_blocks`.`
+  -   **`output_format`**: Управляет структурой OCR-вывода. `'full_text'` (по умолчанию) возвращает одну строку в `ocr_text`. `'blocks'` возвращает список в `text_blocks`. `'lines'` возвращает список в `line_blocks`. `'detailed'` возвращает полностью вложенную структуру в `detailed_blocks`.
   -   **`ocr_preserve_line_breaks`**: Если `False` и `output_format` равен `'full_text'`, объединяет весь текст OCR в одну строку.
+  -   **`include_raw_response`**: По умолчанию выключен. Сырые protobuf-объекты большие и не сериализуются, поэтому прикладываются только по запросу.
+  -   Параметры рендера имеют смысл только вместе с `output_overlay_path`. У каждого есть одноимённый флаг CLI — см. [Рендеринг перевода](#-рендеринг-перевода).
 
   **Возвращаемый словарь `result` содержит:**
   - `ocr_text` (Optional[str]): Полный распознанный текст (если `output_format='full_text'`).
@@ -370,7 +457,20 @@ asyncio.run(process_with_details())
   - `translated_text` (Optional[str]): Переведенный текст, если был запрошен.
   - `word_data` (List[dict]): Список словарей для каждого распознанного слова с его геометрией.
   - `detailed_blocks` (Optional[List[dict]]): Список полностью структурированных текстовых блоков (если `output_format='detailed'`). Каждый блок содержит строки, которые, в свою очередь, содержат слова, с геометрией на каждом уровне.
-  - `raw_response_objects`: "Сырой" Protobuf-объект ответа для дальнейшего анализа.
+  - `raw_response_objects`: "Сырой" Protobuf-объект ответа — **только при `include_raw_response=True`**.
+
+  #### **Метод `process_region`**
+
+  ```python
+  result: dict = await api.process_region(
+      image_path: Any,
+      region: Tuple[float, float, float, float],   # center_x, center_y, w, h
+      ocr_language: Optional[str] = None,
+      text_query: Optional[str] = None,
+      ocr_preserve_line_breaks: bool = True,
+  )
+  ```
+  Перечитывает одну область в исходном разрешении. См. [Запрос по области](#-запрос-по-области).
 
 </details>
 
@@ -400,6 +500,121 @@ asyncio.run(process_with_details())
   ```
 
 </details>
+
+## 🖥️ Режим демона
+
+Импорт Pillow, protobuf и httpx стоит около секунды. Если `lens_scan` вызывается
+часто — например, ShareX на каждый скриншот — этот импорт можно оплатить один раз:
+
+```bash
+lens_scan --serve                      # http://127.0.0.1:8765
+lens_scan --serve --port 9000 --token secret
+```
+
+| маршрут | тело запроса |
+|---|---|
+| `POST /v1/ocr` | `{"image": "<путь или URL>"}` либо `{"image_b64": "..."}`, плюс любые из `translate_to`, `translate_from`, `ocr_language`, `ocr_preserve_line_breaks`, `output_format`, `overlay_path`, `overlay_mode`, `vertical_text`, `erase_mode`, `hull_padding`, `outline_scale`, `min_readable_px`, `text_align`, `manga_mode`, `manga_box_growth` |
+| `POST /v1/region` | тот же источник, плюс `"region": [center_x, center_y, width, height]` в долях 0..1 и необязательный `text_query` |
+| `GET /health` | проверка живости, отдаёт версию |
+
+Все опции рендеринга, что есть в CLI, принимаются здесь под теми же именами:
+`--erase-mode hull --outline 3` в командной строке — это `"erase_mode": "hull",
+"outline_scale": 3` в теле. Запросы обязаны быть `Content-Type: application/json`.
+
+### Кто может до него достучаться
+
+Демон держит API-ключ и сходит в Google за любого, кто до него дозвонился,
+поэтому по умолчанию он закрыт:
+
+- **Ни одна веб-страница им не воспользуется.** Запрос с заголовком `Origin`
+  отклоняется, если этот origin не указан в `--allow-origin`. Проверяется именно
+  *запрос*, а не ответ: страница может отправить POST, который ей запрещено
+  прочитать, и всё равно получить нужный ей побочный эффект — запрос к Google на
+  ваш ключ или открытый файл с вашего диска.
+- **`--host` вне loopback требует `--token`**, и тогда принимается только
+  `image_b64`. Путь или URL — это то, что демон открывает сам: на сетевом
+  слушателе это чтение вашего диска и поход на хост по выбору вызывающего.
+- Токен сравнивается за постоянное время.
+
+```bash
+# открыть одной своей странице
+lens_scan --serve --allow-origin https://yoursite.example
+
+# наружу: токен обязателен, принимаются только пиксели
+lens_scan --serve --host 0.0.0.0 --token "$(openssl rand -hex 24)"
+```
+
+Userscript'у для Tampermonkey всё это **не нужно** — он ходит в Google напрямую
+через `GM_xmlhttpRequest`, на который CORS не распространяется. Открывать демон
+браузерному origin'у имеет смысл только для страниц, которые вы пишете сами.
+
+## 🔍 Запрос по области
+
+Полнокадровый проход ужимает всё, что больше 1600px, — ровно там, где мелкий
+текст и страдает. Запрос по области отправляет только вырезанные пиксели, в
+исходном масштабе:
+
+```python
+async with LensAPI() as api:
+    # (center_x, center_y, width, height) в долях от полного изображения
+    result = await api.process_region("page.png", (0.8, 0.82, 0.35, 0.06))
+    print(result["ocr_text"])
+```
+
+```bash
+lens_scan page.png --region 0.8,0.82,0.35,0.06
+lens_scan page.png --region 0.8,0.82,0.35,0.06 --text-query "что тут написано"
+```
+
+Геометрия возвращается в координатах полного изображения, так что напрямую
+сопоставима с выводом `process_image`.
+
+## 🎨 Рендеринг перевода
+
+```bash
+lens_scan manga.png -t ru -to out.png                      # как в Chromium, по умолчанию
+lens_scan manga.png -t ru -to out.png --vertical-text horizontal
+lens_scan page.png  -t ru -to out.png --overlay-mode legacy
+```
+
+`--vertical-text` решает судьбу вертикального CJK-текста:
+
+| значение | поведение |
+|---|---|
+| `auto` (по умолчанию) | остаётся вертикальным, только если переводим в CJK-язык |
+| `keep` | всегда вертикально, ровно как Chromium |
+| `horizontal` | абзац переливается в горизонтальные строки с переносами |
+
+### Чтобы результат читался
+
+Chromium перерисовывает строку в тот же бокс, где была исходная. Для дорожного
+знака это верно, для облачка в манге — нет: перевод заметно длиннее японского,
+который он заменяет. Эти ручки существуют ради этого разрыва:
+
+| флаг | параметр API | что делает |
+|---|---|---|
+| `--erase-mode patch\|hull` | `erase_mode` | `patch` — серверный inpaint, как в Chromium. `hull` — обводит область текста выпуклой оболочкой и заливает цветом фона: чище, но только там, где этот цвет ровный. |
+| `--hull-padding N` | `hull_padding` | Насколько оболочка выходит за текст, в долях высоты строки (по умолчанию `0.45`). |
+| `--outline N` | `outline_scale` | Множитель обводки под переведённым текстом; `0` убирает её. Рисуется настоящим штрихом, поэтому остаётся чистой вплоть до `8`. |
+| `--min-text-size PX` | `min_readable_px` | Нижняя граница кегля. Увеличение текста **не** увеличивает стираемую область — она меряется по тексту как он реально нарисован. |
+| `--text-align auto\|left\|center\|right` | `text_align` | `auto` повторяет исходную строку. |
+| `--manga` | `manga_mode` | Пресет для страниц вертикального японского: всегда переливать, раскладывать шире найденного бокса, стирать оболочкой, крупнее минимальный размер. |
+| `--manga-growth N` | `manga_box_growth` | Насколько шире найденного бокса раскладывать в режиме манги (по умолчанию `1.45`). |
+
+```bash
+lens_scan page.png -t ru -to out.png --manga
+lens_scan page.png -t ru -to out.png --erase-mode hull --outline 3 --min-text-size 18
+```
+
+Для языков справа налево (арабский, иврит, фарси…) нужен шейпинг, которого нет в
+опубликованных колёсах Pillow — они собраны без libraqm:
+
+```bash
+pip install "chrome-lens-py[rtl]"      # python-bidi + arabic-reshaper
+pip install "chrome-lens-py[fonts]"    # fontTools, подбор шрифта по символам
+```
+
+Без extra `fonts` рендер работает, но шрифт без нужных глифов нарисует «тофу».
 
 ## Интеграция Sharex
 Посмотрите [sharex.md](docs/sharex.md) для получения дополнительной информации о том, как использовать эту библиотеку с ShareX.
