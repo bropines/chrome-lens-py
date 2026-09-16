@@ -124,6 +124,21 @@ def print_help():
         "  --vertical-text MODE",
         "Vertical (CJK) source text: auto (default), keep, or horizontal.",
     )
+    table.add_row(
+        "  --manga",
+        "Preset for vertical Japanese: reflow, wider layout, hull erasing, bigger text.",
+    )
+    table.add_row(
+        "  --erase-mode MODE",
+        "How to remove the source: 'patch' (Chromium) or 'hull' (cover the area).",
+    )
+    table.add_row(
+        "  --outline N", "Outline thickness behind translated text (0 removes it)."
+    )
+    table.add_row(
+        "  --min-text-size PX", "Enlarge text that would render smaller than this."
+    )
+    table.add_row("  --text-align SIDE", "auto (follow source), left, center or right.")
     table.add_row("  --font FONT_PATH", "Path to a .ttf font file for the overlay.")
     table.add_row("  --font-size SIZE", "Font size for the overlay (default: 20).")
     table.add_row("\n[bold]Advanced & Debug Options:[/bold]")
@@ -240,6 +255,42 @@ async def cli_main():
         help="Top-to-bottom source text: 'auto' (default) keeps it vertical only "
         "when translating into a CJK language, 'keep' always renders vertically "
         "like Chromium, 'horizontal' always reflows the paragraph.",
+    )
+    parser.add_argument(
+        "--erase-mode",
+        choices=["patch", "hull"],
+        default="patch",
+        help="How to remove the source text: 'patch' uses the server's "
+        "inpainting like Chromium, 'hull' covers the whole text area with its "
+        "background colour (cleaner, but only right where that colour is flat).",
+    )
+    parser.add_argument("--hull-padding", type=float, default=0.45)
+    parser.add_argument(
+        "--outline",
+        dest="outline_scale",
+        type=float,
+        default=1.0,
+        help="Multiplier on the outline behind translated text; 0 removes it.",
+    )
+    parser.add_argument(
+        "--min-text-size",
+        dest="min_readable_px",
+        type=float,
+        default=0.0,
+        help="Enlarge text that would render smaller than this many pixels.",
+    )
+    parser.add_argument(
+        "--text-align", choices=["auto", "left", "center", "right"], default="auto"
+    )
+    parser.add_argument(
+        "--manga",
+        dest="manga_mode",
+        action="store_true",
+        help="Preset for pages of vertical Japanese: always reflow, lay out "
+        "wider than the detected box, erase by hull, bigger minimum size.",
+    )
+    parser.add_argument(
+        "--manga-growth", dest="manga_box_growth", type=float, default=1.45
     )
     parser.add_argument("--font", dest="font_path")
     parser.add_argument("--font-size", type=int)
@@ -468,6 +519,13 @@ async def cli_main():
                             output_format=output_format,
                             overlay_mode=args.overlay_mode,
                             vertical_text=args.vertical_text,
+                            erase_mode=args.erase_mode,
+                            hull_padding=args.hull_padding,
+                            outline_scale=args.outline_scale,
+                            min_readable_px=args.min_readable_px,
+                            text_align=args.text_align,
+                            manga_mode=args.manga_mode,
+                            manga_box_growth=args.manga_box_growth,
                         )
                     except Exception as e:
                         result = e

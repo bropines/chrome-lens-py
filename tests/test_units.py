@@ -23,10 +23,10 @@ from chrome_lens_py.core.text_renderer import (
     _wrap_text,
     build_line_text,
     fit_font_size,
+    wraps_per_character,
 )
 from chrome_lens_py.exceptions import LensImageError, LensProtobufError
 from chrome_lens_py.server import json_safe
-
 
 # --------------------------------------------------------------- downscaling
 
@@ -155,7 +155,14 @@ def test_fit_font_size_never_exceeds_bounds():
 
 @pytest.mark.parametrize(
     "char,upright",
-    [("今", True), ("は", True), ("ア", True), ("한", True), ("A", False), ("7", False)],
+    [
+        ("今", True),
+        ("は", True),
+        ("ア", True),
+        ("한", True),
+        ("A", False),
+        ("7", False),
+    ],
 )
 def test_upright_classification(char, upright):
     assert _is_upright(char) is upright
@@ -187,12 +194,29 @@ def test_wrap_text_breaks_on_words():
     assert all(line.strip() for line in lines)
 
 
-def test_wrap_text_falls_back_to_characters_without_spaces():
+def test_wrap_text_breaks_between_characters_when_asked():
     from PIL import ImageFont
 
     font = ImageFont.load_default(20)
-    lines = _wrap_text("今天天气不错今天天气不错", font, 40)
+    lines = _wrap_text("今天天气不错今天天气不错", font, 40, per_character=True)
     assert len(lines) > 1
+
+
+def test_wrap_text_never_splits_a_word_it_was_not_asked_to():
+    # Deciding per-character wrapping from whether the string contained a space
+    # split short Russian words letter by letter down a column.
+    from PIL import ImageFont
+
+    font = ImageFont.load_default(20)
+    lines = _wrap_text("Уже", font, 8)
+    assert lines == ["Уже"]
+
+
+def test_wraps_per_character_follows_the_target_language():
+    assert wraps_per_character("ja") is True
+    assert wraps_per_character("zh-CN") is True
+    assert wraps_per_character("ru") is False
+    assert wraps_per_character("") is False
 
 
 # -------------------------------------------------------------------- colours

@@ -134,6 +134,15 @@ def shape_for_display(text: str, is_rtl: bool) -> str:
         return text
 
 
+def _load_font(font_path: Optional[str], size: int) -> ImageFont.FreeTypeFont:
+    size = max(RENDER_MIN_FONT_SIZE, min(int(size), RENDER_MAX_FONT_SIZE))
+    return (
+        ImageFont.truetype(font_path, size)
+        if font_path
+        else ImageFont.load_default(size)
+    )
+
+
 def fit_font_size(
     text: str, font_path: Optional[str], box_width: float, box_height: float
 ) -> Tuple[ImageFont.FreeTypeFont, int]:
@@ -184,6 +193,85 @@ _UPRIGHT_RANGES = (
     (0xFF00, 0xFF60),  # Full-width forms
     (0xFFE0, 0xFFE6),  # Full-width signs
 )
+
+
+def _box_corners(box, width: int, height: int) -> List[Tuple[float, float]]:
+    """The four corners of a rotated line box, in image pixels."""
+    cx, cy = box.center_x * width, box.center_y * height
+    half_w, half_h = box.width * width / 2, box.height * height / 2
+    # Pillow draws counter-clockwise; rotation_z is clockwise.
+    angle = -box.rotation_z
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+    return [
+        (cx + dx * cos_a - dy * sin_a, cy + dx * sin_a + dy * cos_a)
+        for dx, dy in (
+            (-half_w, -half_h),
+            (half_w, -half_h),
+            (half_w, half_h),
+            (-half_w, half_h),
+        )
+    ]
+
+
+def _convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    """Andrew's monotone chain."""
+    if len(points) < 3:
+        return list(points)
+
+    ordered = sorted(set(points))
+
+    def half(seq):
+        chain: List[Tuple[float, float]] = []
+        for point in seq:
+            while len(chain) >= 2:
+                (ox, oy), (ax, ay) = chain[-2], chain[-1]
+                if (ax - ox) * (point[1] - oy) - (ay - oy) * (point[0] - ox) > 0:
+                    break
+                chain.pop()
+            chain.append(point)
+        return chain[:-1]
+
+    return half(ordered) + half(reversed(ordered))
+
+
+def _erase_text_area(canvas: Image.Image, paragraph, data, padding: float) -> None:
+    """Cover the whole area the source text occupied, in one shape.
+
+    The server's inpainting erases glyphs but keeps their anti-aliased edges,
+    and on a page of vertical text that residue reads as noise. The paragraph's
+    bounding box is the wrong shape to cover it with: for columns at an angle,
+    or ragged lines, a rectangle takes in far more than the text and an ellipse
+    inscribed in it takes in too little at the corners. The hull of every line
+    box's corners is exactly the text's extent.
+    """
+    width, height = canvas.size
+    points: List[Tuple[float, float]] = []
+    thinnest = float("inf")
+
+    for line in paragraph.lines:
+        if not line.HasField("geometry"):
+            continue
+        box = line.geometry.bounding_box
+        points.extend(_box_corners(box, width, height))
+        thinnest = min(thinnest, box.width * width, box.height * height)
+
+    hull = _convex_hull(points)
+    if len(hull) < 3 or not data.line:
+        return
+
+    colour = _argb_to_rgba(data.line[0].style.background_primary_color)
+    pad = int(round(thinnest * padding)) if thinnest != float("inf") else 0
+
+    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    draw.polygon(hull, fill=colour)
+    if pad > 0:
+        # Widening the outline with a thick round-jointed line grows the shape
+        # by `pad` in every direction and rounds its corners in one step.
+        draw.line(hull + [hull[0]], fill=colour, width=pad * 2, joint="curve")
+        for x, y in hull:
+            draw.ellipse((x - pad, y - pad, x + pad, y + pad), fill=colour)
+    canvas.alpha_composite(layer)
 
 
 def _is_upright(char: str) -> bool:
@@ -314,15 +402,18 @@ def _render_vertical_tile(
     }.get(align, (box_h - total_h) / 2)
 
     def stamp(target: ImageDraw.ImageDraw, px: float, py: float, glyph: str):
-        if outline and outline_color:
-            for dx, dy in (
-                (-outline, outline),
-                (outline, outline),
-                (outline, -outline),
-                (-outline, -outline),
-            ):
-                target.text((px + dx, py + dy), glyph, font=font, fill=outline_color)
-        target.text((px, py), glyph, font=font, fill=fill)
+        # Pillow strokes text natively. Chromium uses four offset copies only
+        # because CSS has no portable text stroke, and that reads as an outline
+        # only while the offset is a pixel or two - past that the copies
+        # separate into ghosts with gaps between them.
+        target.text(
+            (px, py),
+            glyph,
+            font=font,
+            fill=fill,
+            stroke_width=outline if outline_color else 0,
+            stroke_fill=outline_color,
+        )
 
     for upright, run in _vertical_runs(text):
         if upright:
@@ -383,17 +474,26 @@ def font_for_text(text: str, preferred: Optional[str]) -> Optional[str]:
         return preferred
 
 
-def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> List[str]:
-    """Greedy wrap. Falls back to per-character when the script has no spaces."""
+def _wrap_text(
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: float,
+    per_character: bool = False,
+) -> List[str]:
+    """Greedy wrap, breaking between words or between characters.
+
+    Which of the two applies is a property of the *language*, not of the string
+    in hand. Deciding it from whether the text happened to contain a space split
+    short words - a one-word Russian bubble came out stacked letter by letter.
+    """
     lines: List[str] = []
     for hard_line in text.splitlines() or [""]:
         if not hard_line:
             lines.append("")
             continue
 
-        # ja/zh/ko translations arrive without spaces to break on.
-        tokens = hard_line.split() if " " in hard_line else list(hard_line)
-        joiner = " " if " " in hard_line else ""
+        tokens = list(hard_line) if per_character else hard_line.split()
+        joiner = "" if per_character else " "
 
         current = ""
         for token in tokens:
@@ -408,8 +508,18 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> Lis
     return lines
 
 
+def wraps_per_character(target_language: str) -> bool:
+    """ja, zh and ko break between characters; everything else between words."""
+    base = (target_language or "").split("-")[0].lower()
+    return base in _CJK_LANGUAGES or target_language.lower() in _CJK_LANGUAGES
+
+
 def fit_text_block(
-    text: str, font_path: Optional[str], box_w: float, box_h: float
+    text: str,
+    font_path: Optional[str],
+    box_w: float,
+    box_h: float,
+    per_character: bool = False,
 ) -> Tuple[ImageFont.FreeTypeFont, int, List[str]]:
     """Largest font at which `text` wraps to fit inside the box.
 
@@ -435,7 +545,7 @@ def fit_text_block(
         mid = (low + high) // 2
         font = load(mid)
         ascent, descent = font.getmetrics()
-        lines = _wrap_text(text, font, box_w)
+        lines = _wrap_text(text, font, box_w, per_character)
         total_h = len(lines) * (ascent + descent)
         widest = max((font.getlength(ln) for ln in lines), default=0.0)
         if widest >= box_w or total_h >= box_h:
@@ -446,7 +556,7 @@ def fit_text_block(
 
     size = max(RENDER_MIN_FONT_SIZE, min(low - 1, RENDER_MAX_FONT_SIZE))
     font = load(size)
-    return font, size, best or _wrap_text(text, font, box_w)
+    return font, size, best or _wrap_text(text, font, box_w, per_character)
 
 
 def _render_text_block(
@@ -473,15 +583,14 @@ def _render_text_block(
             "center": (box_w - advance) / 2,
             "right": box_w - advance,
         }.get(align, (box_w - advance) / 2)
-        if outline and outline_color:
-            for dx, dy in (
-                (-outline, outline),
-                (outline, outline),
-                (outline, -outline),
-                (-outline, -outline),
-            ):
-                draw.text((x + dx, y + dy), line, font=font, fill=outline_color)
-        draw.text((x, y), line, font=font, fill=fill)
+        draw.text(
+            (x, y),
+            line,
+            font=font,
+            fill=fill,
+            stroke_width=outline if outline_color else 0,
+            stroke_fill=outline_color,
+        )
         y += em
     return tile
 
@@ -544,7 +653,14 @@ def render_translation_overlay(
     objects_response: "LensOverlayObjectsResponse",
     font_path: Optional[str] = None,
     draw_background: bool = True,
-    vertical_text: str = "keep",
+    vertical_text: str = "auto",
+    erase_mode: str = "patch",
+    hull_padding: float = 0.45,
+    outline_scale: float = 1.0,
+    min_readable_px: float = 0.0,
+    text_align: str = "auto",
+    manga_mode: bool = False,
+    manga_box_growth: float = 1.45,
 ) -> Image.Image:
     """Repaint translated text onto the image, Chromium-style.
 
@@ -560,7 +676,28 @@ def render_translation_overlay(
                      painful to read set vertically, and the source line boxes
                      are tall narrow columns that horizontal text cannot occupy,
                      so the paragraph box is used as one text area instead.
+
+    `erase_mode` chooses how the source is removed:
+      "patch" - the server's inpainted patches, as Chromium does. Faithful, but
+                it erases glyphs while keeping their anti-aliased edges, and on
+                a page of vertical text that residue reads as noise.
+      "hull"  - cover the convex hull of the line boxes with the line's
+                background colour. Only right where that colour is flat, which
+                inside a speech bubble it is.
+
+    `min_readable_px` raises text that would otherwise render too small to read:
+    Lens fits text to the original line box, so fine print on a large page comes
+    back at a few pixels. Lines can then overlap, which is why it is optional.
+
+    `manga_mode` bundles the settings a page of vertical Japanese wants: always
+    reflow, lay out wider than the detected box, erase by hull, and a floor of
+    at least 14px.
     """
+    if manga_mode:
+        vertical_text = "horizontal"
+        erase_mode = "hull"
+        min_readable_px = max(min_readable_px, 14.0)
+
     canvas = image.convert("RGBA")
     width, height = canvas.size
     aspect = width / height
@@ -594,9 +731,18 @@ def render_translation_overlay(
             data.writing_direction == _WRITING_DIRECTION_RTL
             or data.target_language.split("-")[0].lower() in RTL_LANGUAGES
         )
-        align = _ALIGNMENT.get(data.alignment, "center")
-        if is_rtl and align == "left":
-            align = "right"
+        # Chromium always follows the source. Once text has been reflowed into a
+        # shape the source never had, that stops being obviously right.
+        if text_align != "auto":
+            align = text_align
+        else:
+            align = _ALIGNMENT.get(data.alignment, "center")
+            if is_rtl and align == "left":
+                align = "right"
+
+        use_hull = draw_background and erase_mode == "hull"
+        if use_hull:
+            _erase_text_area(canvas, paragraph, data, hull_padding)
 
         reflow = vertical and should_reflow_horizontally(
             vertical_text, data.target_language
@@ -623,7 +769,11 @@ def render_translation_overlay(
                 )
 
             pbox = paragraph.geometry.bounding_box
-            pw, ph = pbox.width * width, pbox.height * height
+            # The detected box hugs the glyphs. A speech bubble is round and has
+            # room around them, so manga mode lays out wider than the box.
+            growth = max(1.0, manga_box_growth) if manga_mode else 1.0
+            pw = pbox.width * width * growth
+            ph = pbox.height * height * min(growth, 1.2)
             text = shape_for_display(data.translation.strip(), is_rtl)
             if pw >= 1 and ph >= 1 and text:
                 text_color = (
@@ -631,11 +781,20 @@ def render_translation_overlay(
                 )
                 outline_color = (
                     _argb_to_rgba(style.background_primary_color)
-                    if (has_inpaint and style)
+                    if ((has_inpaint or use_hull) and style)
                     else None
                 )
                 line_font = font_for_text(text, font_path)
-                font, font_size, lines = fit_text_block(text, line_font, pw, ph)
+                font, font_size, lines = fit_text_block(
+                    text, line_font, pw, ph, wraps_per_character(data.target_language)
+                )
+                floor = int(round(min_readable_px))
+                if floor > font_size:
+                    font = _load_font(line_font, floor)
+                    font_size = floor
+                    lines = _wrap_text(
+                        text, font, pw, wraps_per_character(data.target_language)
+                    )
                 tile = _render_text_block(
                     lines,
                     font,
@@ -671,10 +830,13 @@ def render_translation_overlay(
             cx, cy = box.center_x * width, box.center_y * height
 
             has_inpaint = False
-            if draw_background:
+            if draw_background and not use_hull:
                 has_inpaint = _draw_background(
                     canvas, tline, box_w, box_h, cx, cy, deg, aspect
                 )
+            elif use_hull:
+                # The hull already covers the source; the outline still helps.
+                has_inpaint = True
 
             next_line = (
                 data.line[line_index + 1] if line_index + 1 < len(data.line) else None
@@ -694,6 +856,7 @@ def render_translation_overlay(
             )
 
             line_font = font_for_text(text, font_path)
+            floor = int(round(min_readable_px))
             if vertical:
                 font, font_size = fit_font_size_vertical(text, line_font, box_w, box_h)
                 outline = (
@@ -713,6 +876,8 @@ def render_translation_overlay(
                 )
             else:
                 font, font_size = fit_font_size(text, line_font, box_w, box_h)
+                if floor > font_size:
+                    font, font_size = _load_font(line_font, floor), floor
                 advance = font.getlength(text)
                 ascent, descent = font.getmetrics()
 
@@ -727,16 +892,19 @@ def render_translation_overlay(
                 }[align]
                 y = (box_h - (ascent + descent)) / 2
 
-                if outline_color:
-                    outline = max(1, round(font_size * RENDER_OUTLINE_RATIO))
-                    for dx, dy in (
-                        (-outline, outline),
-                        (outline, outline),
-                        (outline, -outline),
-                        (-outline, -outline),
-                    ):
-                        draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-                draw.text((x, y), text, font=font, fill=text_color)
+                outline = (
+                    max(1, round(font_size * RENDER_OUTLINE_RATIO * outline_scale))
+                    if outline_color
+                    else 0
+                )
+                draw.text(
+                    (x, y),
+                    text,
+                    font=font,
+                    fill=text_color,
+                    stroke_width=outline,
+                    stroke_fill=outline_color,
+                )
 
             _paste_rotated(canvas, tile, cx, cy, deg)
             rendered_lines += 1

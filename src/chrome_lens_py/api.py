@@ -433,6 +433,13 @@ class LensAPI:
         ] = "full_text",
         overlay_mode: Literal["chromium", "legacy"] = "chromium",
         vertical_text: Literal["keep", "auto", "horizontal"] = "auto",
+        erase_mode: Literal["patch", "hull"] = "patch",
+        hull_padding: float = 0.45,
+        outline_scale: float = 1.0,
+        min_readable_px: float = 0.0,
+        text_align: Literal["auto", "left", "center", "right"] = "auto",
+        manga_mode: bool = False,
+        manga_box_growth: float = 1.45,
         include_raw_response: bool = False,
     ) -> Dict[str, Any]:
 
@@ -503,6 +510,13 @@ class LensAPI:
                             response_proto.objects_response,
                             font_path=self._get_font_path(),
                             vertical_text=vertical_text,
+                            erase_mode=erase_mode,
+                            hull_padding=hull_padding,
+                            outline_scale=outline_scale,
+                            min_readable_px=min_readable_px,
+                            text_align=text_align,
+                            manga_mode=manga_mode,
+                            manga_box_growth=manga_box_growth,
                         )
                     else:
                         word_boxes_norm = []
