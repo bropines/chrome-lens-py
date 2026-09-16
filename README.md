@@ -49,9 +49,11 @@ This will automatically configure a hotkey (**Ctrl + O**) and the necessary acti
     -   Get individual text lines with their own precise geometry.
 -   **Built-in Translation**: Instantly translate recognized text into any supported language.
 -   **Versatile Image Sources**: Process images from a **file path**, **URL**, **bytes**, **PIL Image** object, or **NumPy array**.
--   **Text Overlay**: Automatically generate and save images with the translated text rendered over them(works poorly, alas, no time to do better).
+-   **Chromium-Accurate Text Overlay**: Repaints translated text in place the way Chrome's own Lens overlay does — erasing the source with the server's inpainted background patch, then drawing the translation in the original colours, angle and line box. Handles right-to-left scripts, vertical CJK, and per-character font fallback.
+-   **Region Queries**: Re-read one region of an image at native resolution (`process_region`), which reads small print far better than the full-image pass.
+-   **Local Daemon**: `lens_scan --serve` keeps a warm process so callers skip the ~1.2 s interpreter start on every invocation. Doubles as a backend for browser userscripts.
 -   **Feature-Rich CLI**: A simple yet powerful command-line interface (`lens_scan`) for quick use.
--   **Proxy Support**: Full support for HTTP, HTTPS, and SOCKS proxies.
+-   **Proxy Support**: Full support for HTTP, HTTPS, and SOCKS proxies, plus `--no-env-proxy` when you want to bypass the proxy your environment sets.
 -   **Clipboard Integration**: Instantly copy OCR or translation results to your clipboard with the `--sharex` flag.
 -   **Flexible Configuration**: Manage settings via a `config.json` file, CLI arguments, or environment variables.
 
@@ -401,6 +403,69 @@ asyncio.run(process_with_details())
   ```
 
 </details>
+
+## 🖥️ Daemon mode
+
+Importing Pillow, protobuf and httpx costs roughly a second. If something calls
+`lens_scan` repeatedly — ShareX on every screenshot, say — run it as a daemon and
+pay that once:
+
+```bash
+lens_scan --serve                      # http://127.0.0.1:8765
+lens_scan --serve --port 9000 --token secret
+```
+
+| route | body |
+|---|---|
+| `POST /v1/ocr` | `{"image": "<path or URL>"}` or `{"image_b64": "..."}`, plus `translate_to`, `ocr_language`, `output_format`, `vertical_text`, `overlay_mode` |
+| `POST /v1/region` | the same, plus `"region": [center_x, center_y, width, height]` normalized 0..1 |
+| `GET /health` | liveness check |
+
+Measured here: **0.37 s** per request against the daemon versus **1.53 s** for a
+cold CLI invocation. It binds to loopback and sends CORS headers, so a
+Tampermonkey userscript can use it directly.
+
+## 🔍 Region queries
+
+The full-image pass downscales anything over 1600px, which is exactly when small
+print suffers. A region query sends only the cropped pixels, at native scale:
+
+```python
+async with LensAPI() as api:
+    # (center_x, center_y, width, height), normalized against the full image
+    result = await api.process_region("page.png", (0.8, 0.82, 0.35, 0.06))
+    print(result["ocr_text"])
+```
+
+Geometry comes back in full-image coordinates, so it lines up with
+`process_image` output directly.
+
+## 🎨 Overlay rendering
+
+```bash
+lens_scan manga.png -t ru -to out.png                      # Chromium-style, default
+lens_scan manga.png -t ru -to out.png --vertical-text horizontal
+lens_scan page.png  -t ru -to out.png --overlay-mode legacy
+```
+
+`--vertical-text` controls what happens to top-to-bottom CJK source text:
+
+| value | behaviour |
+|---|---|
+| `auto` (default) | stays vertical only when translating into a CJK language |
+| `keep` | always vertical, exactly like Chromium |
+| `horizontal` | reflows the paragraph into horizontal wrapped lines |
+
+Right-to-left targets (Arabic, Hebrew, Persian…) need shaping that Pillow's
+published wheels cannot do, since they are built without libraqm:
+
+```bash
+pip install "chrome-lens-py[rtl]"      # python-bidi + arabic-reshaper
+pip install "chrome-lens-py[fonts]"    # fontTools, for per-character font fallback
+```
+
+Without the `fonts` extra the renderer still works, but a font lacking glyphs for
+the target script will draw tofu boxes.
 
 ## Sharex Integration
 Check [sharex.md](docs/sharex.md) for more information on how to use this library with ShareX.

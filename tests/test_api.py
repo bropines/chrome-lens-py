@@ -1,4 +1,7 @@
 import pytest
+
+# These hit the real Lens API. Run them with: pytest -m network
+pytestmark = pytest.mark.network
 from chrome_lens_py import LensAPI
 from chrome_lens_py.exceptions import LensException
 

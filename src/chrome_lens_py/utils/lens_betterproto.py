@@ -84,6 +84,9 @@ from .protobufs.lens_overlay_visual_search_interaction_log_data_pb2 import (
 TextLayoutLine = TextLayout.Line
 TextLayoutParagraph = TextLayout.Paragraph
 TextLayoutWord = TextLayout.Word
+TextLayoutWordType = TextLayout.Word.Type
+TranslationDataLine = TranslationData.Line
+BackgroundImageDataFileFormat = TranslationData.BackgroundImageData.FileFormat
 TranslationDataStatusCode = TranslationData.Status
 LensOverlayInteractionRequestMetadataType = LensOverlayInteractionRequestMetadata.Type
 PolygonVertexOrdering = Polygon.VertexOrdering
@@ -149,6 +152,9 @@ __all__ = [
     "TextLayoutLine",
     "TextLayoutParagraph",
     "TextLayoutWord",
+    "TextLayoutWordType",
+    "TranslationDataLine",
+    "BackgroundImageDataFileFormat",
     "TranslationDataStatusCode",
     "LensOverlayInteractionRequestMetadataType",
     "PolygonVertexOrdering",

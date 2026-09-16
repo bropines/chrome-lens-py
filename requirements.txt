@@ -1,10 +1,7 @@
-requests
-Pillow
-filetype
-json5
-PySocks
-httpx[socks]
-numpy
-rich
-#betterproto >= 2.0.0b6
+# Runtime dependencies. Kept in sync with pyproject.toml [project.dependencies];
+# optional extras live there (clipboard, rtl, fonts, numpy).
+httpx[socks,http2]>=0.20
+Pillow>=9.0
 protobuf
+filetype>=1.0
+rich>=10.0

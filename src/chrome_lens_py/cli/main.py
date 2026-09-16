@@ -43,7 +43,9 @@ def setup_logging(level_str: str = "WARNING"):
         format=log_format,
         handlers=[
             RichHandler(
-                console=console,
+                # Logs go to stderr so that piping stdout (ShareX, shell
+                # redirection) yields only the actual result text.
+                console=Console(stderr=True),
                 show_time=False,
                 show_level=log_level <= logging.INFO,
                 show_path=log_level <= logging.DEBUG,
@@ -114,6 +116,14 @@ def print_help():
     table.add_row(
         "  --update-config", "Update the default config file with CLI arguments."
     )
+    table.add_row(
+        "  --overlay-mode MODE",
+        "Overlay renderer: 'chromium' (default, in-place per line) or 'legacy'.",
+    )
+    table.add_row(
+        "  --vertical-text MODE",
+        "Vertical (CJK) source text: auto (default), keep, or horizontal.",
+    )
     table.add_row("  --font FONT_PATH", "Path to a .ttf font file for the overlay.")
     table.add_row("  --font-size SIZE", "Font size for the overlay (default: 20).")
     table.add_row("\n[bold]Advanced & Debug Options:[/bold]")
@@ -121,6 +131,10 @@ def print_help():
     table.add_row(
         "  --proxy URL",
         "Proxy server URL (e.g., http://user:pass@host:port, socks5://host:port).",
+    )
+    table.add_row(
+        "  --no-env-proxy",
+        "Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment and connect directly.",
     )
     table.add_row("  --timeout SECONDS", "Request timeout in seconds (default: 60).")
     table.add_row(
@@ -195,11 +209,44 @@ async def cli_main():
     )
     parser.add_argument("--config-file", dest="config_file_path_override")
     parser.add_argument("--update-config", action="store_true")
+    parser.add_argument(
+        "--overlay-mode",
+        choices=["chromium", "legacy"],
+        default="chromium",
+        help="How to draw --translate-out. 'chromium' repaints each line in "
+        "place using the server's inpainted background; 'legacy' is the old "
+        "white-box overlay.",
+    )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Run as a local HTTP daemon instead of processing one image.",
+    )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--token", help="Require this bearer token on daemon requests.")
+    parser.add_argument(
+        "--region",
+        help="Re-read one region at native resolution: cx,cy,w,h normalized 0..1.",
+    )
+    parser.add_argument(
+        "--vertical-text",
+        choices=["keep", "auto", "horizontal"],
+        default="auto",
+        help="Top-to-bottom source text: 'auto' (default) keeps it vertical only "
+        "when translating into a CJK language, 'keep' always renders vertically "
+        "like Chromium, 'horizontal' always reflows the paragraph.",
+    )
     parser.add_argument("--font", dest="font_path")
     parser.add_argument("--font-size", type=int)
     # Advanced
     parser.add_argument("--api-key")
     parser.add_argument("--proxy")
+    parser.add_argument(
+        "--no-env-proxy",
+        action="store_true",
+        help="Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY and connect directly.",
+    )
     parser.add_argument("--timeout", type=int)
     parser.add_argument(
         "--concurrency",
@@ -217,6 +264,26 @@ async def cli_main():
 
     if args.setup_sharex:
         setup_sharex_config()
+        return
+
+    if args.serve:
+        setup_logging(args.logging_level or "INFO")
+        from ..server import run_server
+
+        console.print(
+            f"[bold green]chrome-lens-py daemon[/bold green] on "
+            f"[cyan]http://{args.host}:{args.port}[/cyan]  "
+            f"(POST /v1/ocr, POST /v1/region, GET /health)"
+        )
+        await run_server(
+            host=args.host,
+            port=args.port,
+            token=args.token,
+            api_key=args.api_key or DEFAULT_API_KEY,
+            proxy=args.proxy,
+            trust_env=not args.no_env_proxy,
+            font_path=args.font_path,
+        )
         return
 
     MAX_CONCURRENCY_HARD_LIMIT = 30
@@ -316,6 +383,7 @@ async def cli_main():
         font_path=app_config.get("font_path"),
         font_size=app_config.get("font_size"),
         max_concurrent=args.concurrency,
+        trust_env=not args.no_env_proxy,
     )
 
     try:
@@ -329,6 +397,18 @@ async def cli_main():
         next_to_print = 0
         results_ready = asyncio.Condition()
 
+        def overlay_path_for(index: int) -> str:
+            """Give every image in a batch its own overlay file.
+
+            A single --translate-out path meant each image overwrote the
+            previous one, so only the last result survived.
+            """
+            base = args.output_overlay_path
+            if not base or len(image_sources) == 1:
+                return base
+            stem, ext = os.path.splitext(base)
+            return f"{stem}_{index + 1}{ext or '.png'}"
+
         async def worker(queue):
             while True:
                 index, path = await queue.get()
@@ -340,11 +420,13 @@ async def cli_main():
                             ocr_language=args.ocr_lang,
                             target_translation_language=args.target_lang,
                             source_translation_language=args.source_lang,
-                            output_overlay_path=args.output_overlay_path,
+                            output_overlay_path=overlay_path_for(index),
                             ocr_preserve_line_breaks=app_config.get(
                                 "ocr_preserve_line_breaks", True
                             ),
                             output_format=output_format,
+                            overlay_mode=args.overlay_mode,
+                            vertical_text=args.vertical_text,
                         )
                     except Exception as e:
                         result = e
@@ -481,14 +563,13 @@ async def cli_main():
                 )
 
             if args.output_overlay_path and translated_text:
+                saved_overlay = overlay_path_for(next_to_print)
                 if not args.quiet:
                     console.print(
-                        f"\nImage with overlay saved to: [cyan]{args.output_overlay_path}[/cyan]"
+                        f"\nImage with overlay saved to: [cyan]{saved_overlay}[/cyan]"
                     )
                 else:
-                    logging.info(
-                        f"Image with overlay saved to: {args.output_overlay_path}"
-                    )
+                    logging.info("Image with overlay saved to: %s", saved_overlay)
 
             if args.sharex:
                 source_for_copy, text_to_copy = ("", "")
@@ -532,15 +613,22 @@ async def cli_main():
     except LensException as e:
         console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
         sys.exit(1)
+    finally:
+        await api.aclose()
 
 
 def run():
-    if sys.platform == "win32" and sys.stdout.encoding != "utf-8":
-        try:
-            subprocess.run(["chcp", "65001"], capture_output=True)
-            logging.debug("Set Windows console to chcp 65001 (UTF-8)")
-        except Exception as e:
-            print(f"Warning: Failed to set console to UTF-8 (chcp 65001). Error: {e}")
+    if sys.platform == "win32":
+        # Reconfigure the streams directly instead of shelling out to chcp:
+        # chcp is a console builtin that is not always resolvable (it fails
+        # outright under Git Bash / MSYS), and it does nothing for a piped
+        # stdout, which is exactly how ShareX invokes us.
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                if getattr(stream, "encoding", "").lower() not in ("utf-8", "utf8"):
+                    stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception as e:  # pragma: no cover - very old/odd streams
+                logging.debug("Could not reconfigure stream to UTF-8: %s", e)
     try:
         asyncio.run(cli_main())
     except KeyboardInterrupt:

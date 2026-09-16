@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chrome_lens_py"
+version = "3.5.0"
+description = "Python library for Google Lens OCR and Translation using the crupload endpoint."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT License" }
+authors = [{ name = "Bropines", email = "bropines@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "httpx[socks,http2] >= 0.20",
+    "Pillow >= 9.0",
+    "protobuf",
+    "filetype >= 1.0",
+    "rich >= 10.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bropines/chrome-lens-py"
+
+[project.scripts]
+lens_scan = "chrome_lens_py.cli.main:run"
+
+[project.optional-dependencies]
+clipboard = ["pyperclip>=1.8"]
+# Pillow wheels ship without libraqm, so right-to-left scripts need shaping and
+# bidi done in Python before the text reaches the renderer.
+rtl = ["python-bidi>=0.4", "arabic-reshaper>=3.0"]
+# Per-character font fallback needs to read font cmaps.
+fonts = ["fonttools>=4.0"]
+numpy = ["numpy"]
+dev = ["black", "isort", "flake8", "mypy", "pytest", "pytest-asyncio"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: test requires live access to the Lens API"]

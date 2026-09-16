@@ -33,7 +33,18 @@ class LensImageError(LensException):
 class LensProtobufError(LensException):
     """Exception for errors related to the creation or parsing of Protobuf messages."""
 
-    pass
+    def __init__(self, message, response_body=None):
+        super().__init__(message)
+        self.response_body = response_body
+
+    def __str__(self):
+        msg = super().__str__()
+        if self.response_body:
+            body = str(self.response_body)
+            if len(body) > 200:
+                body = body[:200] + "..."
+            msg += f"\nResponse Body (partial): {body}"
+        return msg
 
 
 class LensFontError(LensException):
