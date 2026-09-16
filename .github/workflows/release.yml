@@ -40,8 +40,14 @@ jobs:
       - name: Sort imports check (isort)
         run: isort --check-only src
 
+      # The offline suite is the gate. The live-API tests are informative only:
+      # they depend on Google answering a runner, which is not this repo's bug.
       - name: Run tests
-        run: pytest tests/test_api.py
+        run: pytest -m "not network"
+
+      - name: Run live API tests
+        continue-on-error: true
+        run: pytest -m network
 
   build:
     name: Build for ${{ matrix.os }}
