@@ -56,13 +56,28 @@ lens_scan-windows-amd64.exe --setup-sharex
 
 ## 🚀 Установка
 
-Три пути, отличаются тем, что требуют от вас:
+Четыре пути, отличаются тем, что требуют от вас:
 
-| | нужен Python? | однострочник | обновление |
+| | нужен Python? | как | обновление |
 |---|---|---|---|
-| **uv** (рекомендуется) | нет — uv притащит свой | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
+| **Homebrew** (macOS, Linux) | нет | `brew install bropines/tap/lens-scan` | `brew upgrade lens-scan` |
+| **uv** | нет — uv притащит свой | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
 | **standalone zip** | нет | `install.ps1` / `install.sh` | перезапустить установщик |
-| **pip** | да, свой | — | `pip install -U chrome-lens-py` |
+| **pip** | да, свой | `pip install chrome-lens-py` | `pip install -U chrome-lens-py` |
+
+### Homebrew
+
+```bash
+brew install bropines/tap/lens-scan
+```
+
+Это одна команда, а не две: `brew` по пути сам подключит тап
+[bropines/homebrew-tap](https://github.com/bropines/homebrew-tap). Ставится
+готовая standalone-сборка, поэтому какой у вас Python — неважно, а формула
+обновляется автоматически на каждом релизе.
+
+Собираются Apple Silicon и x86_64 Linux. На Intel-маке или ARM-линуксе формула
+не станет качать то, чего не собирали, а остановится и отправит к uv.
 
 ### Однострочник через uv
 

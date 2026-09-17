@@ -77,18 +77,31 @@ Measured on the same machine, `--help` only, median of six runs.
 The standalone build starts fastest of the three because Nuitka has compiled the
 imports away; the one-file variant lost to both by unpacking itself first.
 
-There are three ways in, and they differ in what they need from you:
+Four ways in, differing in what they need from you:
 
-| | needs Python? | one-liner | update with |
+| | needs Python? | how | update with |
 |---|---|---|---|
-| **uv** (recommended) | no — uv fetches one | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
+| **Homebrew** (macOS, Linux) | no | `brew install bropines/tap/lens-scan` | `brew upgrade lens-scan` |
+| **uv** | no — uv fetches one | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
 | **standalone zip** | no | `install.ps1` / `install.sh` | re-run the installer |
-| **pip** | yes, your own | — | `pip install -U chrome-lens-py` |
+| **pip** | yes, your own | `pip install chrome-lens-py` | `pip install -U chrome-lens-py` |
 
 ```bash
+brew install bropines/tap/lens-scan           # macOS / Linux
 uv tool install "chrome-lens-py[clipboard]"   # or: pipx install chrome-lens-py
 pip install chrome-lens-py                    # if you manage Python yourself
 ```
+
+### Homebrew
+
+That is one command, not two: `brew` taps
+[bropines/homebrew-tap](https://github.com/bropines/homebrew-tap) on the way
+past. It installs the prebuilt standalone folder, so it does not care which
+Python you have, and the formula is bumped automatically on every release.
+
+Published builds cover Apple Silicon and x86_64 Linux. On an Intel Mac or ARM
+Linux the formula stops and points you at uv, rather than failing to download
+something that was never built.
 
 ### One-line install with uv
 
