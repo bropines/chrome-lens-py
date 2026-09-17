@@ -84,6 +84,21 @@ def print_version():
     table.add_row("Executable", sys.executable)
     table.add_row("Package", str(Path(__file__).resolve().parent.parent))
     table.add_row("Python", sys.version.split()[0])
+
+    # Reported because --sharex fails quietly without it, and every frozen
+    # binary we shipped up to 3.5.2 was built without it - so ShareX copied
+    # nothing and said nothing. Also what CI asserts on, to stop that
+    # recurring.
+    try:
+        import pyperclip  # noqa: F401
+
+        clipboard = "available"
+    except ImportError:
+        clipboard = (
+            "not installed (--sharex will not work; "
+            "pip install 'chrome-lens-py\\[clipboard]')"
+        )
+    table.add_row("Clipboard", clipboard)
     console.print(table)
 
 
@@ -788,7 +803,7 @@ async def cli_main():
                         # This is an error/warning, so it should probably stay visible
                         console.print(
                             "\n[bold red]Failed to copy text. Is 'pyperclip' installed? "
-                            '(`pip install "chrome-lens-py[clipboard]"`)[/bold red]'
+                            '(`pip install "chrome-lens-py\\[clipboard]"`)[/bold red]'
                         )
                 elif not args.quiet:
                     console.print("\n[yellow]No text available to copy.[/yellow]")

@@ -92,10 +92,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # With the clipboard extra: --sharex is how ShareX gets its result back,
+      # and a plain `pip install .` left pyperclip out of every binary we have
+      # ever shipped, so --sharex silently copied nothing. Caught on macOS.
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install .
+          pip install ".[clipboard]"
 
       # Two deliberate choices here.
       #
@@ -116,15 +119,31 @@ jobs:
           standalone: true
           onefile: false
           output-dir: dist
-          include-package: chrome_lens_py
+          # pyperclip named explicitly: it is imported inside a function, in a
+          # try/except, which is exactly the shape a bundler is most likely to
+          # miss.
+          include-package: |
+            chrome_lens_py
+            pyperclip
           assume-yes-for-downloads: true
 
       - name: Smoke-test the binary
         shell: bash
         run: |
+          set -euo pipefail
           chmod +x dist/lens_scan.dist/${{ matrix.binary }} || true
           ./dist/lens_scan.dist/${{ matrix.binary }} --help > /dev/null
           echo "binary starts and prints help"
+
+          # Every binary up to 3.5.2 shipped without pyperclip, so --sharex
+          # copied nothing and said nothing - which is precisely how ShareX
+          # hands the result back. Fail the build rather than ship that again.
+          ./dist/lens_scan.dist/${{ matrix.binary }} --version | tee /tmp/version.txt
+          grep -q "Clipboard.*available" /tmp/version.txt || {
+            echo "::error::pyperclip is missing from the build; --sharex would do nothing."
+            exit 1
+          }
+          echo "clipboard support is bundled"
 
       - name: Package the folder
         shell: bash
