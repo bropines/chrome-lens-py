@@ -318,6 +318,14 @@ async def run_managed_daemon(
             resolve = getattr(api, "_get_font_path", None)
             if resolve is not None:
                 await asyncio.to_thread(resolve)
+            # Open the TLS (and HTTP/2) connection to Lens now, so the first
+            # real request finds it ready. The reply (a 404/405 for a bare GET,
+            # no API key attached) is thrown away; only the pooled connection
+            # matters.
+            handler = getattr(api, "request_handler", None)
+            if handler is not None:
+                http = await handler.get_client()
+                await http.get(handler.endpoints[0], timeout=8)
         except Exception:
             logger.debug("warm-up skipped", exc_info=True)
 

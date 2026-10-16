@@ -246,6 +246,11 @@ def uninstall_service() -> bool:
     info = client.live_daemon()
     if info is not None:
         ok = client.shutdown(info) and ok
+    # Forget the uploader token too: while service.json exists, a daemon the
+    # client starts on demand is the persistent, fixed-port kind. The ShareX
+    # uploader needs re-importing after the next --setup-sharex --mode uploader.
+    if _remove(os.path.join(runtime.data_dir(), runtime.SERVICE_FILE)):
+        console.print("Forgot the uploader token (service.json).")
     if removed:
         console.print(f"Removed [cyan]{escape(path)}[/cyan].")
     else:
