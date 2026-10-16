@@ -1,0 +1,8 @@
+# Tools for scripts/update_protos.py. Pinned so a regeneration is reproducible:
+# the protoc inside grpcio-tools decides the gencode version, and with it the
+# protobuf runtime floor in pyproject.toml (1.81.1 -> libprotoc 33.5 -> 6.33.5).
+# Raising grpcio-tools means raising that floor too; tests/test_protos.py fails
+# until the two agree.
+grpcio-tools==1.81.1
+black==26.5.1
+isort==9.0.1

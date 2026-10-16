@@ -1,0 +1,27 @@
+{
+    "version": "3.5.3",
+    "##": "Placeholder: the portable archive first ships with the release after 3.5.3. The release workflow (scripts/bump_scoop_manifest.py) rewrites version, url and hash; until then installing this fails the hash check on purpose.",
+    "description": "Google Lens OCR and translation from the command line (official signed Python, no compiled executable)",
+    "homepage": "https://github.com/bropines/chrome-lens-py",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/bropines/chrome-lens-py/releases/download/v3.5.3/lens_scan-windows-amd64-portable.zip",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "extract_dir": "lens_scan-windows-amd64-portable"
+        }
+    },
+    "bin": "lens_scan.cmd",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/bropines/chrome-lens-py/releases/download/v$version/lens_scan-windows-amd64-portable.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                },
+                "extract_dir": "lens_scan-windows-amd64-portable"
+            }
+        }
+    }
+}
