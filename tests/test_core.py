@@ -543,8 +543,12 @@ def test_opaque_images_stay_jpeg():
         assert encoded.data[:2] == b"\xff\xd8"
 
 
-def test_images_with_real_transparency_are_uploaded_as_webp():
-    encoded = encode_image_for_api(_text_on_transparent((0, 0, 0, 255)))
+def test_webp_mode_uploads_transparency_as_webp():
+    # Chromium parity, available on request. Not the default: the server
+    # composites transparency onto black, losing black text.
+    encoded = encode_image_for_api(
+        _text_on_transparent((0, 0, 0, 255)), alpha_mode="webp"
+    )
     assert encoded.mime_type == MIME_WEBP
     assert encoded.data[:4] == b"RIFF" and encoded.data[8:12] == b"WEBP"
     decoded = Image.open(io.BytesIO(encoded.data))
@@ -851,3 +855,12 @@ async def test_results_report_the_original_image_size():
     region = await api.process_region(Image.new("RGB", (100, 80)), (0.5, 0.5, 0.4, 0.4))
     assert region["image_size"] == [100, 80]
     await api.aclose()
+
+
+def test_default_alpha_mode_keeps_black_text_on_transparency_readable():
+    # The default must not hand the server a transparent image it will put on
+    # black: that is how black text on a transparent PNG came back empty.
+    encoded = encode_image_for_api(_text_on_transparent((0, 0, 0, 255)))
+    assert encoded.mime_type == MIME_JPEG
+    background = Image.open(io.BytesIO(encoded.data)).getpixel((35, 15))[0]
+    assert background > 128  # light background behind dark text

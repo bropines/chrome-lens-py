@@ -44,7 +44,12 @@ DEFAULT_IMAGE_JPEG_QUALITY = 40
 DEFAULT_IMAGE_WEBP_QUALITY = 40
 # What to upload for an image with real transparency: "webp" (Chromium parity),
 # "flatten" (JPEG on white) or "contrast" (JPEG on white/black by content).
-DEFAULT_ALPHA_MODE = "webp"
+#
+# "contrast" rather than Chromium's "webp": measured live, the server composites
+# transparency onto black, so black text on a transparent PNG comes back empty
+# under "webp", and white text vanishes under "flatten". "contrast" picks the
+# background by the content's luminance and read all three cases.
+DEFAULT_ALPHA_MODE = "contrast"
 
 # Transport
 DEFAULT_CONNECT_TIMEOUT = 10
