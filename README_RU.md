@@ -34,7 +34,7 @@ lens_scan --setup-sharex
 # Или через готовый .exe файл:
 lens_scan-windows-amd64.exe --setup-sharex
 ```
-Это автоматически настроит горячую клавишу (**Ctrl + O**) и все необходимые действия для использования Google Lens OCR.
+Это автоматически настроит горячую клавишу (**Ctrl + O**) и все необходимые действия для использования Google Lens OCR. Добавьте `-t ru` (любой код языка), чтобы хоткей переводил. Старый `HotkeysConfig.json` предварительно сохраняется в резервную копию. Подробнее: [docs/sharex.md](docs/sharex.md).
 
 ---
 
@@ -184,19 +184,25 @@ lens_scan --version
 | `--translate <язык>` | `-t` | **Перевести** распознанный текст на целевой язык (например, `en`, `ru`). |
 | `--translate-from <язык>` | | Указать исходный язык для перевода (иначе определяется автоматически). |
 | `--translate-out <путь>` | `-to` | **Сохранить** изображение с наложенным переводом по указанному пути. |
-| `--output-blocks` | `-b` | **Вывести текст OCR в виде сегментированных блоков** (полезно для комиксов). Несовместимо с `--get-coords` и `--output-lines`.|
-| `--output-lines` | `-ol` | **Вывести текст OCR в виде отдельных строк** с их геометрией. Несовместимо с `--output-blocks` и `--get-coords`.|
-| `--get-coords` | | Вывести распознанные слова и их координаты в формате JSON. Несовместимо с `--output-blocks` и `--output-lines`.|
+| `--output-blocks` | `-b` | **Вывести текст OCR в виде сегментированных блоков** (полезно для комиксов). Несовместимо с `--get-coords`, `--output-lines`, `--format` и `--oneline`.|
+| `--output-lines` | `-ol` | **Вывести текст OCR в виде отдельных строк** с их геометрией. Несовместимо с `--output-blocks`, `--get-coords`, `--format` и `--oneline`.|
+| `--get-coords` | | Вывести распознанные слова и их координаты в формате JSON. Несовместимо с `--output-blocks`, `--output-lines`, `--format` и `--oneline`.|
+| `--format <fmt>` | | Формат вывода: `text` (по умолчанию), `json`, `jsonl` (объект на изображение), `hocr` (XHTML с `bbox` в пикселях) или `tsv` (колонки как у tesseract). Несовместимо с `-b`, `-ol`, `--get-coords`, `--oneline`. |
+| `--oneline` | | Вывести каждый результат одной компактной JSON-строкой: `{"file", "ocr_text", "translated_text", "error"}`. Совместимо с форком [Chrome-Lens-OCR](https://github.com/timminator/Chrome-Lens-OCR) (SubtitleEdit, VideOCR). |
 | `--sharex` | `-sx` | **Скопировать** результат в буфер обмена (перевод или OCR). |
 | `--ocr-single-line` | | Объединить весь распознанный текст в одну строку, удалив переносы. |
 | `--config-file <путь>`| | Путь к кастомному файлу конфигурации в формате JSON. |
-| `--update-config` | | Обновить файл конфигурации по умолчанию настройками из текущей команды. |
+| `--update-config` | | Сохранить настройки из текущей команды в файл конфигурации по умолчанию (кроме API-ключа). Прежний файл остаётся как `config.json.bak`. Работает и без изображения. |
 | `--font <путь>` | | Путь к файлу шрифта `.ttf` для наложения текста. |
 | `--font-size <размер>` | | Размер шрифта для наложения (по умолчанию: 20). |
 | `--proxy <url>` | | URL прокси-сервера (например, `socks5://127.0.0.1:9050`). |
 | `--no-env-proxy` | | Игнорировать `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` из окружения и идти напрямую. |
 | `--concurrency <N>` | | Максимум одновременных запросов (по умолчанию 5, потолок 30). |
 | `--timeout <сек>` | | Таймаут запроса в секундах (по умолчанию 60). |
+| `--retries <N>` | | Повторы после сетевой ошибки или повторяемого HTTP-статуса (по умолчанию 2). |
+| `--api-key <ключ>` | | API-ключ Google Cloud (лучше через `LENS_API_KEY`). |
+| `--client-region <код>` | | Код региона клиента (по умолчанию `US`). |
+| `--client-time-zone <id>` | | ID часового пояса клиента (по умолчанию `America/New_York`). |
 | `--overlay-mode <режим>`| | `chromium` (по умолчанию) или `legacy` — старое наложение белым боксом. |
 | `--vertical-text <режим>`| | Вертикальный CJK: `auto`, `keep` или `horizontal`. |
 | `--erase-mode <режим>` | | `patch` (серверный inpaint) или `hull` (залить область целиком). |
@@ -213,10 +219,12 @@ lens_scan --version
 | `--port <N>` | | Порт для демона (по умолчанию `8765`). |
 | `--token <токен>` | | Требовать bearer-токен. Обязателен, если `--host` не loopback. |
 | `--allow-origin <origin>`| | Пустить один браузерный origin к демону (можно повторять). По умолчанию ни одного. |
-| `--setup-sharex` | | Автоматически прописать `lens_scan` в ShareX. |
+| `--setup-sharex` | | Автоматически прописать `lens_scan` в ShareX (Windows). С `-t <язык>` хоткей будет переводить. См. [docs/sharex.md](docs/sharex.md). |
 | `--logging-level <ур>`| `-l` | Установить уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `--version` | `-V` | Показать версию и то, какая именно копия запускается. |
-| `--help` | `-h` | Показать это справочное сообщение. |
+| `--help` | `-h` | Показать это справочное сообщение. Текст строится из парсера, поэтому всегда содержит все опции. |
+
+  **Вывод и коды возврата.** Данные результата (текст OCR, перевод, JSON) идут в stdout как есть; заголовки, ход работы и ошибки идут в stderr, поэтому `lens_scan img.png > out.txt` содержит только текст. Код возврата: `0` — все изображения обработаны, `1` — все провалились (или неверные аргументы), `2` — часть провалилась.
 
   #### **Примеры**
 
@@ -526,27 +534,61 @@ asyncio.run(process_with_details())
 <details>
   <summary><b>⚙️ Конфигурация</b></summary>
   
-  Настройки загружаются со следующим приоритетом: **Аргументы CLI > Файл `config.json` > Значения по умолчанию**.
-  
+  Настройки определяются в таком порядке: **явно заданный флаг CLI > `config.json` > переменная окружения `LENS_*` > значение по умолчанию**.
+
   #### **`config.json`**
-  
-  Файл `config.json` можно разместить в директории конфигурации по умолчанию вашей ОС для установки постоянных опций.
+
+  Файл `config.json` можно разместить в директории конфигурации по умолчанию вашей ОС для установки постоянных опций (или указать другой через `--config-file`).
   -   **Linux**: `~/.config/chrome-lens-py/config.json`
   -   **macOS**: `~/Library/Application Support/chrome-lens-py/config.json`
   -   **Windows**: `C:\Users\<user>\.config\chrome-lens-py\config.json`
 
+  Все ключи необязательны. Если файл не является JSON-объектом или значение имеет неверный тип, запуск останавливается с сообщением, где назван ключ. `--update-config` пишет файл атомарно и оставляет прежний как `config.json.bak`.
+
+  | Ключ | Переменная | Флаг | По умолчанию |
+  | :--- | :--- | :--- | :--- |
+  | `api_key` | `LENS_API_KEY` | `--api-key` | встроенный ключ |
+  | `proxy` | `LENS_PROXY` | `--proxy` | нет |
+  | `trust_env` | `LENS_TRUST_ENV` | `--no-env-proxy` (инверсия) | `true` |
+  | `client_region` | `LENS_CLIENT_REGION` | `--client-region` | `US` |
+  | `client_time_zone` | `LENS_CLIENT_TIME_ZONE` | `--client-time-zone` | `America/New_York` |
+  | `timeout` | `LENS_TIMEOUT` | `--timeout` | `60` |
+  | `retries` | `LENS_RETRIES` | `--retries` | `2` |
+  | `concurrency` | `LENS_CONCURRENCY` | `--concurrency` | `5` (максимум 30) |
+  | `target_lang` | `LENS_TARGET_LANG` | `-t` | нет (без перевода) |
+  | `ocr_preserve_line_breaks` | `LENS_OCR_PRESERVE_LINE_BREAKS` | `--ocr-single-line` (инверсия) | `true` |
+  | `logging_level` | `LENS_LOGGING_LEVEL` | `-l` | `WARNING` |
+  | `font_path` | `LENS_FONT_PATH` | `--font` | системный шрифт |
+  | `font_size` | `LENS_FONT_SIZE` | `--font-size` | `20` |
+  | `overlay_mode` | `LENS_OVERLAY_MODE` | `--overlay-mode` | `chromium` |
+  | `vertical_text` | `LENS_VERTICAL_TEXT` | `--vertical-text` | `auto` |
+  | `erase_mode` | `LENS_ERASE_MODE` | `--erase-mode` | `patch` |
+  | `hull_padding` | `LENS_HULL_PADDING` | `--hull-padding` | `0.45` |
+  | `outline_scale` | `LENS_OUTLINE_SCALE` | `--outline` | `1.0` |
+  | `min_readable_px` | `LENS_MIN_READABLE_PX` | `--min-text-size` | `0` |
+  | `text_align` | `LENS_TEXT_ALIGN` | `--text-align` | `auto` |
+  | `manga_mode` | `LENS_MANGA_MODE` | `--manga` | `false` |
+  | `manga_box_growth` | `LENS_MANGA_BOX_GROWTH` | `--manga-growth` | `1.45` |
+
+  Как ключи конфига принимаются и написания флагов: `translate`, `font`, `outline`, `min_text_size`, `manga`, `manga_growth`, `no_env_proxy`. Булевы значения в переменных окружения: `1/0`, `true/false`, `yes/no`, `on/off`. `--serve` читает те же настройки.
+
   ##### **Пример `config.json`**
   ```json
   {
-    "api_key": "ОПЦИОНАЛЬНО! Если вы не знаете что это, то не советую его здесь указывать",
     "proxy": "socks5://127.0.0.1:9050",
     "client_region": "DE",
     "client_time_zone": "Europe/Berlin",
     "timeout": 90,
+    "retries": 3,
+    "target_lang": "ru",
+    "overlay_mode": "chromium",
+    "manga_mode": false,
+    "concurrency": 4,
     "font_path": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "ocr_preserve_line_breaks": true
   }
   ```
+  `api_key` тоже принимается, но переменная окружения не оставляет ключ в файле, которым можно случайно поделиться.
 
 </details>
 

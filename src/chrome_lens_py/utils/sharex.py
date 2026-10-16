@@ -16,10 +16,7 @@ def copy_to_clipboard(text: str) -> bool:
     except ImportError:
         logger.error(
             "Module 'pyperclip' not found. Install the extra to enable the "
-            # Escaped: this goes through rich, which would read
-            # "[clipboard]" as a style tag and drop it, leaving the
-            # instruction naming the wrong package.
-            "clipboard: pip install 'chrome-lens-py\\[clipboard]'"
+            "clipboard: pip install 'chrome-lens-py[clipboard]'"
         )
         if system == "Linux":
             logger.info(

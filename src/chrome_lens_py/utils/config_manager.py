@@ -1,12 +1,210 @@
+"""Settings for the CLI: one typed dataclass, one place for the defaults.
+
+Where a value comes from, highest priority first:
+
+1. a flag given explicitly on the command line,
+2. the JSON config file,
+3. a ``LENS_*`` environment variable (``LENS_API_KEY``, ``LENS_PROXY``, ...),
+4. the default declared on :class:`Settings`.
+
+"Given explicitly" is the important part: the argparse parser in
+``cli/main.py`` declares every settings flag with ``default=SUPPRESS``, so a flag
+the user did not type is simply absent from the namespace instead of arriving
+as a default that would override the config file.
+"""
+
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+import shutil
+import tempfile
+import typing
+from dataclasses import MISSING, dataclass, field, fields
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from ..constants import APP_NAME_FOR_CONFIG, DEFAULT_CONFIG_FILENAME
+from ..constants import (
+    APP_NAME_FOR_CONFIG,
+    DEFAULT_API_KEY,
+    DEFAULT_CLIENT_REGION,
+    DEFAULT_CLIENT_TIME_ZONE,
+    DEFAULT_MAX_RETRIES,
+)
 from ..exceptions import LensConfigError
 
 logger = logging.getLogger(__name__)
+
+ENV_PREFIX = "LENS_"
+MAX_CONCURRENCY = 30
+LOGGING_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+# Fields whose value must not be echoed into logs.
+SECRET_FIELDS = frozenset({"api_key", "proxy"})
+# Never written back by --update-config: a key typed once on a command line
+# should not end up lying around in a file nobody remembers editing.
+NEVER_PERSISTED = frozenset({"api_key"})
+
+
+@dataclass
+class Settings:
+    """Every persistent option of the CLI, with its default."""
+
+    api_key: str = DEFAULT_API_KEY
+    proxy: Optional[str] = None
+    client_region: str = DEFAULT_CLIENT_REGION
+    client_time_zone: str = DEFAULT_CLIENT_TIME_ZONE
+    timeout: int = 60
+    retries: int = DEFAULT_MAX_RETRIES
+    concurrency: int = 5
+    # False = ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (the --no-env-proxy flag).
+    trust_env: bool = True
+    font_path: Optional[str] = None
+    font_size: Optional[int] = None
+    logging_level: str = "WARNING"
+    ocr_preserve_line_breaks: bool = True
+    target_lang: Optional[str] = None
+    overlay_mode: str = "chromium"
+    vertical_text: str = "auto"
+    erase_mode: str = "patch"
+    hull_padding: float = 0.45
+    outline_scale: float = 1.0
+    min_readable_px: float = 0.0
+    text_align: str = "auto"
+    manga_mode: bool = False
+    manga_box_growth: float = 1.45
+
+    # Bookkeeping, not options.
+    sources: Dict[str, str] = field(default_factory=dict, repr=False, compare=False)
+    notes: List[str] = field(default_factory=list, repr=False, compare=False)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {name: getattr(self, name) for name in SETTING_NAMES}
+
+
+SETTING_NAMES: Tuple[str, ...] = tuple(
+    f.name for f in fields(Settings) if f.name not in ("sources", "notes")
+)
+
+CHOICES: Dict[str, Tuple[str, ...]] = {
+    "overlay_mode": ("chromium", "legacy"),
+    "vertical_text": ("keep", "auto", "horizontal"),
+    "erase_mode": ("patch", "hull"),
+    "text_align": ("auto", "left", "center", "right"),
+}
+
+# Names accepted in config.json besides the canonical field names: the CLI flag
+# spellings people naturally copy over.
+CONFIG_ALIASES: Dict[str, str] = {
+    "translate": "target_lang",
+    "font": "font_path",
+    "outline": "outline_scale",
+    "min_text_size": "min_readable_px",
+    "manga": "manga_mode",
+    "manga_growth": "manga_box_growth",
+}
+# ...and the one whose meaning is inverted.
+INVERTED_ALIASES: Dict[str, str] = {"no_env_proxy": "trust_env"}
+
+
+def default_value(name: str) -> Any:
+    """The declared default of one setting (what ``--help`` should print)."""
+    for f in fields(Settings):
+        if f.name == name:
+            return f.default if f.default is not MISSING else None
+    raise KeyError(name)
+
+
+def _kind(name: str) -> type:
+    """bool / int / float / str for a setting, unwrapping Optional."""
+    hint = typing.get_type_hints(Settings)[name]
+    if typing.get_origin(hint) is typing.Union:
+        hint = next(a for a in typing.get_args(hint) if a is not type(None))
+    return hint
+
+
+def _coerce(name: str, value: Any, origin: str) -> Any:
+    """Turn a raw value (JSON, environment string) into the setting's type."""
+    kind = _kind(name)
+    problem = f"{origin}: '{name}' "
+
+    if kind is bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in ("1", "true", "yes", "on"):
+                return True
+            if lowered in ("0", "false", "no", "off"):
+                return False
+        raise LensConfigError(f"{problem}must be true or false, got {value!r}.")
+
+    if kind is int:
+        if isinstance(value, bool):
+            raise LensConfigError(f"{problem}must be a whole number, got {value!r}.")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                pass
+        raise LensConfigError(f"{problem}must be a whole number, got {value!r}.")
+
+    if kind is float:
+        if isinstance(value, bool):
+            raise LensConfigError(f"{problem}must be a number, got {value!r}.")
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                pass
+        raise LensConfigError(f"{problem}must be a number, got {value!r}.")
+
+    # str
+    if not isinstance(value, str):
+        raise LensConfigError(f"{problem}must be a string, got {value!r}.")
+    if name == "logging_level":
+        value = value.strip().upper()
+    elif name in CHOICES:
+        value = value.strip().lower()
+    return value
+
+
+def _validate(settings: Settings) -> None:
+    def bad(name: str, why: str) -> LensConfigError:
+        origin = settings.sources.get(name, "default")
+        return LensConfigError(f"Invalid {name} ({origin}): {why}.")
+
+    if settings.timeout <= 0:
+        raise bad("timeout", "must be greater than 0")
+    if settings.retries < 0:
+        raise bad("retries", "must not be negative")
+    if settings.concurrency < 1:
+        raise bad("concurrency", "must be at least 1")
+    if settings.concurrency > MAX_CONCURRENCY:
+        raise bad(
+            "concurrency",
+            f"cannot be greater than {MAX_CONCURRENCY}. "
+            "This is a security measure to prevent IP blocking",
+        )
+    if settings.font_size is not None and settings.font_size <= 0:
+        raise bad("font_size", "must be greater than 0")
+    if settings.logging_level not in LOGGING_LEVELS:
+        raise bad("logging_level", f"must be one of {', '.join(LOGGING_LEVELS)}")
+    for name, allowed in CHOICES.items():
+        if getattr(settings, name) not in allowed:
+            raise bad(name, f"must be one of {', '.join(allowed)}")
+    for name in ("hull_padding", "outline_scale", "min_readable_px"):
+        if getattr(settings, name) < 0:
+            raise bad(name, "must not be negative")
+    if settings.manga_box_growth <= 0:
+        raise bad("manga_box_growth", "must be greater than 0")
+
+
+# --------------------------------------------------------------------- files
 
 
 def get_default_config_dir(app_name: str = APP_NAME_FOR_CONFIG) -> str:
@@ -18,24 +216,153 @@ def get_default_config_dir(app_name: str = APP_NAME_FOR_CONFIG) -> str:
 
 
 def load_config(config_file_path: str) -> Dict[str, Any]:
+    """Load a JSON config file.
+
+    Returns an empty dict when the file does not exist. Raises LensConfigError
+    for anything that is there but unusable: unreadable, not JSON, or JSON that
+    is not an object.
     """
-    Loads configuration from a JSON file.
-    Returns an empty dictionary if the file is not found.
-    Raises LensConfigError on parsing or I/O errors.
+    if not os.path.isfile(config_file_path):
+        return {}
+    try:
+        # utf-8-sig: Notepad likes to prepend a BOM, which json.load rejects.
+        with open(config_file_path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise LensConfigError(
+            f"Error decoding JSON from config file '{config_file_path}': {e}"
+        ) from e
+    except (OSError, UnicodeDecodeError) as e:
+        raise LensConfigError(
+            f"I/O error reading config file '{config_file_path}': {e}"
+        ) from e
+    if not isinstance(data, dict):
+        raise LensConfigError(
+            f"Config file '{config_file_path}' must contain a JSON object "
+            f'(like {{"timeout": 90}}), not {type(data).__name__}.'
+        )
+    return data
+
+
+def atomic_write_text(path: str, text: str, encoding: str = "utf-8") -> None:
+    """Write a file so that a crash leaves either the old or the new content.
+
+    The text goes to a temp file in the same directory first (same filesystem,
+    so os.replace is atomic), then replaces the target in one step.
     """
-    if os.path.isfile(config_file_path):
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline="") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
         try:
-            with open(config_file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            raise LensConfigError(
-                f"Error decoding JSON from config file '{config_file_path}': {e}"
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def write_config(config_file_path: str, data: Mapping[str, Any]) -> None:
+    """Atomically save the config, keeping the previous version as ``.bak``."""
+    try:
+        text = json.dumps(data, indent=4, ensure_ascii=False) + "\n"
+        if os.path.isfile(config_file_path):
+            shutil.copy2(config_file_path, config_file_path + ".bak")
+        atomic_write_text(config_file_path, text)
+    except (OSError, TypeError, ValueError) as e:
+        raise LensConfigError(f"Error saving config file '{config_file_path}': {e}")
+
+
+# ------------------------------------------------------------------ resolving
+
+
+def _normalise_config(
+    raw: Mapping[str, Any], origin: str
+) -> Tuple[Dict[str, Any], List[str]]:
+    """(canonical name -> coerced value with aliases folded in, unknown keys)."""
+    found: Dict[str, Any] = {}
+    unknown: List[str] = []
+    for key, value in raw.items():
+        name = str(key).strip().lower().replace("-", "_")
+        if value is None:
+            continue  # null means "not set", as it always has
+        if name in INVERTED_ALIASES:
+            target = INVERTED_ALIASES[name]
+            found.setdefault(target, not _coerce_alias_bool(name, value, origin))
+            continue
+        name = CONFIG_ALIASES.get(name, name)
+        if name not in SETTING_NAMES:
+            unknown.append(str(key))
+            continue
+        is_alias = str(key).strip().lower().replace("-", "_") != name
+        if is_alias and name in found:
+            continue  # the canonical spelling wins
+        found[name] = value
+    coerced = {name: _coerce(name, value, origin) for name, value in found.items()}
+    return coerced, unknown
+
+
+def _coerce_alias_bool(name: str, value: Any, origin: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise LensConfigError(f"{origin}: '{name}' must be true or false, got {value!r}.")
+
+
+def resolve_settings(
+    cli_args: Optional[Mapping[str, Any]] = None,
+    config_file_path: Optional[str] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> Settings:
+    """Merge defaults, environment, config file and explicit CLI values."""
+    env = os.environ if env is None else env
+    settings = Settings()
+    for name in SETTING_NAMES:
+        settings.sources[name] = "default"
+
+    def apply(name: str, value: Any, source: str) -> None:
+        setattr(settings, name, value)
+        settings.sources[name] = source
+
+    # 3. environment
+    for name in SETTING_NAMES:
+        var = ENV_PREFIX + name.upper()
+        raw = env.get(var)
+        if raw is None or raw.strip() == "":
+            continue
+        apply(name, _coerce(name, raw, f"environment variable {var}"), f"env {var}")
+
+    # 2. config file
+    if config_file_path:
+        file_values, unknown_keys = _normalise_config(
+            load_config(config_file_path), f"config file '{config_file_path}'"
+        )
+        for key in unknown_keys:
+            settings.notes.append(
+                f"Ignoring unknown key '{key}' in config file '{config_file_path}'."
             )
-        except IOError as e:
-            raise LensConfigError(
-                f"I/O error reading config file '{config_file_path}': {e}"
-            )
-    return {}
+        for name, value in file_values.items():
+            apply(name, value, f"config file {config_file_path}")
+
+    # 1. explicit CLI values (None = not given)
+    for name in SETTING_NAMES:
+        value = (cli_args or {}).get(name)
+        if value is not None:
+            apply(name, _coerce(name, value, "command line"), "command line")
+
+    _validate(settings)
+    return settings
+
+
+# ---------------------------------------------------------------- compat API
 
 
 def get_effective_config_value(
@@ -52,106 +379,33 @@ def get_effective_config_value(
 def build_app_config(
     cli_args: Optional[Dict[str, Any]] = None, config_file_path: Optional[str] = None
 ) -> Dict[str, Any]:
+    """Settings as a plain dict (kept for callers of the pre-Settings API)."""
+    return resolve_settings(cli_args, config_file_path).to_dict()
+
+
+def update_config_file_from_cli(cli_args: Mapping[str, Any], config_file_path: str):
+    """Save the settings given explicitly on the command line into the config file.
+
+    Everything except the API key is persisted. Unknown keys already in the
+    file are left alone. The previous file is kept as ``<file>.bak``.
     """
-    Builds the final application config by merging values from CLI args and a config file.
-    """
-    cli = cli_args or {}
-    loaded_config = load_config(config_file_path) if config_file_path else {}
-
-    if loaded_config:
-        logging.info("Applying settings from config file:")
-        for key, value in loaded_config.items():
-            if key.lower() not in ["api_key", "proxy"]:
-                logging.info(f"  - {key}: {value}")
-
-    # Priority: CLI > Config File > Default (handled by get_effective_config_value)
-    # Defaults are defined in constants.py or as literals here.
-    from ..constants import (
-        DEFAULT_API_KEY,
-        DEFAULT_CLIENT_REGION,
-        DEFAULT_CLIENT_TIME_ZONE,
-    )
-
-    final_config = {
-        "api_key": get_effective_config_value(
-            cli.get("api_key"), loaded_config.get("api_key"), DEFAULT_API_KEY
-        ),
-        "client_region": get_effective_config_value(
-            cli.get("client_region"),
-            loaded_config.get("client_region"),
-            DEFAULT_CLIENT_REGION,
-        ),
-        "client_time_zone": get_effective_config_value(
-            cli.get("client_time_zone"),
-            loaded_config.get("client_time_zone"),
-            DEFAULT_CLIENT_TIME_ZONE,
-        ),
-        "proxy": get_effective_config_value(
-            cli.get("proxy"), loaded_config.get("proxy"), None
-        ),
-        "timeout": int(
-            get_effective_config_value(
-                cli.get("timeout"), loaded_config.get("timeout"), 60
-            )
-        ),
-        "font_path": get_effective_config_value(
-            cli.get("font_path"), loaded_config.get("font_path"), None
-        ),
-        "font_size": (
-            int(
-                get_effective_config_value(
-                    cli.get("font_size"), loaded_config.get("font_size"), 20
-                )
-            )
-            if get_effective_config_value(
-                cli.get("font_size"), loaded_config.get("font_size"), None
-            )
-            is not None
-            else None
-        ),
-        "logging_level": get_effective_config_value(
-            cli.get("logging_level"), loaded_config.get("logging_level"), "WARNING"
-        ).upper(),
-        "ocr_preserve_line_breaks": get_effective_config_value(
-            cli.get("ocr_preserve_line_breaks"),
-            loaded_config.get("ocr_preserve_line_breaks"),
-            True,
-        ),
-    }
-    return final_config
-
-
-def update_config_file_from_cli(cli_args: Dict[str, Any], config_file_path: str):
-    """Updates the config file with values from CLI args (only safe fields)."""
     current_config = load_config(config_file_path)
 
-    fields_to_update = [
-        "client_region",
-        "client_time_zone",
-        "proxy",
-        "timeout",
-        "font_path",
-        "font_size",
-        "logging_level",
-        "ocr_preserve_line_breaks",
-    ]
     updated = False
-    for field in fields_to_update:
-        cli_value = cli_args.get(field)
-        if cli_value is not None and current_config.get(field) != cli_value:
-            current_config[field] = cli_value
+    for name in SETTING_NAMES:
+        if name in NEVER_PERSISTED:
+            continue
+        cli_value = cli_args.get(name)
+        if cli_value is None:
+            continue
+        cli_value = _coerce(name, cli_value, "command line")
+        if current_config.get(name) != cli_value:
+            current_config[name] = cli_value
             updated = True
 
     if not updated:
-        logging.info("No configuration changes to save from CLI arguments.")
+        logger.info("No configuration changes to save from CLI arguments.")
         return
 
-    config_dir = os.path.dirname(config_file_path)
-    try:
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(current_config, f, indent=4, ensure_ascii=False)
-        logging.info(f"Configuration file updated: {config_file_path}")
-    except (IOError, TypeError) as e:
-        raise LensConfigError(f"Error saving config file '{config_file_path}': {e}")
+    write_config(config_file_path, current_config)
+    logger.info("Configuration file updated: %s", config_file_path)

@@ -42,7 +42,7 @@ lens_scan --setup-sharex
 # Or using the standalone .exe:
 lens_scan-windows-amd64.exe --setup-sharex
 ```
-This will automatically configure a hotkey (**Ctrl + O**) and the necessary actions to use Google Lens OCR.
+This will automatically configure a hotkey (**Ctrl + O**) and the necessary actions to use Google Lens OCR. Add `-t ru` (any language code) to make the hotkey translate instead. Your old `HotkeysConfig.json` is backed up first. Details: [docs/sharex.md](docs/sharex.md).
 
 ---
 
@@ -206,19 +206,25 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--translate <lang>` | `-t` | **Translate** the OCR text to the target language code (e.g., `en`, `ru`). |
 | `--translate-from <lang>` | | Specify the source language for translation (otherwise auto-detected). |
 | `--translate-out <path>` | `-to` | **Save** the image with the translated text overlaid to the specified file path. |
-| `--output-blocks` | `-b` | **Output OCR text as segmented blocks** (useful for comics). Incompatible with `--get-coords` and `--output-lines`.|
-| `--output-lines` | `-ol` | **Output OCR text as individual lines** with their geometry. Incompatible with `--output-blocks` and `--get-coords`.|
-| `--get-coords` | | Output recognized words and their coordinates in JSON format. Incompatible with `--output-blocks` and `--output-lines`. |
+| `--output-blocks` | `-b` | **Output OCR text as segmented blocks** (useful for comics). Incompatible with `--get-coords`, `--output-lines`, `--format` and `--oneline`.|
+| `--output-lines` | `-ol` | **Output OCR text as individual lines** with their geometry. Incompatible with `--output-blocks`, `--get-coords`, `--format` and `--oneline`.|
+| `--get-coords` | | Output recognized words and their coordinates in JSON format. Incompatible with `--output-blocks`, `--output-lines`, `--format` and `--oneline`. |
+| `--format <fmt>` | | Output format: `text` (default), `json`, `jsonl` (one object per image), `hocr` (XHTML with pixel `bbox`es) or `tsv` (tesseract-style columns). Incompatible with `-b`, `-ol`, `--get-coords`, `--oneline`. |
+| `--oneline` | | Print each result as one compact JSON line: `{"file", "ocr_text", "translated_text", "error"}`. Drop-in for the [Chrome-Lens-OCR](https://github.com/timminator/Chrome-Lens-OCR) fork (SubtitleEdit, VideOCR). |
 | `--sharex` | `-sx` | **Copy** the result (translation or OCR) to the clipboard. |
 | `--ocr-single-line` | | Join all recognized OCR text into a single line, removing line breaks. |
 | `--config-file <path>`| | Path to a custom JSON configuration file. |
-| `--update-config` | | Update the default config file with settings from the current command. |
+| `--update-config` | | Save the settings given on this command line into the default config file (never the API key). The previous file is kept as `config.json.bak`. Works without an image. |
 | `--font <path>` | | Path to a `.ttf` font file for the text overlay. |
 | `--font-size <size>` | | Font size for the text overlay (default: 20). |
 | `--proxy <url>` | | Proxy server URL (e.g., `socks5://127.0.0.1:9050`). |
 | `--no-env-proxy` | | Ignore `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` and connect directly. |
 | `--concurrency <N>` | | Maximum concurrent requests (default 5, hard limit 30). |
 | `--timeout <sec>` | | Request timeout in seconds (default 60). |
+| `--retries <N>` | | Retries after a network error or a retryable HTTP status (default 2). |
+| `--api-key <key>` | | Google Cloud API key (prefer `LENS_API_KEY`). |
+| `--client-region <code>` | | Client region code (default `US`). |
+| `--client-time-zone <id>` | | Client time zone ID (default `America/New_York`). |
 | `--overlay-mode <mode>`| | `chromium` (default) or `legacy`, the old white-box overlay. |
 | `--vertical-text <mode>`| | Vertical CJK source: `auto`, `keep` or `horizontal`. |
 | `--erase-mode <mode>` | | `patch` (server inpaint) or `hull` (cover the whole area). |
@@ -235,10 +241,12 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--port <N>` | | Port for the daemon (default `8765`). |
 | `--token <token>` | | Require a bearer token. Mandatory when `--host` is not loopback. |
 | `--allow-origin <origin>`| | Let one browser origin call the daemon (repeatable). None by default. |
-| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically. |
+| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically (Windows). Add `-t <lang>` to make the hotkey translate. See [docs/sharex.md](docs/sharex.md). |
 | `--logging-level <lvl>`| `-l` | Set logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `--version` | `-V` | Show the version and which copy of it is running. |
-| `--help` | `-h` | Show this help message and exit. |
+| `--help` | `-h` | Show this help message and exit. The text is generated from the parser, so it always lists every option. |
+
+  **Output and exit codes.** Result data (OCR text, translations, JSON) goes to stdout exactly as produced; headers, progress and errors go to stderr, so `lens_scan img.png > out.txt` holds only the text. The exit code is `0` when every image succeeded, `1` when all failed (or the arguments were invalid) and `2` when some failed.
 
   #### **Examples**
 
@@ -548,27 +556,61 @@ asyncio.run(process_with_details())
 <details>
   <summary><b>⚙️ Configuration</b></summary>
   
-  Settings are loaded with the following priority: **CLI Arguments > `config.json` File > Library Defaults**.
-  
+  Settings are resolved with the following priority: **CLI flag given explicitly > `config.json` > `LENS_*` environment variable > default**.
+
   #### **`config.json`**
-  
-  A `config.json` file can be placed in your system's default config directory to set persistent options.
+
+  A `config.json` file can be placed in your system's default config directory to set persistent options (or pass another one with `--config-file`).
   -   **Linux**: `~/.config/chrome-lens-py/config.json`
   -   **macOS**: `~/Library/Application Support/chrome-lens-py/config.json`
   -   **Windows**: `C:\Users\<user>\.config\chrome-lens-py\config.json`
 
+  Every key is optional. A file that is not a JSON object, or a value of the wrong type, stops the run with a message naming the key. `--update-config` writes the file atomically and keeps the previous one as `config.json.bak`.
+
+  | Key | Env variable | Flag | Default |
+  | :--- | :--- | :--- | :--- |
+  | `api_key` | `LENS_API_KEY` | `--api-key` | built-in key |
+  | `proxy` | `LENS_PROXY` | `--proxy` | none |
+  | `trust_env` | `LENS_TRUST_ENV` | `--no-env-proxy` (inverted) | `true` |
+  | `client_region` | `LENS_CLIENT_REGION` | `--client-region` | `US` |
+  | `client_time_zone` | `LENS_CLIENT_TIME_ZONE` | `--client-time-zone` | `America/New_York` |
+  | `timeout` | `LENS_TIMEOUT` | `--timeout` | `60` |
+  | `retries` | `LENS_RETRIES` | `--retries` | `2` |
+  | `concurrency` | `LENS_CONCURRENCY` | `--concurrency` | `5` (max 30) |
+  | `target_lang` | `LENS_TARGET_LANG` | `-t` | none (no translation) |
+  | `ocr_preserve_line_breaks` | `LENS_OCR_PRESERVE_LINE_BREAKS` | `--ocr-single-line` (inverted) | `true` |
+  | `logging_level` | `LENS_LOGGING_LEVEL` | `-l` | `WARNING` |
+  | `font_path` | `LENS_FONT_PATH` | `--font` | system font |
+  | `font_size` | `LENS_FONT_SIZE` | `--font-size` | `20` |
+  | `overlay_mode` | `LENS_OVERLAY_MODE` | `--overlay-mode` | `chromium` |
+  | `vertical_text` | `LENS_VERTICAL_TEXT` | `--vertical-text` | `auto` |
+  | `erase_mode` | `LENS_ERASE_MODE` | `--erase-mode` | `patch` |
+  | `hull_padding` | `LENS_HULL_PADDING` | `--hull-padding` | `0.45` |
+  | `outline_scale` | `LENS_OUTLINE_SCALE` | `--outline` | `1.0` |
+  | `min_readable_px` | `LENS_MIN_READABLE_PX` | `--min-text-size` | `0` |
+  | `text_align` | `LENS_TEXT_ALIGN` | `--text-align` | `auto` |
+  | `manga_mode` | `LENS_MANGA_MODE` | `--manga` | `false` |
+  | `manga_box_growth` | `LENS_MANGA_BOX_GROWTH` | `--manga-growth` | `1.45` |
+
+  The flag spellings `translate`, `font`, `outline`, `min_text_size`, `manga`, `manga_growth` and `no_env_proxy` are also accepted as config keys. Booleans in environment variables take `1/0`, `true/false`, `yes/no`, `on/off`. `--serve` reads the same settings.
+
   ##### **Example `config.json`**
   ```json
   {
-    "api_key": "OPTIONAL! If you don't know what this is, I don't recommend setting it here.",
     "proxy": "socks5://127.0.0.1:9050",
     "client_region": "DE",
     "client_time_zone": "Europe/Berlin",
     "timeout": 90,
+    "retries": 3,
+    "target_lang": "en",
+    "overlay_mode": "chromium",
+    "manga_mode": false,
+    "concurrency": 4,
     "font_path": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "ocr_preserve_line_breaks": true
   }
   ```
+  `api_key` is accepted too, but an environment variable keeps the key out of a file you might share.
 
 </details>
 

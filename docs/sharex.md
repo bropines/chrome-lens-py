@@ -20,9 +20,22 @@ The easiest way to set up ShareX is to use the built-in automation command.
 
 **What this does:**
 *   Locates your ShareX configuration.
-*   Closes ShareX if it's running.
-*   Adds/updates a hotkey (**Ctrl + O**) that captures a region and sends it to Google Lens.
+*   Closes ShareX if it's running (a normal close first, so ShareX saves its own state; a forced kill only if it does not exit within a few seconds).
+*   Copies `HotkeysConfig.json` to `HotkeysConfig.json.bak-<timestamp>` next to it. Nothing is changed before this copy exists.
+*   Adds/updates a hotkey (**Ctrl + O**) that captures a region and sends it to Google Lens. The new file is written atomically, so a crash cannot leave a half-written config.
 *   Restarts ShareX automatically.
+
+If anything fails (for example the config is not valid JSON) the original file is left untouched.
+
+**Translate instead of just OCR.** Pass a target language and the hotkey's action gets `-t <lang>`:
+```bash
+lens_scan --setup-sharex --translate ru     # same as -t ru
+```
+The action's arguments become `-t ru --sharex "$input"`. Run the command again with another language (or none) to change it; the existing `lens` action is updated in place. Language codes may contain only letters, digits, `-` and `_`.
+
+**Other defaults** (proxy, timeout, region, `target_lang`, ...) do not need to be baked into the hotkey: `lens_scan` reads `config.json` and `LENS_*` environment variables on every run, so changing them later needs no ShareX re-setup. See the configuration table in the README.
+
+**Exit status.** `--setup-sharex` exits `0` on success and `1` if it could not complete.
 
 ---
 
@@ -43,12 +56,16 @@ If the automated setup fails or you want custom settings, follow these steps:
     *   **Add** a new action:
         *   **Name**: `Lens OCR`
         *   **File path**: (Paste the path from step 3)
-        *   **Arguments**: `"$input" --sharex`
+        *   **Arguments**: `--sharex "$input"` (add `-t ru` in front to translate)
         *   Check `Hidden window`.
 
 ---
 
 ## Troubleshooting
+If something went wrong with the automated setup, restore the previous configuration by closing ShareX and copying `Documents\ShareX\HotkeysConfig.json.bak-<timestamp>` over `HotkeysConfig.json`.
+
+If the hotkey runs but nothing lands on the clipboard, `lens_scan` now exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra: `pip install "chrome-lens-py[clipboard]"`.
+
 If it takes a long time to process and nothing is copied, try unchecking **"Hidden window"** in your ShareX action settings to see the error console. 
 
 **Antivirus Warning**: Some antivirus software may flag the standalone `.exe` as a threat. This is a false positive common with compiled Python binaries. If this happens, add an exclusion or use the Python version via `pip`.
