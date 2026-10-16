@@ -1,14 +1,19 @@
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from rich.console import Console
+from rich.markup import escape
+
+from .config_manager import atomic_write_text
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -25,18 +30,30 @@ def is_sharex_running() -> bool:
         return False
 
 
-def terminate_sharex():
-    """Closes ShareX to prevent it from overwriting the config on exit."""
-    if is_sharex_running():
-        console.print(
-            "[yellow]ShareX is running. Closing it to apply changes...[/yellow]"
-        )
-        try:
+def terminate_sharex() -> bool:
+    """Close ShareX so it cannot overwrite the config on its way out.
+
+    Asks politely first: a normal close lets ShareX write its own state to
+    disk, and only then do we edit the file. A forced kill is the fallback
+    when it has not gone after a few seconds. Returns True if it was running.
+    """
+    if not is_sharex_running():
+        return False
+
+    console.print("[yellow]ShareX is running. Closing it to apply changes...[/yellow]")
+    try:
+        subprocess.run(["taskkill", "/IM", "ShareX.exe"], capture_output=True)
+        for _ in range(10):
+            time.sleep(0.5)
+            if not is_sharex_running():
+                break
+        else:
             subprocess.run(["taskkill", "/F", "/IM", "ShareX.exe"], capture_output=True)
-            # Give it a moment to release file handles
-            time.sleep(1)
-        except Exception as e:
-            console.print(f"[bold red]Error closing ShareX:[/bold red] {e}")
+        # Give it a moment to release file handles
+        time.sleep(1)
+    except Exception as e:
+        console.print(f"[bold red]Error closing ShareX:[/bold red] {escape(str(e))}")
+    return True
 
 
 def get_sharex_executable_path() -> Optional[Path]:
@@ -92,88 +109,49 @@ def get_documents_path() -> Path:
         return Path(os.path.expanduser("~/Documents"))
 
 
-def setup_sharex_config():
+_LANG_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+
+def build_action_args(target_lang: Optional[str] = None) -> str:
+    """Arguments ShareX passes to lens_scan; `-t <lang>` makes the hotkey translate."""
+    if target_lang:
+        if not _LANG_RE.match(target_lang):
+            raise ValueError(f"Invalid language code: {target_lang!r}")
+        return f'-t {target_lang} --sharex "$input"'
+    return '--sharex "$input"'
+
+
+def backup_hotkeys_config(config_path: Path) -> Path:
+    """Copy the file to HotkeysConfig.json.bak-<timestamp> next to it."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = config_path.with_name(f"{config_path.name}.bak-{stamp}")
+    shutil.copy2(config_path, backup_path)
+    return backup_path
+
+
+def apply_lens_hotkey(
+    config: Dict[str, Any], executable_path: str, action_args: str
+) -> bool:
+    """Add or update the 'lens' action in a HotkeysConfig dict.
+
+    Returns True if an existing action was updated, False if one was added.
     """
-    Automatically configures ShareX to use chrome-lens-py for OCR/Translation.
-    Injects a custom hotkey into HotkeysConfig.json.
-    """
-    if sys.platform != "win32":
-        console.print(
-            "[bold red]Error:[/bold red] ShareX setup is only supported on Windows."
-        )
-        return
+    hotkeys = config.get("Hotkeys")
+    if not isinstance(hotkeys, list):
+        hotkeys = []
 
-    # 1. Locate HotkeysConfig.json
-    documents_dir = get_documents_path()
-    sharex_dir = documents_dir / "ShareX"
-    config_path = sharex_dir / "HotkeysConfig.json"
-
-    if not config_path.exists():
-        console.print(
-            f"[bold red]Error:[/bold red] ShareX configuration file not found at: [cyan]{config_path}[/cyan]"
-        )
-        console.print("Make sure ShareX is installed and has been run at least once.")
-        return
-
-    # 2. Determine the path to the lens_scan executable/script.
-    # ShareX requires a full absolute path — it cannot resolve bare command names.
-    # Priority:
-    #   a) shutil.which("lens_scan") — resolves via PATH (covers pip-installed shims,
-    #      pyenv, venv, etc.)
-    #   b) If sys.executable is NOT python itself (i.e. a compiled binary), use it directly.
-    #   c) Hard fail with a clear message so the user knows what to fix.
-    found_via_which = shutil.which("lens_scan")
-
-    if found_via_which:
-        executable_path = str(Path(found_via_which).resolve())
-    else:
-        # Maybe we're running as a compiled binary (Nuitka/PyInstaller)
-        se = sys.executable
-        if not se.lower().endswith(("python.exe", "pythonw.exe", "python", "pythonw")):
-            executable_path = se
-        else:
-            console.print(
-                "[bold red]Error:[/bold red] Could not locate the [cyan]lens_scan[/cyan] executable.\n"
-                "Make sure the package is installed (e.g. [bold]pip install chrome-lens-py[/bold]) "
-                "and that the Scripts directory is in your PATH."
-            )
-            return
-
-    console.print(f"Detected executable path: [cyan]{executable_path}[/cyan]")
-
-    # 3. Load and modify the config
-    try:
-        # ShareX uses UTF-8 with BOM sometimes
-        with open(config_path, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
-    except Exception as e:
-        console.print(f"[bold red]Error reading ShareX config:[/bold red] {e}")
-        return
-
-    hotkeys = config.get("Hotkeys", [])
-
-    # Check if 'lens' action already exists to avoid exact duplicates
-    exists = False
     for hk in hotkeys:
-        task = hk.get("TaskSettings", {})
-        programs = task.get("ExternalPrograms") or []
-        for prog in programs:
-            if prog.get("Name") == "lens":
-                # Update existing one
+        task = hk.get("TaskSettings", {}) if isinstance(hk, dict) else {}
+        for prog in task.get("ExternalPrograms") or []:
+            if isinstance(prog, dict) and prog.get("Name") == "lens":
                 prog["Path"] = executable_path
-                prog["Args"] = '--sharex "$input"'
+                prog["Args"] = action_args
                 prog["IsActive"] = True
-                exists = True
-                console.print(
-                    "Found existing 'lens' task in ShareX. [yellow]Updating path...[/yellow]"
-                )
-                break
-        if exists:
-            break
+                config["Hotkeys"] = hotkeys
+                return True
 
-    if not exists:
-        # Create a new hotkey entry
-        new_entry = {
+    hotkeys.append(
+        {
             "HotkeyInfo": {"Hotkey": "O, Control", "Win": False},
             "TaskSettings": {
                 "Description": "Google Lens OCR (chrome-lens-py)",
@@ -186,7 +164,7 @@ def setup_sharex_config():
                         "IsActive": True,
                         "Name": "lens",
                         "Path": executable_path,
-                        "Args": '--sharex "$input"',
+                        "Args": action_args,
                         "OutputExtension": "",
                         "Extensions": "",
                         "HiddenWindow": True,
@@ -195,50 +173,142 @@ def setup_sharex_config():
                 ],
             },
         }
-        hotkeys.append(new_entry)
+    )
+    config["Hotkeys"] = hotkeys
+    return False
+
+
+def _find_lens_scan() -> Optional[str]:
+    # ShareX requires a full absolute path - it cannot resolve bare command names.
+    # Priority:
+    #   a) shutil.which("lens_scan") - resolves via PATH (covers pip-installed
+    #      shims, pyenv, venv, etc.)
+    #   b) If sys.executable is NOT python itself (i.e. a compiled binary), use
+    #      it directly.
+    found_via_which = shutil.which("lens_scan")
+    if found_via_which:
+        return str(Path(found_via_which).resolve())
+    se = sys.executable
+    if not se.lower().endswith(("python.exe", "pythonw.exe", "python", "pythonw")):
+        return se
+    return None
+
+
+def _restart_sharex(interactive: bool) -> None:
+    sharex_exe = get_sharex_executable_path()
+    if not sharex_exe and interactive:
         console.print(
-            "Adding new [bold green]Ctrl + O[/bold green] hotkey for Google Lens OCR."
+            "[yellow]ShareX executable not found in standard locations.[/yellow]"
+        )
+        user_path = console.input(
+            "Please enter the full path to [bold]ShareX.exe[/bold] "
+            "(or press Enter to skip restart): "
+        ).strip()
+        if user_path:
+            p = Path(user_path.strip('"'))
+            if p.exists() and p.is_file():
+                sharex_exe = p
+            else:
+                console.print(f"[red]Invalid path: {escape(user_path)}[/red]")
+
+    if sharex_exe:
+        console.print(
+            f"[yellow]Restarting ShareX from: {escape(str(sharex_exe))}[/yellow]"
+        )
+        subprocess.Popen([str(sharex_exe)], start_new_session=True)
+    else:
+        console.print(
+            "[yellow]Skipping ShareX restart. Please start it manually.[/yellow]"
         )
 
-    config["Hotkeys"] = hotkeys
 
-    # 4. Terminate ShareX before saving to prevent overwrite
-    terminate_sharex()
+def setup_sharex_config(target_lang: Optional[str] = None) -> bool:
+    """
+    Automatically configures ShareX to use chrome-lens-py for OCR/Translation.
+    Injects a custom hotkey into HotkeysConfig.json, translating into
+    `target_lang` when one is given. Returns True on success.
 
-    # 5. Save the config
+    The existing file is copied to HotkeysConfig.json.bak-<timestamp> before it
+    is touched, and the new content is written atomically.
+    """
+    if sys.platform != "win32":
+        console.print(
+            "[bold red]Error:[/bold red] ShareX setup is only supported on Windows."
+        )
+        return False
+
     try:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
+        action_args = build_action_args(target_lang)
+    except ValueError as e:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+        return False
+
+    # 1. Locate HotkeysConfig.json
+    config_path = get_documents_path() / "ShareX" / "HotkeysConfig.json"
+    if not config_path.exists():
+        console.print(
+            "[bold red]Error:[/bold red] ShareX configuration file not found at: "
+            f"[cyan]{escape(str(config_path))}[/cyan]"
+        )
+        console.print("Make sure ShareX is installed and has been run at least once.")
+        return False
+
+    # 2. Determine the path to the lens_scan executable/script.
+    executable_path = _find_lens_scan()
+    if not executable_path:
+        console.print(
+            "[bold red]Error:[/bold red] Could not locate the [cyan]lens_scan[/cyan] "
+            "executable.\nMake sure the package is installed "
+            "(e.g. [bold]pip install chrome-lens-py[/bold]) "
+            "and that the Scripts directory is in your PATH."
+        )
+        return False
+    console.print(f"Detected executable path: [cyan]{escape(executable_path)}[/cyan]")
+    if target_lang:
+        console.print(
+            f"The hotkey will translate into: [cyan]{escape(target_lang)}[/cyan]"
+        )
+
+    # 3. Close ShareX first, so that what we read is what it saved on exit
+    #    and nothing overwrites our edit afterwards.
+    was_running = terminate_sharex()
+
+    saved = False
+    try:
+        # ShareX uses UTF-8 with BOM sometimes
+        with open(config_path, "r", encoding="utf-8-sig") as f:
+            config = json.load(f)
+        if not isinstance(config, dict):
+            raise ValueError("HotkeysConfig.json does not contain a JSON object.")
+
+        if apply_lens_hotkey(config, executable_path, action_args):
+            console.print(
+                "Found existing 'lens' task in ShareX. [yellow]Updating it...[/yellow]"
+            )
+        else:
+            console.print(
+                "Adding new [bold green]Ctrl + O[/bold green] hotkey for Google Lens OCR."
+            )
+
+        backup_path = backup_hotkeys_config(config_path)
+        console.print(
+            f"Backup of the previous config: [cyan]{escape(str(backup_path))}[/cyan]"
+        )
+        atomic_write_text(str(config_path), json.dumps(config, indent=2))
+        saved = True
         console.print(
             "\n[bold green]Success![/bold green] ShareX configuration updated."
         )
-
-        # 6. Restart ShareX
-        sharex_exe = get_sharex_executable_path()
-        if not sharex_exe:
-            console.print(
-                "[yellow]ShareX executable not found in standard locations.[/yellow]"
-            )
-            user_path = console.input(
-                "Please enter the full path to [bold]ShareX.exe[/bold] (or press Enter to skip restart): "
-            ).strip()
-            if user_path:
-                p = Path(user_path.strip('"'))
-                if p.exists() and p.is_file():
-                    sharex_exe = p
-                else:
-                    console.print(f"[red]Invalid path: {user_path}[/red]")
-
-        if sharex_exe:
-            console.print(f"[yellow]Restarting ShareX from: {sharex_exe}[/yellow]")
-            subprocess.Popen([str(sharex_exe)], start_new_session=True)
-        else:
-            console.print(
-                "[yellow]Skipping ShareX restart. Please start it manually.[/yellow]"
-            )
-
         console.print(
-            "\nDefault hotkey: [bold cyan]Ctrl + O[/bold cyan] (Region capture -> Lens OCR)"
+            "\nDefault hotkey: [bold cyan]Ctrl + O[/bold cyan] "
+            "(Region capture -> Lens OCR)"
         )
     except Exception as e:
-        console.print(f"[bold red]Error saving ShareX config:[/bold red] {e}")
+        console.print(
+            f"[bold red]Error updating ShareX config:[/bold red] {escape(str(e))}"
+        )
+
+    # 4. Bring ShareX back (also after a failure, if we were the ones to close it).
+    if saved or was_running:
+        _restart_sharex(interactive=saved)
+    return saved
