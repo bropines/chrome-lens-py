@@ -1,36 +1,77 @@
 import argparse
 import asyncio
+import inspect
 import json
 import logging
 import os
-import subprocess
+import shutil
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from .. import __version__
+from .. import __version__, formats
 from ..api import LensAPI
-from ..constants import (
-    DEFAULT_API_KEY,
-    DEFAULT_CLIENT_REGION,
-    DEFAULT_CLIENT_TIME_ZONE,
-    DEFAULT_CONFIG_FILENAME,
-)
-from ..exceptions import LensConfigError, LensException
+from ..constants import DEFAULT_CONFIG_FILENAME
+from ..exceptions import LensConfigError, LensException, LensImageError
 from ..utils.config_manager import (
-    build_app_config,
+    SECRET_FIELDS,
+    Settings,
+    default_value,
     get_default_config_dir,
+    resolve_settings,
     update_config_file_from_cli,
 )
-from ..utils.general import is_image_file_supported
+from ..utils.general import is_image_file_supported, is_url
 from ..utils.sharex import copy_to_clipboard
 from ..utils.sharex_setup import setup_sharex_config
 
+logger = logging.getLogger(__name__)
+
+# Exit codes. 2 is also what argparse uses for a usage error, which is fine:
+# both mean "not everything you asked for happened".
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_PARTIAL = 2
+
+CONCURRENCY_WARNING_THRESHOLD = 20
+
+# `console` carries output that is the point of the command (--version, --help).
+# `err_console` carries everything decorative or diagnostic, so stdout holds
+# only result data and can be piped or redirected without cleaning it first.
 console = Console()
+err_console = Console(stderr=True)
+
+
+# ------------------------------------------------------------------- output
+
+
+def emit(text: str = "") -> None:
+    """Write result data to stdout exactly as given.
+
+    Never goes through rich: rich wraps at the terminal width (80 columns when
+    piped) and reads "[...]" as markup, either of which corrupts JSON and OCR
+    text.
+    """
+    sys.stdout.write(text + "\n")
+    sys.stdout.flush()
+
+
+def note(markup: str) -> None:
+    """Decorative / informational message (stderr). Callers escape any data."""
+    err_console.print(markup)
+
+
+def fail(message: str, label: str = "Error") -> None:
+    """An error message (stderr). The text is data and is never parsed as markup."""
+    err_console.print(
+        Text.assemble((f"{label}: ", "bold red"), message), soft_wrap=True
+    )
 
 
 def setup_logging(level_str: str = "WARNING"):
@@ -40,6 +81,9 @@ def setup_logging(level_str: str = "WARNING"):
         if log_level <= logging.DEBUG
         else "%(message)s"
     )
+    # force=True: if anything logged before this point, the root logger already
+    # has a handler and a plain basicConfig would silently do nothing, which is
+    # how `-l DEBUG` used to have no effect.
     logging.basicConfig(
         level=log_level,
         format=log_format,
@@ -51,14 +95,17 @@ def setup_logging(level_str: str = "WARNING"):
                 show_time=False,
                 show_level=log_level <= logging.INFO,
                 show_path=log_level <= logging.DEBUG,
-                markup=True,
+                # Log messages carry URLs, paths and server replies; "[x]" in
+                # them must not be read as markup.
+                markup=False,
                 rich_tracebacks=True,
             )
         ],
+        force=True,
     )
     if log_level > logging.DEBUG:
         logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.debug(f"Logging level set to {level_str.upper()}")
+    logger.debug("Logging level set to %s", level_str.upper())
 
 
 def print_version():
@@ -102,385 +149,857 @@ def print_version():
     console.print(table)
 
 
-def print_help():
-    console.print("\n[bold cyan]Google Lens CLI (chrome-lens-py)[/bold cyan]")
-    console.print("Performs OCR and optional translation on an image.")
-
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column(style="green")
-    table.add_column()
-    table.add_row("Usage:", "lens_scan <image_source> [ocr_lang] [options]")
-    table.add_row("\n[bold]Arguments:[/bold]")
-    table.add_row("  image_source", "Path to an image file, a URL, or a directory.")
-    table.add_row(
-        "  ocr_lang",
-        "BCP 47 language code for OCR (e.g., 'en', 'ja'). If omitted, auto-detection is attempted.",
-    )
-    table.add_row("\n[bold]Translation Options:[/bold]")
-    table.add_row(
-        "  -t, --translate TARGET_LANG",
-        "Target language for translation (e.g., 'en', 'ru').",
-    )
-    table.add_row(
-        "  --translate-from SOURCE_LANG",
-        "Source language for translation (auto-detected if omitted).",
-    )
-    table.add_row(
-        "  -to, --translate-out FILE_PATH",
-        "Save the image with translated text overlaid.",
-    )
-    table.add_row("\n[bold]Output and Config Options:[/bold]")
-    table.add_row(
-        "  -b, --output-blocks",
-        "Output OCR text as segmented blocks (useful for comics).",
-    )
-    table.add_row(
-        "  -ol, --output-lines",
-        "Output OCR text as individual lines with their geometry.",
-    )
-    table.add_row(
-        "  --get-coords",
-        "Output recognized words with their coordinates in JSON format.",
-    )
-    table.add_row(
-        "  -q, --quiet",
-        "Suppress informational messages and headers, printing only the final result data.",
-    )
-    table.add_row(
-        "  -sx, --sharex", "Copy the result (translation or OCR) to the clipboard."
-    )
-    table.add_row(
-        "  --ocr-single-line",
-        "Join all OCR text into a single line (preserves line breaks by default).",
-    )
-    table.add_row(
-        "  --config-file FILE_PATH", "Path to a custom JSON configuration file."
-    )
-    table.add_row(
-        "  --update-config", "Update the default config file with CLI arguments."
-    )
-    table.add_row(
-        "  --overlay-mode MODE",
-        "Overlay renderer: 'chromium' (default, in-place per line) or 'legacy'.",
-    )
-    table.add_row(
-        "  --vertical-text MODE",
-        "Vertical (CJK) source text: auto (default), keep, or horizontal.",
-    )
-    table.add_row(
-        "  --manga",
-        "Preset for vertical Japanese: reflow, wider layout, hull erasing, bigger text.",
-    )
-    table.add_row(
-        "  --erase-mode MODE",
-        "How to remove the source: 'patch' (Chromium) or 'hull' (cover the area).",
-    )
-    table.add_row(
-        "  --outline N", "Outline thickness behind translated text (0 removes it)."
-    )
-    table.add_row(
-        "  --min-text-size PX", "Enlarge text that would render smaller than this."
-    )
-    table.add_row("  --text-align SIDE", "auto (follow source), left, center or right.")
-    table.add_row("  --font FONT_PATH", "Path to a .ttf font file for the overlay.")
-    table.add_row("  --font-size SIZE", "Font size for the overlay (default: 20).")
-    table.add_row("\n[bold]Daemon Options:[/bold]")
-    table.add_row(
-        "  --serve", "Run as a local HTTP daemon instead of processing one image."
-    )
-    table.add_row("  --host ADDR", "Address to bind (default: 127.0.0.1).")
-    table.add_row("  --port N", "Port to bind (default: 8765).")
-    table.add_row(
-        "  --token TOKEN",
-        "Require this bearer token. Mandatory when --host is not loopback.",
-    )
-    table.add_row(
-        "  --allow-origin ORIGIN",
-        "Let one browser origin call the daemon (repeatable). None by default, "
-        "so no web page can reach it.",
-    )
-    table.add_row("\n[bold]Advanced & Debug Options:[/bold]")
-    table.add_row("  --api-key KEY", "Google Cloud API key (overrides config).")
-    table.add_row(
-        "  --proxy URL",
-        "Proxy server URL (e.g., http://user:pass@host:port, socks5://host:port).",
-    )
-    table.add_row(
-        "  --region CX,CY,W,H",
-        "Re-read one region at native resolution (values normalized 0..1).",
-    )
-    table.add_row("  --text-query TEXT", "Text to send alongside --region.")
-    table.add_row(
-        "  --no-env-proxy",
-        "Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment and connect directly.",
-    )
-    table.add_row("  --timeout SECONDS", "Request timeout in seconds (default: 60).")
-    table.add_row(
-        "  --concurrency N",
-        "Set the maximum number of concurrent requests (default: 5).",
-    )
-    table.add_row(
-        "  --client-region REGION",
-        f"Client region code (default: '{DEFAULT_CLIENT_REGION}').",
-    )
-    table.add_row(
-        "  --client-time-zone TZ",
-        f"Client time zone ID (default: '{DEFAULT_CLIENT_TIME_ZONE}').",
-    )
-    table.add_row(
-        "  -l, --logging-level LEVEL",
-        "Set logging level (DEBUG, INFO, WARNING, ERROR).",
-    )
-    table.add_row(
-        "  -V, --version", "Show the version and which copy of it is running."
-    )
-    table.add_row("  -h, --help", "Show this help message and exit.")
-    console.print(table)
+# ------------------------------------------------------------------- parser
 
 
-async def cli_main():
-    parser = argparse.ArgumentParser(description="Google Lens CLI", add_help=False)
+class _HelpFormatter(argparse.HelpFormatter):
+    """argparse's formatter with room for our long option names."""
+
+    def __init__(self, prog: str):
+        width = max(shutil.get_terminal_size((100, 24)).columns - 2, 60)
+        super().__init__(prog, max_help_position=36, width=min(width, 110))
+
+
+def _default_text(name: str) -> str:
+    return f" (default: {default_value(name)})"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The one description of the command line; --help is generated from it.
+
+    Options that map to a persistent setting are declared with
+    ``default=SUPPRESS``. A flag the user did not type is then absent from the
+    parsed namespace, which is what lets the config file and LENS_* variables
+    take effect instead of being overridden by a hard-coded default.
+    """
+    parser = argparse.ArgumentParser(
+        prog="lens_scan",
+        usage="lens_scan <image_source> [ocr_lang] [options]",
+        description="Performs OCR and optional translation on an image with Google Lens.",
+        add_help=False,
+        formatter_class=_HelpFormatter,
+    )
+    SUPPRESS = argparse.SUPPRESS
+
+    def setting(group, *flags, **kwargs):
+        kwargs.setdefault("default", SUPPRESS)
+        return group.add_argument(*flags, **kwargs)
+
     # Positional
-    parser.add_argument(
-        "image_source", nargs="?", help="Path to the image file, a URL, or a directory."
+    g = parser.add_argument_group("Arguments")
+    g.add_argument(
+        "image_source",
+        nargs="?",
+        help="Path to an image file, a URL, or a directory.",
     )
-    parser.add_argument(
-        "ocr_lang", nargs="?", default=None, help="BCP 47 code for OCR."
+    g.add_argument(
+        "ocr_lang",
+        nargs="?",
+        default=None,
+        help="BCP 47 language code for OCR (e.g. 'en', 'ja'). "
+        "Auto-detected if omitted.",
     )
-    # ShareX Setup
-    parser.add_argument(
-        "--setup-sharex",
+
+    g = parser.add_argument_group("Translation")
+    setting(
+        g,
+        "-t",
+        "--translate",
+        dest="target_lang",
+        metavar="TARGET_LANG",
+        help="Target language for translation (e.g. 'en', 'ru').",
+    )
+    g.add_argument(
+        "--translate-from",
+        dest="source_lang",
+        metavar="SOURCE_LANG",
+        help="Source language for translation (auto-detected if omitted).",
+    )
+    g.add_argument(
+        "-to",
+        "--translate-out",
+        dest="output_overlay_path",
+        metavar="FILE_PATH",
+        help="Save the image with the translated text overlaid.",
+    )
+
+    g = parser.add_argument_group("Output")
+    g.add_argument(
+        "--format",
+        choices=formats.FORMATS,
+        default="text",
+        dest="output_format",
+        help="Output format: text (default), json, jsonl (one object per image), "
+        "hocr (XHTML) or tsv (tesseract-style). Not combinable with "
+        "-b/-ol/--get-coords/--oneline.",
+    )
+    g.add_argument(
+        "--oneline",
         action="store_true",
-        help="Automatically configure ShareX to use lens_scan for OCR/Translation.",
+        help='Print each result as one compact JSON line: {"file", "ocr_text", '
+        '"translated_text", "error"}. Compatible with the Chrome-Lens-OCR fork.',
     )
-    # Translation
-    parser.add_argument("-t", "--translate", dest="target_lang")
-    parser.add_argument("--translate-from", dest="source_lang")
-    parser.add_argument("-to", "--translate-out", dest="output_overlay_path")
-    # Output & Config
-    parser.add_argument(
+    g.add_argument(
         "-b",
         "--output-blocks",
         action="store_true",
-        help="Output OCR text as segmented blocks.",
+        help="Output OCR text as segmented blocks (useful for comics).",
     )
-    parser.add_argument(
+    g.add_argument(
         "-ol",
         "--output-lines",
         action="store_true",
         help="Output OCR text as individual lines.",
     )
-    parser.add_argument(
+    g.add_argument(
         "--get-coords",
         action="store_true",
-        help="Output word coordinates in JSON format.",
+        help="Output recognized words with their coordinates as JSON.",
     )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Suppress informational messages, printing only result data.",
-    )
-    parser.add_argument("-sx", "--sharex", action="store_true")
-    parser.add_argument(
+    setting(
+        g,
         "--ocr-single-line",
         action="store_false",
         dest="ocr_preserve_line_breaks",
-        default=None,
+        help="Join all OCR text into a single line (line breaks are kept by default).",
     )
-    parser.add_argument("--config-file", dest="config_file_path_override")
-    parser.add_argument("--update-config", action="store_true")
-    parser.add_argument(
+    g.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress informational messages; print only result data.",
+    )
+    g.add_argument(
+        "-sx",
+        "--sharex",
+        action="store_true",
+        help="Copy the result (translation or OCR) to the clipboard.",
+    )
+    g.add_argument(
+        "--region",
+        metavar="CX,CY,W,H",
+        help="Re-read one region at native resolution (values normalized 0..1).",
+    )
+    g.add_argument(
+        "--text-query",
+        metavar="TEXT",
+        help="Text to send alongside --region.",
+    )
+
+    g = parser.add_argument_group("Overlay rendering (with --translate-out)")
+    setting(
+        g,
         "--overlay-mode",
         choices=["chromium", "legacy"],
-        default="chromium",
-        help="How to draw --translate-out. 'chromium' repaints each line in "
-        "place using the server's inpainted background; 'legacy' is the old "
-        "white-box overlay.",
+        metavar="MODE",
+        help="'chromium' repaints each line in place using the server's inpainted "
+        "background; 'legacy' is the old white-box overlay"
+        + _default_text("overlay_mode")
+        + ".",
     )
-    parser.add_argument(
+    setting(
+        g,
+        "--vertical-text",
+        choices=["keep", "auto", "horizontal"],
+        metavar="MODE",
+        help="Top-to-bottom source text: 'auto' keeps it vertical only when "
+        "translating into a CJK language, 'keep' always renders vertically, "
+        "'horizontal' always reflows" + _default_text("vertical_text") + ".",
+    )
+    setting(
+        g,
+        "--erase-mode",
+        choices=["patch", "hull"],
+        metavar="MODE",
+        help="How to remove the source text: 'patch' uses the server's "
+        "inpainting, 'hull' covers the whole text area with its background "
+        "colour" + _default_text("erase_mode") + ".",
+    )
+    setting(
+        g,
+        "--hull-padding",
+        type=float,
+        metavar="N",
+        help="How far the hull reaches past the text, in line heights"
+        + _default_text("hull_padding")
+        + ".",
+    )
+    setting(
+        g,
+        "--outline",
+        dest="outline_scale",
+        type=float,
+        metavar="N",
+        help="Multiplier on the outline behind translated text; 0 removes it"
+        + _default_text("outline_scale")
+        + ".",
+    )
+    setting(
+        g,
+        "--min-text-size",
+        dest="min_readable_px",
+        type=float,
+        metavar="PX",
+        help="Enlarge text that would render smaller than this many pixels"
+        + _default_text("min_readable_px")
+        + ".",
+    )
+    setting(
+        g,
+        "--text-align",
+        choices=["auto", "left", "center", "right"],
+        metavar="SIDE",
+        help="auto (follow the source), left, center or right"
+        + _default_text("text_align")
+        + ".",
+    )
+    setting(
+        g,
+        "--manga",
+        dest="manga_mode",
+        action="store_true",
+        help="Preset for vertical Japanese: always reflow, lay out wider than the "
+        "detected box, erase by hull, bigger minimum size.",
+    )
+    setting(
+        g,
+        "--manga-growth",
+        dest="manga_box_growth",
+        type=float,
+        metavar="N",
+        help="How much wider than the detected box to lay out in manga mode"
+        + _default_text("manga_box_growth")
+        + ".",
+    )
+    setting(
+        g,
+        "--font",
+        dest="font_path",
+        metavar="FONT_PATH",
+        help="Path to a .ttf font file for the overlay.",
+    )
+    setting(
+        g,
+        "--font-size",
+        type=int,
+        metavar="SIZE",
+        help="Font size for the overlay (default: 20).",
+    )
+
+    g = parser.add_argument_group("Daemon")
+    g.add_argument(
         "--serve",
         action="store_true",
         help="Run as a local HTTP daemon instead of processing one image.",
     )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--token", help="Require this bearer token on daemon requests.")
-    parser.add_argument(
+    g.add_argument(
+        "--host",
+        default="127.0.0.1",
+        metavar="ADDR",
+        help="Address to bind (default: 127.0.0.1).",
+    )
+    g.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        metavar="N",
+        help="Port to bind (default: 8765).",
+    )
+    g.add_argument(
+        "--token",
+        help="Require this bearer token. Mandatory when --host is not loopback.",
+    )
+    g.add_argument(
         "--allow-origin",
         action="append",
         default=[],
         metavar="ORIGIN",
-        help="Let this browser origin call the daemon (repeatable). Without "
-        "it no web page can, which is the point: otherwise any site you "
-        "visit could spend your API key or read your files through it.",
+        help="Let one browser origin call the daemon (repeatable). None by "
+        "default, so no web page can reach it.",
     )
-    parser.add_argument(
-        "--region",
-        help="Re-read one region at native resolution: cx,cy,w,h normalized 0..1.",
+
+    g = parser.add_argument_group("Connection")
+    setting(g, "--api-key", metavar="KEY", help="Google Cloud API key.")
+    setting(
+        g,
+        "--proxy",
+        metavar="URL",
+        help="Proxy server URL (e.g. http://user:pass@host:port, socks5://host:port).",
     )
-    parser.add_argument(
-        "--text-query",
-        help="Text to send alongside --region, the way the overlay does when "
-        "you select a region and type a question about it.",
-    )
-    parser.add_argument(
-        "--vertical-text",
-        choices=["keep", "auto", "horizontal"],
-        default="auto",
-        help="Top-to-bottom source text: 'auto' (default) keeps it vertical only "
-        "when translating into a CJK language, 'keep' always renders vertically "
-        "like Chromium, 'horizontal' always reflows the paragraph.",
-    )
-    parser.add_argument(
-        "--erase-mode",
-        choices=["patch", "hull"],
-        default="patch",
-        help="How to remove the source text: 'patch' uses the server's "
-        "inpainting like Chromium, 'hull' covers the whole text area with its "
-        "background colour (cleaner, but only right where that colour is flat).",
-    )
-    parser.add_argument("--hull-padding", type=float, default=0.45)
-    parser.add_argument(
-        "--outline",
-        dest="outline_scale",
-        type=float,
-        default=1.0,
-        help="Multiplier on the outline behind translated text; 0 removes it.",
-    )
-    parser.add_argument(
-        "--min-text-size",
-        dest="min_readable_px",
-        type=float,
-        default=0.0,
-        help="Enlarge text that would render smaller than this many pixels.",
-    )
-    parser.add_argument(
-        "--text-align", choices=["auto", "left", "center", "right"], default="auto"
-    )
-    parser.add_argument(
-        "--manga",
-        dest="manga_mode",
-        action="store_true",
-        help="Preset for pages of vertical Japanese: always reflow, lay out "
-        "wider than the detected box, erase by hull, bigger minimum size.",
-    )
-    parser.add_argument(
-        "--manga-growth", dest="manga_box_growth", type=float, default=1.45
-    )
-    parser.add_argument("--font", dest="font_path")
-    parser.add_argument("--font-size", type=int)
-    # Advanced
-    parser.add_argument("--api-key")
-    parser.add_argument("--proxy")
-    parser.add_argument(
+    setting(
+        g,
         "--no-env-proxy",
-        action="store_true",
-        help="Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY and connect directly.",
+        dest="trust_env",
+        action="store_false",
+        help="Ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment and "
+        "connect directly.",
     )
-    parser.add_argument("--timeout", type=int)
-    parser.add_argument(
+    setting(
+        g,
+        "--timeout",
+        type=int,
+        metavar="SECONDS",
+        help="Request timeout in seconds" + _default_text("timeout") + ".",
+    )
+    setting(
+        g,
+        "--retries",
+        type=int,
+        metavar="N",
+        help="Retries after a network error or a retryable HTTP status"
+        + _default_text("retries")
+        + ".",
+    )
+    setting(
+        g,
         "--concurrency",
         type=int,
-        default=5,
-        help="Maximum number of concurrent requests.",
+        metavar="N",
+        help="Maximum number of concurrent requests"
+        + _default_text("concurrency")
+        + ", at most 30.",
     )
-    parser.add_argument("--client-region")
-    parser.add_argument("--client-time-zone")
-    # Meta
-    parser.add_argument("-l", "--logging-level", dest="logging_level")
-    parser.add_argument("-h", "--help", action="store_true")
-    parser.add_argument("-V", "--version", action="store_true")
+    setting(
+        g,
+        "--client-region",
+        metavar="REGION",
+        help="Client region code" + _default_text("client_region") + ".",
+    )
+    setting(
+        g,
+        "--client-time-zone",
+        metavar="TZ",
+        help="Client time zone ID" + _default_text("client_time_zone") + ".",
+    )
 
-    args = parser.parse_args()
+    g = parser.add_argument_group("Configuration and setup")
+    g.add_argument(
+        "--config-file",
+        dest="config_file_path_override",
+        metavar="FILE_PATH",
+        help="Path to a custom JSON configuration file.",
+    )
+    g.add_argument(
+        "--update-config",
+        action="store_true",
+        help="Save the settings given on this command line into the default "
+        "config file (never the API key).",
+    )
+    g.add_argument(
+        "--setup-sharex",
+        action="store_true",
+        help="Configure ShareX to use lens_scan (Windows). Add -t LANG to make "
+        "the hotkey translate.",
+    )
+    setting(
+        g,
+        "-l",
+        "--logging-level",
+        metavar="LEVEL",
+        help="Logging level: DEBUG, INFO, WARNING, ERROR"
+        + _default_text("logging_level")
+        + ".",
+    )
+    g.add_argument(
+        "-V",
+        "--version",
+        action="store_true",
+        help="Show the version and which copy of it is running.",
+    )
+    g.add_argument(
+        "-h", "--help", action="store_true", help="Show this help message and exit."
+    )
+    return parser
+
+
+def print_help(parser: Optional[argparse.ArgumentParser] = None, file=None) -> None:
+    """Render --help from the parser, so it cannot drift from the real options."""
+    parser = parser or build_parser()
+    file = file or sys.stdout
+    header = Console(file=file)
+    header.print("\n[bold cyan]Google Lens CLI (chrome-lens-py)[/bold cyan]")
+    file.write(parser.format_help())
+    file.write(
+        "\nEnvironment: any setting can also be given as LENS_<NAME> "
+        "(LENS_API_KEY, LENS_PROXY, LENS_TIMEOUT, ...).\n"
+        "Precedence: command line > config file > environment > defaults.\n"
+        "Exit codes: 0 all images processed, 1 all failed, 2 some failed.\n"
+    )
+    file.flush()
+
+
+# ---------------------------------------------------------------- processing
+
+
+def _api_kwargs(settings: Settings) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = dict(
+        api_key=settings.api_key,
+        client_region=settings.client_region,
+        client_time_zone=settings.client_time_zone,
+        proxy=settings.proxy,
+        timeout=settings.timeout,
+        font_path=settings.font_path,
+        font_size=settings.font_size,
+        max_concurrent=settings.concurrency,
+        trust_env=settings.trust_env,
+    )
+    # LensAPI grew no retry parameter yet. Pass ours only once it has one, so
+    # --retries starts working the day core accepts `max_retries`.
+    try:
+        if "max_retries" in inspect.signature(LensAPI.__init__).parameters:
+            kwargs["max_retries"] = settings.retries
+    except (TypeError, ValueError):
+        pass
+    return kwargs
+
+
+def _render_kwargs(settings: Settings) -> Dict[str, Any]:
+    return dict(
+        overlay_mode=settings.overlay_mode,
+        vertical_text=settings.vertical_text,
+        erase_mode=settings.erase_mode,
+        hull_padding=settings.hull_padding,
+        outline_scale=settings.outline_scale,
+        min_readable_px=settings.min_readable_px,
+        text_align=settings.text_align,
+        manga_mode=settings.manga_mode,
+        manga_box_growth=settings.manga_box_growth,
+    )
+
+
+def _exit_code(failed: int, total: int) -> int:
+    if failed == 0:
+        return EXIT_OK
+    return EXIT_FAILED if failed >= total else EXIT_PARTIAL
+
+
+def _coords_json(result: Dict[str, Any]) -> str:
+    word_data = result.get("word_data")
+    if not word_data:
+        return "[]"
+    processed = []
+    for data in word_data:
+        geom = data.get("geometry")
+        processed.append(
+            {
+                data["word"]: (
+                    {
+                        "center_x": round(geom["center_x"], 4),
+                        "center_y": round(geom["center_y"], 4),
+                        "width": round(geom["width"], 4),
+                        "height": round(geom["height"], 4),
+                        "angle_deg": round(geom["angle_deg"], 2),
+                    }
+                    if geom
+                    else None
+                )
+            }
+        )
+    return json.dumps(processed, indent=2, ensure_ascii=False)
+
+
+async def _image_size(api: Any, source: str) -> Optional[Tuple[int, int]]:
+    """Pixel size of the image as Lens saw it (it reports geometry normalized)."""
+    try:
+        if not is_url(source):
+            from PIL import Image
+
+            with Image.open(source) as image:
+                return image.size
+
+        from ..core.image_processor import prepare_image_for_api
+
+        client = await api.request_handler.get_client()
+        _, _, _, original = await prepare_image_for_api(
+            source, client=client, keep_original=True
+        )
+        return original.size if original is not None else None
+    except Exception as e:
+        logger.debug("Could not determine the size of %s: %s", source, e)
+        return None
+
+
+def _text_to_copy(
+    result: Dict[str, Any], settings: Settings, blocks_mode: bool
+) -> Tuple[str, str]:
+    translated = result.get("translated_text")
+    if settings.target_lang and translated:
+        return translated, "Translated text"
+    if blocks_mode:
+        blocks = result.get("text_blocks", [])
+        if blocks:
+            return "\n\n".join(b.get("text", "") for b in blocks), "OCR text (blocks)"
+        return "", ""
+    text = formats.ocr_text(result, settings.ocr_preserve_line_breaks)
+    return (text, "OCR text") if text else ("", "")
+
+
+def _print_text_result(
+    result: Dict[str, Any], args: argparse.Namespace, settings: Settings
+) -> None:
+    quiet = args.quiet
+    if args.output_lines:
+        line_blocks = result.get("line_blocks", [])
+        if not quiet:
+            note(f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]")
+            if not line_blocks:
+                note("No lines found.")
+        for j, line in enumerate(line_blocks):
+            if not quiet:
+                note(f"\n--- [cyan]Line #{j + 1}[/cyan] ---")
+            emit(line.get("text", ""))
+    elif args.output_blocks:
+        text_blocks = result.get("text_blocks", [])
+        if not quiet:
+            note(f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]")
+            if not text_blocks:
+                note("No text blocks found.")
+        for j, block in enumerate(text_blocks):
+            if not quiet:
+                note(f"\n--- [cyan]Block #{j + 1}[/cyan] ---")
+            emit(block.get("text", ""))
+    else:
+        ocr_text = result.get("ocr_text")
+        if not quiet:
+            note("\n[bold green]OCR Results:[/bold green]")
+        if ocr_text:
+            emit(ocr_text)
+        elif not quiet:
+            note("No OCR text found.")
+
+    translated = result.get("translated_text")
+    if translated:
+        if not quiet:
+            suffix = " (Full)" if (args.output_lines or args.output_blocks) else ""
+            note(f"\n[bold green]Translated Text{suffix}:[/bold green]")
+        emit(translated)
+
+
+async def _run_region(
+    api: Any, args: argparse.Namespace, settings: Settings, source: str
+) -> int:
+    try:
+        region = tuple(float(v) for v in args.region.split(","))
+        if len(region) != 4:
+            raise ValueError
+    except ValueError:
+        fail(
+            "--region takes four numbers: center_x,center_y,width,height "
+            "(normalized 0..1)."
+        )
+        return EXIT_FAILED
+
+    try:
+        result = await api.process_region(
+            source,
+            region=region,
+            ocr_language=args.ocr_lang,
+            text_query=args.text_query,
+            ocr_preserve_line_breaks=settings.ocr_preserve_line_breaks,
+        )
+    except LensException as e:
+        fail(str(e), "Lens API Error")
+        return EXIT_FAILED
+
+    if not args.quiet:
+        note(
+            f"\n[bold green]Region OCR[/bold green] "
+            f"(crop sent at {result['crop_size'][0]}x{result['crop_size'][1]}):"
+        )
+    emit(result["ocr_text"])
+    if args.sharex and result["ocr_text"]:
+        if not copy_to_clipboard(result["ocr_text"]):
+            fail("Could not copy to the clipboard.")
+            return EXIT_FAILED
+    return EXIT_OK
+
+
+def _overlay_path_for(base: Optional[str], index: int, total: int) -> Optional[str]:
+    """Give every image in a batch its own overlay file.
+
+    A single --translate-out path meant each image overwrote the previous one,
+    so only the last result survived.
+    """
+    if not base or total == 1:
+        return base
+    stem, ext = os.path.splitext(base)
+    return f"{stem}_{index + 1}{ext or '.png'}"
+
+
+def _collect_sources(source: str, quiet: bool) -> Optional[List[str]]:
+    if os.path.isdir(source):
+        if not quiet:
+            note(f"Processing directory: [cyan]{escape(source)}[/cyan]")
+        found = [
+            os.path.join(source, name)
+            for name in sorted(os.listdir(source))
+            if is_image_file_supported(os.path.join(source, name))
+        ]
+        if not found:
+            fail(f"No supported image files found in directory '{source}'.")
+            return None
+        return found
+    if not is_image_file_supported(source):
+        fail(f"Source '{source}' is not a valid URL or supported image file.")
+        return None
+    return [source]
+
+
+async def _run_batch(
+    api: Any, args: argparse.Namespace, settings: Settings, sources: List[str]
+) -> int:
+    total = len(sources)
+    fmt = args.output_format
+    structured = fmt != "text"  # json / jsonl / hocr / tsv
+
+    if args.oneline:
+        api_format = "full_text"
+    elif structured:
+        api_format = "detailed"
+    elif args.output_blocks:
+        api_format = "blocks"
+    elif args.output_lines:
+        api_format = "lines"
+    else:
+        api_format = "full_text"
+
+    needs_size = fmt in ("hocr", "tsv")
+    wants_size = fmt in ("json", "jsonl")
+
+    async def process(index: int, path: str):
+        result = await api.process_image(
+            image_path=path,
+            ocr_language=args.ocr_lang,
+            target_translation_language=settings.target_lang,
+            source_translation_language=args.source_lang,
+            output_overlay_path=_overlay_path_for(
+                args.output_overlay_path, index, total
+            ),
+            ocr_preserve_line_breaks=settings.ocr_preserve_line_breaks,
+            output_format=api_format,
+            **_render_kwargs(settings),
+        )
+        size = None
+        if needs_size or wants_size:
+            size = await _image_size(api, path)
+            if needs_size and size is None:
+                raise LensImageError(
+                    f"Could not determine the pixel size of '{path}', which "
+                    f"--format {fmt} needs for its coordinates."
+                )
+        return result, size
+
+    results: Dict[int, Any] = {}
+    ready = asyncio.Condition()
+    queue: asyncio.Queue = asyncio.Queue()
+    for i, path in enumerate(sources):
+        queue.put_nowait((i, path))
+
+    async def worker():
+        while True:
+            index, path = await queue.get()
+            try:
+                try:
+                    outcome: Any = await process(index, path)
+                except Exception as e:  # any failure is that image's, not the run's
+                    outcome = e
+                async with ready:
+                    results[index] = outcome
+                    ready.notify()
+            finally:
+                queue.task_done()
+
+    workers = [
+        asyncio.create_task(worker()) for _ in range(min(settings.concurrency, total))
+    ]
+
+    failed = 0
+    pages: List[formats.Page] = []  # for the formats written once at the end
+    records: List[Dict[str, Any]] = []
+
+    try:
+        for index, path in enumerate(sources):
+            async with ready:
+                await ready.wait_for(lambda: index in results)
+            outcome = results.pop(index)
+            name = os.path.basename(path) if not is_url(path) else path
+
+            if isinstance(outcome, Exception):
+                failed += 1
+                label = f"({index + 1}/{total}) {name}" if total > 1 else name
+                fail(str(outcome), f"Error for {label}")
+                if args.oneline:
+                    emit(formats.oneline_record(path, error=str(outcome)))
+                elif fmt in ("json", "jsonl"):
+                    record = formats.error_record(path, str(outcome))
+                    if fmt == "jsonl":
+                        emit(formats.format_jsonl_line(record))
+                    else:
+                        records.append(record)
+                continue
+
+            result, size = outcome
+            if total > 1 and not args.quiet and not (args.oneline or structured):
+                note(
+                    f"\n- [bold green]({index + 1}/{total}) Result for: "
+                    f"{escape(name)}[/bold green] -"
+                )
+
+            if args.oneline:
+                emit(
+                    formats.oneline_record(
+                        path,
+                        ocr_text=result.get("ocr_text"),
+                        translated_text=result.get("translated_text"),
+                    )
+                )
+            elif structured:
+                page = formats.Page(
+                    file=path,
+                    result=result,
+                    width=size[0] if size else None,
+                    height=size[1] if size else None,
+                )
+                if fmt in ("json", "jsonl"):
+                    record = formats.page_to_dict(
+                        page, settings.ocr_preserve_line_breaks
+                    )
+                    if fmt == "jsonl":
+                        emit(formats.format_jsonl_line(record))
+                    else:
+                        records.append(record)
+                else:
+                    pages.append(page)
+            elif args.get_coords:
+                emit(_coords_json(result))
+            else:
+                _print_text_result(result, args, settings)
+
+            translated = result.get("translated_text")
+            if settings.target_lang and not translated and not args.quiet:
+                note(
+                    "\n[yellow]Translation was requested but not found in the response.[/yellow]"
+                )
+
+            if args.output_overlay_path and translated:
+                saved = _overlay_path_for(args.output_overlay_path, index, total)
+                if not args.quiet:
+                    note(
+                        f"\nImage with overlay saved to: [cyan]{escape(str(saved))}[/cyan]"
+                    )
+                else:
+                    logger.info("Image with overlay saved to: %s", saved)
+
+            if args.sharex:
+                text, what = _text_to_copy(
+                    result,
+                    settings,
+                    blocks_mode=args.output_blocks and not structured,
+                )
+                if text:
+                    if copy_to_clipboard(text):
+                        if not args.quiet:
+                            note(
+                                f"\n[bold magenta]({what} copied to clipboard)[/bold magenta]"
+                            )
+                        else:
+                            logger.info("%s copied to clipboard", what)
+                    else:
+                        failed += 1
+                        fail(
+                            "Failed to copy text. Is 'pyperclip' installed? "
+                            '(pip install "chrome-lens-py[clipboard]")'
+                        )
+                elif not args.quiet:
+                    note("\n[yellow]No text available to copy.[/yellow]")
+
+        if fmt == "json" and records:
+            emit(formats.format_json(records))
+        elif fmt == "hocr" and pages:
+            sys.stdout.write(formats.format_hocr(pages))
+            sys.stdout.flush()
+        elif fmt == "tsv" and pages:
+            sys.stdout.write(formats.format_tsv(pages))
+            sys.stdout.flush()
+    finally:
+        for task in workers:
+            task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+
+    return _exit_code(failed, total)
+
+
+async def _run_serve(args: argparse.Namespace, settings: Settings) -> int:
+    from ..server import is_loopback, run_server
+
+    if not is_loopback(args.host) and not args.token:
+        fail(f"refusing to listen on {args.host} without --token.")
+        err_console.print(
+            "Anyone who could reach that address would be able to spend your "
+            "API key on Google requests.\n"
+            "Either bind 127.0.0.1, or pass --token."
+        )
+        return EXIT_FAILED
+
+    note(
+        f"[bold green]chrome-lens-py daemon[/bold green] on "
+        f"[cyan]http://{escape(args.host)}:{args.port}[/cyan]  "
+        f"(POST /v1/ocr, POST /v1/region, GET /health)"
+    )
+    if args.allow_origin:
+        note(f"Allowed browser origins: {escape(', '.join(args.allow_origin))}")
+    else:
+        note(
+            "[dim]Local programs only; no web page can reach it. "
+            "Use --allow-origin to permit one.[/dim]"
+        )
+    try:
+        await run_server(
+            host=args.host,
+            port=args.port,
+            token=args.token,
+            allowed_origins=frozenset(args.allow_origin),
+            **_api_kwargs(settings),
+        )
+    except ValueError as e:
+        fail(str(e))
+        return EXIT_FAILED
+    return EXIT_OK
+
+
+def _check_output_modes(args: argparse.Namespace) -> Optional[str]:
+    modes = {
+        "--output-blocks": args.output_blocks,
+        "--output-lines": args.output_lines,
+        "--get-coords": args.get_coords,
+        "--oneline": args.oneline,
+        f"--format {args.output_format}": args.output_format != "text",
+    }
+    chosen = [flag for flag, on in modes.items() if on]
+    if len(chosen) > 1:
+        return f"{', '.join(chosen)} cannot be used together."
+    if args.region and chosen:
+        return f"{chosen[0]} cannot be combined with --region."
+    return None
+
+
+async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
+    """Run the CLI and return its exit code (0 ok, 1 all failed, 2 some failed)."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.version:
         print_version()
-        return
-
-    if args.setup_sharex:
-        setup_sharex_config()
-        return
-
-    if args.serve:
-        setup_logging(args.logging_level or "INFO")
-        from ..server import is_loopback, run_server
-
-        if not is_loopback(args.host) and not args.token:
-            console.print(
-                f"[bold red]Error:[/bold red] refusing to listen on {args.host} "
-                "without --token."
-            )
-            console.print(
-                "Anyone who could reach that address would be able to spend your "
-                "API key on Google requests."
-            )
-            console.print("Either bind 127.0.0.1, or pass --token.")
-            sys.exit(1)
-
-        console.print(
-            f"[bold green]chrome-lens-py daemon[/bold green] on "
-            f"[cyan]http://{args.host}:{args.port}[/cyan]  "
-            f"(POST /v1/ocr, POST /v1/region, GET /health)"
-        )
-        if args.allow_origin:
-            console.print(f"Allowed browser origins: {', '.join(args.allow_origin)}")
-        else:
-            console.print(
-                "[dim]Local programs only; no web page can reach it. "
-                "Use --allow-origin to permit one.[/dim]"
-            )
-        try:
-            await run_server(
-                host=args.host,
-                port=args.port,
-                token=args.token,
-                allowed_origins=frozenset(args.allow_origin),
-                api_key=args.api_key or DEFAULT_API_KEY,
-                proxy=args.proxy,
-                trust_env=not args.no_env_proxy,
-                font_path=args.font_path,
-            )
-        except ValueError as e:
-            console.print(f"[bold red]Error:[/bold red] {e}")
-            sys.exit(1)
-        return
-
-    MAX_CONCURRENCY_HARD_LIMIT = 30
-    CONCURRENCY_WARNING_THRESHOLD = 20
-
-    if args.concurrency > MAX_CONCURRENCY_HARD_LIMIT:
-        console.print(
-            f"[bold red]Error:[/bold red] The concurrency value cannot be greater than {MAX_CONCURRENCY_HARD_LIMIT}."
-        )
-        console.print("This is a security measure to prevent IP blocking.")
-        sys.exit(1)
-
-    if args.concurrency > CONCURRENCY_WARNING_THRESHOLD:
-        console.print(
-            f"[bold yellow]Warning:[/bold yellow] High concurrency value ({args.concurrency}) set."
-        )
-        console.print(
-            "This may result in a temporary block by Google. Use with caution."
-        )
-
+        return EXIT_OK
     if args.help:
-        print_help()
-        return
-    if not args.image_source:
-        console.print(
-            "[bold red]Error:[/bold red] The 'image_source' argument is required.\n"
+        print_help(parser)
+        return EXIT_OK
+    if args.setup_sharex:
+        return (
+            EXIT_OK
+            if setup_sharex_config(getattr(args, "target_lang", None))
+            else EXIT_FAILED
         )
-        print_help()
-        sys.exit(1)
-
-    # Validate mutually exclusive output formats
-    output_modes = [args.output_blocks, args.get_coords, args.output_lines]
-    if sum(output_modes) > 1:
-        console.print(
-            "[bold red]Error:[/bold red] --output-blocks, --output-lines, and --get-coords cannot be used together."
-        )
-        sys.exit(1)
 
     default_config_path = os.path.join(
         get_default_config_dir(), DEFAULT_CONFIG_FILENAME
@@ -488,336 +1007,71 @@ async def cli_main():
     config_file_to_load = args.config_file_path_override or default_config_path
 
     try:
-        app_config = build_app_config(vars(args), config_file_to_load)
+        settings = resolve_settings(vars(args), config_file_to_load)
     except LensConfigError as e:
-        console.print(f"[bold red]Configuration Error:[/bold red] {e}")
-        sys.exit(1)
+        fail(str(e), "Configuration Error")
+        return EXIT_FAILED
 
-    setup_logging(app_config.get("logging_level", "WARNING"))
+    level = settings.logging_level
+    if args.serve and settings.sources.get("logging_level") == "default":
+        level = "INFO"  # a daemon with no log output looks hung
+    setup_logging(level)
 
     if os.path.exists(config_file_to_load):
-        logging.info(f"Using config file: {config_file_to_load}")
+        logger.info("Using config file: %s", config_file_to_load)
     elif args.config_file_path_override:
-        logging.warning(
-            f"Specified config file not found: {args.config_file_path_override}"
-        )
-
-    image_sources = []
-    if os.path.isdir(args.image_source):
-        if not args.quiet:
-            console.print(f"Processing directory: [cyan]{args.image_source}[/cyan]")
-        for filename in sorted(os.listdir(args.image_source)):
-            full_path = os.path.join(args.image_source, filename)
-            if is_image_file_supported(full_path):
-                image_sources.append(full_path)
-        if not image_sources:
-            console.print(
-                f"[bold red]Error:[/bold red] No supported image files found in directory '{args.image_source}'."
-            )
-            sys.exit(1)
-    else:
-        if not is_image_file_supported(args.image_source):
-            console.print(
-                f"[bold red]Error:[/bold red] Source '{args.image_source}' is not a valid URL or supported image file."
-            )
-            sys.exit(1)
-        image_sources.append(args.image_source)
+        logger.warning("Specified config file not found: %s", config_file_to_load)
+    for message in settings.notes:
+        logger.warning(message)
+    for name, source in settings.sources.items():
+        if source != "default":
+            shown = "<hidden>" if name in SECRET_FIELDS else getattr(settings, name)
+            logger.debug("Setting %s = %s (from %s)", name, shown, source)
 
     if args.update_config:
         if args.config_file_path_override:
-            console.print(
-                "[bold yellow]Warning:[/bold yellow] --update-config only affects the default config file."
+            note(
+                "[bold yellow]Warning:[/bold yellow] --update-config only affects "
+                "the default config file."
             )
         else:
             try:
                 update_config_file_from_cli(vars(args), default_config_path)
             except LensConfigError as e:
-                console.print(f"[bold red]Error updating config:[/bold red] {e}")
+                fail(str(e), "Error updating config")
+                return EXIT_FAILED
+        if not args.image_source and not args.serve:
+            return EXIT_OK
 
-    api = LensAPI(
-        api_key=app_config.get("api_key", DEFAULT_API_KEY),
-        client_region=app_config.get("client_region"),
-        client_time_zone=app_config.get("client_time_zone"),
-        proxy=app_config.get("proxy"),
-        timeout=app_config.get("timeout", 60),
-        font_path=app_config.get("font_path"),
-        font_size=app_config.get("font_size"),
-        max_concurrent=args.concurrency,
-        trust_env=not args.no_env_proxy,
-    )
+    if args.serve:
+        return await _run_serve(args, settings)
 
-    if args.region:
-        try:
-            region = tuple(float(v) for v in args.region.split(","))
-            if len(region) != 4:
-                raise ValueError
-        except ValueError:
-            console.print(
-                "[bold red]Error:[/bold red] --region takes four numbers: "
-                "center_x,center_y,width,height (normalized 0..1)."
-            )
-            await api.aclose()
-            sys.exit(1)
+    if settings.concurrency > CONCURRENCY_WARNING_THRESHOLD:
+        note(
+            f"[bold yellow]Warning:[/bold yellow] High concurrency value "
+            f"({settings.concurrency}) set. This may result in a temporary block "
+            "by Google. Use with caution."
+        )
 
-        try:
-            result = await api.process_region(
-                image_sources[0],
-                region=region,
-                ocr_language=args.ocr_lang,
-                text_query=args.text_query,
-                ocr_preserve_line_breaks=app_config.get(
-                    "ocr_preserve_line_breaks", True
-                ),
-            )
-            if not args.quiet:
-                console.print(
-                    f"\n[bold green]Region OCR[/bold green] "
-                    f"(crop sent at {result['crop_size'][0]}x{result['crop_size'][1]}):"
-                )
-            console.print(Text(result["ocr_text"]))
-            if args.sharex and result["ocr_text"]:
-                copy_to_clipboard(result["ocr_text"])
-        except LensException as e:
-            console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
-            sys.exit(1)
-        finally:
-            await api.aclose()
-        return
+    if not args.image_source:
+        fail("The 'image_source' argument is required.")
+        print_help(parser, file=sys.stderr)
+        return EXIT_FAILED
 
+    problem = _check_output_modes(args)
+    if problem:
+        fail(problem)
+        return EXIT_FAILED
+
+    sources = _collect_sources(args.image_source, args.quiet)
+    if sources is None:
+        return EXIT_FAILED
+
+    api = LensAPI(**_api_kwargs(settings))
     try:
-        output_format = "full_text"
-        if args.output_blocks:
-            output_format = "blocks"
-        elif args.output_lines:
-            output_format = "lines"
-
-        results_buffer = {}
-        next_to_print = 0
-        results_ready = asyncio.Condition()
-
-        def overlay_path_for(index: int) -> str:
-            """Give every image in a batch its own overlay file.
-
-            A single --translate-out path meant each image overwrote the
-            previous one, so only the last result survived.
-            """
-            base = args.output_overlay_path
-            if not base or len(image_sources) == 1:
-                return base
-            stem, ext = os.path.splitext(base)
-            return f"{stem}_{index + 1}{ext or '.png'}"
-
-        async def worker(queue):
-            while True:
-                index, path = await queue.get()
-                try:
-
-                    try:
-                        result = await api.process_image(
-                            image_path=path,
-                            ocr_language=args.ocr_lang,
-                            target_translation_language=args.target_lang,
-                            source_translation_language=args.source_lang,
-                            output_overlay_path=overlay_path_for(index),
-                            ocr_preserve_line_breaks=app_config.get(
-                                "ocr_preserve_line_breaks", True
-                            ),
-                            output_format=output_format,
-                            overlay_mode=args.overlay_mode,
-                            vertical_text=args.vertical_text,
-                            erase_mode=args.erase_mode,
-                            hull_padding=args.hull_padding,
-                            outline_scale=args.outline_scale,
-                            min_readable_px=args.min_readable_px,
-                            text_align=args.text_align,
-                            manga_mode=args.manga_mode,
-                            manga_box_growth=args.manga_box_growth,
-                        )
-                    except Exception as e:
-                        result = e
-
-                    async with results_ready:
-                        results_buffer[index] = result
-                        results_ready.notify()
-
-                finally:
-                    queue.task_done()
-
-        job_queue = asyncio.Queue()
-        for i, path in enumerate(image_sources):
-            job_queue.put_nowait((i, path))
-
-        worker_tasks = [
-            asyncio.create_task(worker(job_queue)) for _ in range(args.concurrency)
-        ]
-
-        while next_to_print < len(image_sources):
-            async with results_ready:
-                await results_ready.wait_for(lambda: next_to_print in results_buffer)
-
-            result = results_buffer.pop(next_to_print)
-            image_path = image_sources[next_to_print]
-
-            if isinstance(result, Exception):
-                console.print(
-                    f"\n- [bold red]({next_to_print + 1}/{len(image_sources)}) Error for: {os.path.basename(image_path)}[/bold red] -"
-                )
-                console.print(f"[red]{result}[/red]")
-                next_to_print += 1
-                continue
-
-            if len(image_sources) > 1 and not args.quiet:
-                console.print(
-                    f"\n- [bold green]({next_to_print + 1}/{len(image_sources)}) Result for: {os.path.basename(image_path)}[/bold green] -"
-                )
-
-            if args.get_coords:
-                word_data = result.get("word_data")
-                if not word_data:
-                    console.print("[]")
-                    next_to_print += 1
-                    continue  # Continue to next image in batch
-
-                processed_coords = []
-                for data in word_data:
-                    geom = data.get("geometry")
-                    processed_coords.append(
-                        {
-                            data["word"]: (
-                                {
-                                    "center_x": round(geom["center_x"], 4),
-                                    "center_y": round(geom["center_y"], 4),
-                                    "width": round(geom["width"], 4),
-                                    "height": round(geom["height"], 4),
-                                    "angle_deg": round(geom["angle_deg"], 2),
-                                }
-                                if geom
-                                else None
-                            )
-                        }
-                    )
-
-                console.print(
-                    json.dumps(processed_coords, indent=2, ensure_ascii=False)
-                )
-
-            elif args.output_lines:
-                line_blocks = result.get("line_blocks", [])
-                if not args.quiet:
-                    console.print(
-                        f"\n[bold green]OCR Results ({len(line_blocks)} lines):[/bold green]"
-                    )
-                if not line_blocks and not args.quiet:
-                    console.print("No lines found.")
-
-                for j, line in enumerate(line_blocks):
-                    if not args.quiet:
-                        console.print(f"\n--- [cyan]Line #{j+1}[/cyan] ---")
-                    console.print(Text(line.get("text", "")))
-
-                translated_text = result.get("translated_text")
-                if translated_text:
-                    if not args.quiet:
-                        console.print(
-                            "\n[bold green]Translated Text (Full):[/bold green]"
-                        )
-                    console.print(Text(translated_text))
-
-            elif args.output_blocks:
-                text_blocks = result.get("text_blocks", [])
-                if not args.quiet:
-                    console.print(
-                        f"\n[bold green]OCR Results ({len(text_blocks)} blocks):[/bold green]"
-                    )
-                if not text_blocks and not args.quiet:
-                    console.print("No text blocks found.")
-
-                for j, block in enumerate(text_blocks):
-                    if not args.quiet:
-                        console.print(f"\n--- [cyan]Block #{j+1}[/cyan] ---")
-                    console.print(Text(block.get("text", "")))
-
-                translated_text = result.get("translated_text")
-                if translated_text:
-                    if not args.quiet:
-                        console.print(
-                            "\n[bold green]Translated Text (Full):[/bold green]"
-                        )
-                    console.print(Text(translated_text))
-
-            else:  # Default 'full_text' output
-                ocr_text = result.get("ocr_text")
-                if ocr_text:
-                    if not args.quiet:
-                        console.print("\n[bold green]OCR Results:[/bold green]")
-                    console.print(Text(ocr_text))
-                elif not args.quiet:
-                    console.print("\n[bold green]OCR Results:[/bold green]")
-                    console.print("No OCR text found.")
-
-                translated_text = result.get("translated_text")
-                if translated_text:
-                    if not args.quiet:
-                        console.print("\n[bold green]Translated Text:[/bold green]")
-                    console.print(Text(translated_text))
-
-            translated_text = result.get("translated_text")
-            if args.target_lang and not translated_text and not args.quiet:
-                console.print(
-                    "\n[yellow]Translation was requested but not found in the response.[/yellow]"
-                )
-
-            if args.output_overlay_path and translated_text:
-                saved_overlay = overlay_path_for(next_to_print)
-                if not args.quiet:
-                    console.print(
-                        f"\nImage with overlay saved to: [cyan]{saved_overlay}[/cyan]"
-                    )
-                else:
-                    logging.info("Image with overlay saved to: %s", saved_overlay)
-
-            if args.sharex:
-                source_for_copy, text_to_copy = ("", "")
-                # Prioritize translated text for copying
-                if args.target_lang and translated_text:
-                    text_to_copy, source_for_copy = translated_text, "Translated text"
-                elif args.output_blocks:
-                    blocks = result.get("text_blocks", [])
-                    if blocks:
-                        text_to_copy = "\n\n".join([b.get("text", "") for b in blocks])
-                        source_for_copy = "OCR text (blocks)"
-                else:
-                    ocr_text = result.get("ocr_text")
-                    if ocr_text:
-                        text_to_copy, source_for_copy = ocr_text, "OCR text"
-
-                if text_to_copy:
-                    if copy_to_clipboard(text_to_copy):
-                        if not args.quiet:
-                            console.print(
-                                f"\n[bold magenta]({source_for_copy} copied to clipboard)[/bold magenta]"
-                            )
-                        else:
-                            logging.info(f"{source_for_copy} copied to clipboard")
-                    else:
-                        # This is an error/warning, so it should probably stay visible
-                        console.print(
-                            "\n[bold red]Failed to copy text. Is 'pyperclip' installed? "
-                            '(`pip install "chrome-lens-py\\[clipboard]"`)[/bold red]'
-                        )
-                elif not args.quiet:
-                    console.print("\n[yellow]No text available to copy.[/yellow]")
-
-            next_to_print += 1
-
-        await job_queue.join()
-        for task in worker_tasks:
-            task.cancel()
-        await asyncio.gather(*worker_tasks, return_exceptions=True)
-
-    except LensException as e:
-        console.print(f"\n[bold red]Lens API Error:[/bold red] {e}")
-        sys.exit(1)
+        if args.region:
+            return await _run_region(api, args, settings, sources[0])
+        return await _run_batch(api, args, settings, sources)
     finally:
         await api.aclose()
 
@@ -844,15 +1098,21 @@ def force_utf8_streams(streams=None):
             if getattr(stream, "encoding", "").lower().replace("-", "") != "utf8":
                 stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception as e:  # pragma: no cover - very old/odd streams
-            logging.debug("Could not reconfigure stream to UTF-8: %s", e)
+            logger.debug("Could not reconfigure stream to UTF-8: %s", e)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """Synchronous entry point that returns the exit code instead of exiting."""
+    try:
+        return asyncio.run(cli_main(argv))
+    except KeyboardInterrupt:
+        err_console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        return 130
 
 
 def run():
     force_utf8_streams()
-    try:
-        asyncio.run(cli_main())
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+    sys.exit(main())
 
 
 if __name__ == "__main__":
