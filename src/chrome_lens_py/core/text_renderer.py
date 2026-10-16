@@ -592,21 +592,24 @@ def _render_reflow_paragraph(
     style = data.line[0].style if data.line else None
 
     has_inpaint = False
-    for line_index, tline in enumerate(data.line):
-        box = paragraph.lines[line_index].geometry.bounding_box
-        box_w, box_h = box.width * width, box.height * height
-        if box_w < 1 or box_h < 1 or not scene.draw_background:
-            continue
-        has_inpaint |= _draw_background(
-            canvas,
-            tline,
-            box_w,
-            box_h,
-            box.center_x * width,
-            box.center_y * height,
-            -math.degrees(box.rotation_z),
-            scene.aspect,
-        )
+    # When the hull was used it already covers the source. Painting the patches
+    # on top of it would put the residue back that the hull exists to remove.
+    if not use_hull:
+        for line_index, tline in enumerate(data.line):
+            box = paragraph.lines[line_index].geometry.bounding_box
+            box_w, box_h = box.width * width, box.height * height
+            if box_w < 1 or box_h < 1 or not scene.draw_background:
+                continue
+            has_inpaint |= _draw_background(
+                canvas,
+                tline,
+                box_w,
+                box_h,
+                box.center_x * width,
+                box.center_y * height,
+                -math.degrees(box.rotation_z),
+                scene.aspect,
+            )
 
     pbox = paragraph.geometry.bounding_box
     # The detected box hugs the glyphs. A speech bubble is round and has room
