@@ -324,6 +324,29 @@ def daemon_command(extra_args) -> list:
     return cmd + ["-m", "chrome_lens_py", *args]
 
 
+def daemon_env() -> dict:
+    """The environment for the spawned daemon.
+
+    The daemon starts in the home directory, not the caller's, so anything
+    that made the package importable *relative to the caller's cwd* - a
+    relative PYTHONPATH entry, or running from a source checkout - would leave
+    the child with "No module named chrome_lens_py" and the daemon silently
+    never comes up. So relative PYTHONPATH entries are made absolute, and the
+    directory this package was actually imported from goes first.
+    """
+    env = dict(os.environ)
+    if is_compiled():
+        return env
+    entries = [
+        os.path.abspath(p) for p in env.get("PYTHONPATH", "").split(os.pathsep) if p
+    ]
+    package_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if package_root not in entries:
+        entries.insert(0, package_root)
+    env["PYTHONPATH"] = os.pathsep.join(entries)
+    return env
+
+
 def _open_log():
     path = os.path.join(data_dir(create=True), LOG_FILE)
     try:
@@ -351,7 +374,12 @@ def spawn_detached(extra_args) -> bool:
         log = None
     out = log if log is not None else subprocess.DEVNULL
     kwargs = dict(
-        stdin=subprocess.DEVNULL, stdout=out, stderr=out, close_fds=True, cwd=_home()
+        stdin=subprocess.DEVNULL,
+        stdout=out,
+        stderr=out,
+        close_fds=True,
+        cwd=_home(),
+        env=daemon_env(),
     )
     cmd = daemon_command(extra_args)
     try:

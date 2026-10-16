@@ -602,3 +602,23 @@ def test_entry_exits_with_the_daemons_exit_code(fake, monkeypatch):
     with pytest.raises(SystemExit) as stop:
         client.entry(["img.png"])
     assert stop.value.code == 2
+
+
+def test_daemon_env_makes_the_package_importable_from_any_cwd(monkeypatch):
+    # The daemon starts in the home directory. A relative PYTHONPATH entry (or
+    # a source checkout) that only worked from the caller's cwd left it with
+    # "No module named chrome_lens_py", so it silently never came up.
+    import os
+
+    import chrome_lens_py
+    from chrome_lens_py import runtime
+
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(["src", "other/rel"]))
+    entries = runtime.daemon_env()["PYTHONPATH"].split(os.pathsep)
+
+    package_root = os.path.dirname(
+        os.path.dirname(os.path.abspath(chrome_lens_py.__file__))
+    )
+    assert entries[0] == package_root
+    assert all(os.path.isabs(e) for e in entries)
+    assert os.path.abspath("other/rel") in entries
