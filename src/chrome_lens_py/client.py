@@ -341,12 +341,15 @@ def _build_request(argv) -> dict:
         except (AttributeError, ValueError):
             return False
 
+    # The first of these that is a terminal, in the order rich asks.
     columns = None
-    if tty(sys.stderr):
+    order = (1, 2) if sys.platform == "win32" else (0, 1, 2)
+    for fd in order:
         try:
-            columns = os.get_terminal_size(sys.stderr.fileno()).columns
-        except (OSError, ValueError, AttributeError):
-            columns = None
+            columns = os.get_terminal_size(fd).columns or None
+        except (OSError, ValueError):
+            continue
+        break
     env = runtime.forwarded_env(os.environ)
     return {
         "argv": list(argv),
