@@ -933,6 +933,19 @@ def font_supports_text(font_path: str, text: str, index: int = 0) -> bool:
     )
 
 
+def face_has_glyph(face: FontFace, char: str) -> bool:
+    """Whether `face` really maps `char`, judged from the font's own cmap.
+
+    Unlike :func:`font_supports_text` this does not skip neutral codepoints, so
+    it can answer for punctuation and presentation forms. Without fontTools the
+    file cannot be read and the answer is a conservative False.
+    """
+    if not FONTTOOLS_AVAILABLE or not char:
+        return False
+    coverage = _coverage(face)
+    return bool(coverage) and ord(char[0]) in coverage
+
+
 def resolve_font_face_for_text(
     text: str, preferred_path: Optional[str] = None
 ) -> Optional[FontFace]:
