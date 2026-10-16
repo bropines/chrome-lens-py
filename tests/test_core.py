@@ -497,3 +497,357 @@ async def test_no_warning_noise_from_normal_use():
         handler.new_session()
         await handler.post_raw(b"x")
     await handler.aclose()
+
+
+# =============================================================== image encoding
+
+import io  # noqa: E402
+
+from PIL import Image  # noqa: E402
+
+from chrome_lens_py import api as api_module  # noqa: E402
+from chrome_lens_py.api import LensAPI  # noqa: E402
+from chrome_lens_py.core import image_processor as ip  # noqa: E402
+from chrome_lens_py.core.image_processor import (  # noqa: E402
+    MIME_JPEG,
+    MIME_WEBP,
+    encode_image_for_api,
+    has_meaningful_alpha,
+    prepare_image_for_api,
+)
+from chrome_lens_py.core.protobuf_builder import (  # noqa: E402
+    create_ocr_translate_request,
+    create_region_request,
+)
+from chrome_lens_py.exceptions import LensImageError  # noqa: E402
+from chrome_lens_py.utils.lens_betterproto import (  # noqa: E402
+    LensOverlayServerRequest,
+    TranslationDataStatusCode,
+)
+
+
+def _text_on_transparent(color):
+    img = Image.new("RGBA", (40, 20), (0, 0, 0, 0))
+    img.paste(Image.new("RGBA", (10, 10), color), (5, 5))
+    return img
+
+
+def test_opaque_images_stay_jpeg():
+    for img in (
+        Image.new("RGB", (30, 30), "red"),
+        Image.new("RGBA", (30, 30), (255, 0, 0, 255)),  # alpha channel, but solid
+        Image.new("L", (30, 30), 90),
+    ):
+        encoded = encode_image_for_api(img)
+        assert encoded.mime_type == MIME_JPEG
+        assert encoded.data[:2] == b"\xff\xd8"
+
+
+def test_images_with_real_transparency_are_uploaded_as_webp():
+    encoded = encode_image_for_api(_text_on_transparent((0, 0, 0, 255)))
+    assert encoded.mime_type == MIME_WEBP
+    assert encoded.data[:4] == b"RIFF" and encoded.data[8:12] == b"WEBP"
+    decoded = Image.open(io.BytesIO(encoded.data))
+    assert decoded.mode == "RGBA"  # alpha survived the trip
+    assert decoded.getchannel("A").getextrema()[0] == 0
+
+
+def test_palette_transparency_counts_as_alpha():
+    img = Image.new("P", (10, 10))
+    img.info["transparency"] = 0
+    assert has_meaningful_alpha(img)
+    assert not has_meaningful_alpha(Image.new("P", (10, 10)))
+
+
+def test_flatten_and_contrast_modes_keep_text_visible():
+    dark = _text_on_transparent((0, 0, 0, 255))
+    light = _text_on_transparent((255, 255, 255, 255))
+    for mode in ("flatten", "contrast"):
+        assert encode_image_for_api(dark, alpha_mode=mode).mime_type == MIME_JPEG
+
+    def background_pixel(img, mode):
+        encoded = encode_image_for_api(img, alpha_mode=mode)
+        return Image.open(io.BytesIO(encoded.data)).getpixel((35, 15))[0]
+
+    assert background_pixel(dark, "flatten") > 200  # white
+    assert background_pixel(dark, "contrast") > 200  # dark text -> white
+    assert background_pixel(light, "flatten") > 200  # white text lost: the old bug
+    assert background_pixel(light, "contrast") < 50  # light text -> black
+
+
+@pytest.mark.asyncio
+async def test_prepare_image_for_api_keeps_its_jpeg_contract():
+    data, width, height, original = await prepare_image_for_api(
+        _text_on_transparent((0, 0, 0, 255)), keep_original=True
+    )
+    assert data[:2] == b"\xff\xd8" and (width, height) == (40, 20)
+    assert original is not None and original.mode == "RGBA"
+
+
+@pytest.mark.asyncio
+async def test_encoding_runs_off_the_event_loop_thread(monkeypatch):
+    import threading
+
+    seen = []
+    real = ip.encode_image_for_api
+
+    def spy(*args, **kwargs):
+        seen.append(threading.current_thread())
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ip, "encode_image_for_api", spy)
+    await ip.prepare_image(Image.new("RGB", (10, 10)))
+    assert seen and seen[0] is not threading.main_thread()
+
+
+# ============================================================ request building
+
+
+def test_request_id_carries_time_usec_and_mime_type_only_for_webp():
+    import time
+
+    before = int(time.time() * 1_000_000)
+    payload, _ = create_ocr_translate_request(b"img", 10, 10, "en")
+    plain = LensOverlayServerRequest.FromString(payload).objects_request.request_context
+    assert before <= plain.request_id.time_usec <= int(time.time() * 1_000_000)
+    assert plain.request_id.mime_type == ""
+
+    payload, _ = create_ocr_translate_request(
+        b"img", 10, 10, "en", mime_type="image/webp"
+    )
+    webp = LensOverlayServerRequest.FromString(payload).objects_request.request_context
+    assert webp.request_id.mime_type == "image/webp"
+
+
+def test_region_request_is_stamped_too():
+    payload = create_region_request(
+        b"crop", (0.5, 0.5, 0.2, 0.2), 100, 100, 20, "en", 7, 2, 1
+    )
+    request = LensOverlayServerRequest.FromString(payload)
+    assert request.interaction_request.request_context.request_id.time_usec > 0
+
+
+# ===================================================================== LensAPI
+
+
+def _translated_response() -> bytes:
+    response = LensOverlayServerResponse()
+    gleam = response.objects_response.deep_gleams.add()
+    gleam.translation.translation = "hola"
+    gleam.translation.status.code = TranslationDataStatusCode.SUCCESS
+    response.objects_response.text.content_language = "en"
+    return response.SerializeToString()
+
+
+def _api_with(responder, **kwargs) -> LensAPI:
+    return LensAPI(
+        proxy={"all://": httpx.MockTransport(responder)},
+        trust_env=False,
+        max_retries=0,
+        **kwargs,
+    )
+
+
+@pytest.fixture
+def fake_render(monkeypatch):
+    calls = []
+
+    def render(original, objects_response, **kwargs):
+        calls.append(kwargs)
+        return Image.new("RGBA", (original.width, original.height), (1, 2, 3, 255))
+
+    monkeypatch.setattr(api_module, "render_translation_overlay", render)
+    monkeypatch.setattr(LensAPI, "_get_font_path", lambda self: None)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_overlay_save_failure_raises_instead_of_claiming_success(
+    tmp_path, fake_render
+):
+    api = _api_with(lambda r: httpx.Response(200, content=_translated_response()))
+    target = str(tmp_path / "missing_dir" / "out.png")
+    with pytest.raises(LensImageError, match="missing_dir"):
+        await api.process_image(
+            Image.new("RGB", (20, 20)),
+            target_translation_language="es",
+            output_overlay_path=target,
+        )
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_overlay_is_saved_and_returned(tmp_path, fake_render):
+    api = _api_with(lambda r: httpx.Response(200, content=_translated_response()))
+    out = tmp_path / "out.png"
+    result = await api.process_image(
+        Image.new("RGB", (20, 20)),
+        target_translation_language="es",
+        output_overlay_path=str(out),
+        return_overlay=True,
+        overlay_format="webp",
+    )
+    assert result["overlay_path"] == str(out) and out.exists()
+    assert result["overlay_mime_type"] == "image/webp"
+    assert result["overlay_image"][8:12] == b"WEBP"
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_no_overlay_without_translated_text(tmp_path, fake_render):
+    api = _api_with(lambda r: httpx.Response(200, content=OK_BODY))
+    out = tmp_path / "out.png"
+    result = await api.process_image(
+        Image.new("RGB", (20, 20)), output_overlay_path=str(out)
+    )
+    assert result["overlay_path"] is None and not out.exists()
+    assert fake_render == []
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_overlay_mode_is_deprecated(tmp_path, fake_render):
+    api = _api_with(lambda r: httpx.Response(200, content=_translated_response()))
+    with pytest.warns(DeprecationWarning, match="legacy"):
+        await api.process_image(
+            Image.new("RGB", (20, 20)),
+            target_translation_language="es",
+            output_overlay_path=str(tmp_path / "o.png"),
+            overlay_mode="legacy",
+        )
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_shared_session_advances_image_sequence_for_every_image():
+    seen = []
+
+    def responder(request):
+        parsed = LensOverlayServerRequest.FromString(request.content)
+        ids = parsed.objects_request.request_context.request_id
+        seen.append((ids.uuid, ids.sequence_id, ids.image_sequence_id))
+        return httpx.Response(200, content=OK_BODY)
+
+    api = _api_with(responder)
+    for _ in range(3):
+        await api.process_image(Image.new("RGB", (10, 10)), new_session=False)
+    assert [s[1:] for s in seen] == [(1, 1), (2, 2), (3, 3)]
+    assert len({s[0] for s in seen}) == 1  # one conversation, one uuid
+    await api.aclose()
+
+
+def _peak_tracking_responder():
+    state = {"in_flight": 0, "peak": 0}
+
+    async def responder(request):
+        state["in_flight"] += 1
+        state["peak"] = max(state["peak"], state["in_flight"])
+        await asyncio.sleep(0.05)
+        state["in_flight"] -= 1
+        return httpx.Response(200, content=OK_BODY)
+
+    return responder, state
+
+
+@pytest.mark.asyncio
+async def test_concurrent_calls_on_a_shared_session_do_not_interleave():
+    responder, state = _peak_tracking_responder()
+    api = _api_with(responder)
+    await asyncio.gather(
+        *(
+            api.process_image(Image.new("RGB", (10, 10)), new_session=False)
+            for _ in range(4)
+        )
+    )
+    assert state["peak"] == 1
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_private_sessions_still_run_in_parallel():
+    responder, state = _peak_tracking_responder()
+    api = _api_with(responder)
+    await asyncio.gather(
+        *(api.process_image(Image.new("RGB", (10, 10))) for _ in range(4))
+    )
+    assert state["peak"] > 1
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_process_region_encodes_the_full_image_only_once(monkeypatch):
+    encodes = []
+    real = api_module.encode_image_for_api
+
+    def counting(*args, **kwargs):
+        encodes.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(api_module, "encode_image_for_api", counting)
+    api = _api_with(lambda r: httpx.Response(200, content=OK_BODY))
+    result = await api.process_region(
+        Image.new("RGB", (100, 100)), (0.5, 0.5, 0.4, 0.4)
+    )
+    assert result["crop_size"] == (40, 40)
+    assert len(encodes) == 1  # the crop goes through crop_region, not this
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_call_raw_endpoint_is_deprecated_and_raises_lens_errors():
+    api = _api_with(lambda r: httpx.Response(404, text="nope"))
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(LensAPIError) as info:
+            await api.call_raw_endpoint(b"\x00")
+    assert info.value.status_code == 404
+    await api.aclose()
+
+
+@pytest.mark.asyncio
+async def test_call_raw_endpoint_follows_up_with_gsessionid():
+    urls = []
+    first = LensOverlayServerResponse()
+    first.objects_response.cluster_info.server_session_id = "SID"
+
+    def responder(request):
+        urls.append(str(request.url))
+        return httpx.Response(200, content=first.SerializeToString())
+
+    api = _api_with(responder, endpoints="https://lens.example/crupload")
+    with pytest.warns(DeprecationWarning):
+        await api.call_raw_endpoint(b"a", new_session=True)
+        await api.call_raw_endpoint(b"b")
+    assert urls == [
+        "https://lens.example/crupload",
+        "https://lens.example/crupload?gsessionid=SID",
+    ]
+    await api.aclose()
+
+
+def test_api_accepts_resilience_kwargs():
+    api = LensAPI(
+        api_key=["a", "b"],
+        max_retries=5,
+        backoff_base=0.1,
+        backoff_max=2,
+        deadline=9,
+        endpoints=["https://x.example/y"],
+        direct_fallback=True,
+        trust_env=False,
+    )
+    handler = api.request_handler
+    assert handler.api_keys == ["a", "b"] and handler.max_retries == 5
+    assert (handler.backoff_base, handler.backoff_max, handler.deadline) == (0.1, 2, 9)
+    assert handler.endpoints == ("https://x.example/y",) and handler.direct_fallback
+    with pytest.raises(ValueError):
+        LensAPI(alpha_mode="bogus")
+
+
+@pytest.mark.asyncio
+async def test_results_report_the_original_image_size():
+    api = _api_with(lambda r: httpx.Response(200, content=OK_BODY))
+    result = await api.process_image(Image.new("RGB", (2400, 1300)))
+    assert result["image_size"] == [2400, 1300]  # not the downscaled upload size
+    region = await api.process_region(Image.new("RGB", (100, 80)), (0.5, 0.5, 0.4, 0.4))
+    assert region["image_size"] == [100, 80]
+    await api.aclose()
