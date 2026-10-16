@@ -359,8 +359,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf dist/lens_scan.dist
-          mv signed dist/lens_scan.dist
+          # Retried: the antivirus scanner may still hold the freshly built
+          # .exe open, and Windows refuses to delete or rename its folder until
+          # it lets go.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if rm -rf dist/lens_scan.dist && mv signed dist/lens_scan.dist; then
+              break
+            fi
+            [ "$attempt" = 10 ] && { echo "::error::folder still locked"; exit 1; }
+            sleep 3
+          done
           ls dist/lens_scan.dist | head
 
       - name: Smoke-test the binary
@@ -400,10 +408,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mv dist/lens_scan.dist "dist/${ASSET}"
           # Zip and checksum (sha256sum's own format, so
           # `sha256sum -c lens_scan-linux-amd64.zip.sha256` verifies by hand).
-          python scripts/make_zip.py "dist/${ASSET}"
+          # No rename on disk: on Windows the fresh .exe is often still open in
+          # the antivirus scanner and `mv` of its folder fails; --root names
+          # the folder inside the archive instead.
+          python scripts/make_zip.py dist/lens_scan.dist "dist/${ASSET}.zip" --root "${ASSET}"
           ls -la dist
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
