@@ -16,7 +16,6 @@ The easiest way to set up ShareX is to use the built-in automation command.
     ```bash
     lens_scan --setup-sharex
     ```
-    *Note: If you are using the standalone `.exe` from the GitHub Releases, run `lens_scan-windows-amd64.exe --setup-sharex` instead.*
 
 **What this does:**
 *   Locates your ShareX configuration.
@@ -68,4 +67,4 @@ If the hotkey runs but nothing lands on the clipboard, `lens_scan` now exits non
 
 If it takes a long time to process and nothing is copied, try unchecking **"Hidden window"** in your ShareX action settings to see the error console. 
 
-**Antivirus Warning**: Some antivirus software may flag the standalone `.exe` as a threat. This is a false positive common with compiled Python binaries. If this happens, add an exclusion or use the Python version via `pip`.
+**Antivirus Warning**: some antivirus software distrusts unsigned compiled executables. The Windows installer detects a quarantined binary and installs the portable build instead, which runs the package through python.org's signed `python.exe`. You can also install with `uv tool install "chrome-lens-py[clipboard]"`.

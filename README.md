@@ -21,26 +21,27 @@ This project provides a powerful, asynchronous Python library and command-line t
 
 ## 🚀 Quick Start for Windows Users
 
-If you don't want to install Python, you can download the standalone **lens_scan-windows-amd64.exe** from the [Releases](https://github.com/bropines/chrome-lens-py/releases) section.
+No Python needed:
+
+```powershell
+irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.ps1 | iex
+```
 
 > [!NOTE]
-> **About the antivirus warnings.** Earlier releases shipped a single-file
-> binary, which unpacks an executable payload into `%TEMP%` and runs it on every
-> launch. That is packer behaviour, and it is what Defender's ML heuristic
-> reacted to with `Trojan:Win32/Wacatac.H!ml` - a verdict on *behaviour*, not a
-> signature, which is why it fired on user machines while a local scan came back
-> clean. The builds are now a plain folder that does none of that. If you would
-> rather avoid a binary entirely, `uv tool install` below installs the real
-> Python package and has nothing for a heuristic to object to.
+> **About antivirus warnings.** The default Windows build is compiled with
+> Nuitka (~200 ms startup), and some antivirus heuristics distrust any unsigned
+> compiled executable. The installer checks that the binary still runs a moment
+> after unpacking; if your antivirus quarantined it, it installs the
+> **portable build** instead, which contains no executable of ours at all: it
+> runs the package through the official `python.exe` from python.org, signed by
+> the Python Software Foundation. Force either with
+> `$env:LENS_SCAN_FLAVOR = 'portable'` or `'nuitka'`. `uv tool install` below
+> avoids binaries entirely.
 
 ### 📸 Automated ShareX Setup
 If you use **ShareX**, you can fully automate the setup with one command:
 ```bash
-# Using the installed package:
 lens_scan --setup-sharex
-
-# Or using the standalone .exe:
-lens_scan-windows-amd64.exe --setup-sharex
 ```
 This will automatically configure a hotkey (**Ctrl + O**) and the necessary actions to use Google Lens OCR. Add `-t ru` (any language code) to make the hotkey translate instead. Your old `HotkeysConfig.json` is backed up first. Details: [docs/sharex.md](docs/sharex.md).
 
@@ -145,10 +146,30 @@ irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/insta
 curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/install.sh | sh
 ```
 
-Installs to `%LOCALAPPDATA%\Programs\lens-scan` or `~/.local/share/lens-scan`;
-re-running replaces the existing install. Both scripts refuse to install a
-pre-standalone release rather than quietly handing you the self-extracting build
-that caused the antivirus reports.
+Installs to `%LOCALAPPDATA%\Programs\lens-scan` or `~/.local/share/lens-scan`.
+Re-running replaces the existing install, unpacking into a staging folder first,
+so a download that fails verification leaves the old install untouched. Pin a
+version with `LENS_SCAN_VERSION=3.6.0`.
+
+Builds: Windows x64 (compiled, plus the portable fallback), Linux x64 and arm64
+(built against glibc 2.35, so Ubuntu 22.04 / Debian 12 and newer), macOS Apple
+Silicon and Intel. Anything else is pointed at `uv tool install`.
+
+### Scoop
+
+```powershell
+scoop bucket add lens https://github.com/bropines/chrome-lens-py
+scoop install lens-scan            # or lens-scan-portable
+```
+
+### Docker (the daemon)
+
+```bash
+docker run -d -p 127.0.0.1:8765:8765 -e LENS_TOKEN=change-me ghcr.io/bropines/chrome-lens-py
+```
+
+The container refuses to start without `LENS_TOKEN`, because inside the
+container it listens beyond loopback.
 
 Every release publishes a `.sha256` next to each archive, and the installers
 check it before unpacking. Verify one by hand with:
@@ -160,6 +181,13 @@ sha256sum -c lens_scan-linux-amd64.zip.sha256
 Be clear about what that buys: it catches a corrupted or truncated download and
 a CDN serving something other than what was uploaded. It is not a signature —
 anyone able to rewrite the release could rewrite the checksum with it.
+
+For that, every archive also carries a signed build-provenance attestation,
+proving it was built by this repository's release workflow from a given commit:
+
+```bash
+gh attestation verify lens_scan-linux-amd64.zip --repo bropines/chrome-lens-py
+```
 
 Not sure which copy you are running? `lens_scan --version` prints the version
 along with the path it was loaded from, which settles the usual confusion
