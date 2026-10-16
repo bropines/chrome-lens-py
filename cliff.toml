@@ -1,0 +1,53 @@
+# git-cliff configuration: https://git-cliff.org/docs/configuration
+#
+# The release workflow runs `git-cliff --latest --strip header` to write the
+# notes for the tag being released. For a full regeneration: `git-cliff -o CHANGELOG.md`
+# (that rewrites the hand-seeded entries above 3.5.4, so merge by hand).
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project are documented here.
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+            {{ commit.message | upper_first }}\
+            {% if commit.breaking %} (**breaking**){% endif %} ({{ commit.id | truncate(length=7, end="") }})\
+    {% endfor %}
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"
+commit_parsers = [
+    # The weekly protobuf bot is noise in release notes.
+    { message = "^chore: auto-update protobufs", skip = true },
+    { message = "^chore: bump version", skip = true },
+    { message = "^Merge", skip = true },
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^perf", group = "Performance" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^docs?", group = "Documentation" },
+    { message = "^(build|ci)", group = "Build" },
+    { message = "^test", group = "Tests" },
+    { message = "^chore", group = "Miscellaneous" },
+]
