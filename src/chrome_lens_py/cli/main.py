@@ -1,13 +1,27 @@
 import argparse
 import asyncio
+import contextvars
 import inspect
+import io
 import json
 import logging
 import os
 import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    TextIO,
+    Tuple,
+)
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -29,7 +43,7 @@ from ..utils.config_manager import (
 )
 from ..utils.general import is_image_file_supported, is_url
 from ..utils.sharex import copy_to_clipboard
-from ..utils.sharex_setup import setup_sharex_config
+from ..utils.sharex_setup import setup_sharex_config, setup_sharex_uploader
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +61,68 @@ CONCURRENCY_WARNING_THRESHOLD = 20
 console = Console()
 err_console = Console(stderr=True)
 
+ApiProvider = Callable[[Settings, Mapping[str, str]], Awaitable[Any]]
+
+
+class RunLocally(Exception):
+    """Raised inside the daemon for a command it must not run itself.
+
+    The client then runs it in its own process, so --help, argparse errors and
+    anything that touches the machine behave exactly as without a daemon.
+    """
+
+
+@dataclass
+class CliContext:
+    """Where one CLI run writes, and what it resolves against.
+
+    Absent for an ordinary process, where stdout/stderr and the working
+    directory are the real ones. Inside the daemon each forwarded request gets
+    its own, held in a ContextVar so concurrent requests cannot see each
+    other's streams (asyncio tasks inherit the context they are created in).
+    """
+
+    out: TextIO
+    err: TextIO
+    err_console: Console
+    cwd: str
+    env: Mapping[str, str] = field(default_factory=dict)
+    api_provider: Optional[ApiProvider] = None
+    log_level: int = logging.WARNING
+
+
+_CONTEXT: "contextvars.ContextVar[Optional[CliContext]]" = contextvars.ContextVar(
+    "lens_cli_context", default=None
+)
+
+
+def current_context() -> Optional[CliContext]:
+    return _CONTEXT.get()
+
+
+def real_path(path: str) -> str:
+    """`path` as the filesystem should see it.
+
+    Inside the daemon a relative path means "relative to the client's working
+    directory", not the daemon's. Names shown to the user (and echoed in
+    --oneline/json records) stay as typed; only the open()/stat() calls use
+    this. URLs pass through.
+    """
+    ctx = _CONTEXT.get()
+    if ctx is None or not path or is_url(path):
+        return path
+    return os.path.join(ctx.cwd, path)
+
+
+def _stdout() -> TextIO:
+    ctx = _CONTEXT.get()
+    return ctx.out if ctx is not None else sys.stdout
+
+
+def _stderr_console() -> Console:
+    ctx = _CONTEXT.get()
+    return ctx.err_console if ctx is not None else err_console
+
 
 # ------------------------------------------------------------------- output
 
@@ -58,18 +134,25 @@ def emit(text: str = "") -> None:
     piped) and reads "[...]" as markup, either of which corrupts JSON and OCR
     text.
     """
-    sys.stdout.write(text + "\n")
-    sys.stdout.flush()
+    out = _stdout()
+    out.write(text + "\n")
+    out.flush()
+
+
+def write_stdout(text: str) -> None:
+    out = _stdout()
+    out.write(text)
+    out.flush()
 
 
 def note(markup: str) -> None:
     """Decorative / informational message (stderr). Callers escape any data."""
-    err_console.print(markup)
+    _stderr_console().print(markup)
 
 
 def fail(message: str, label: str = "Error") -> None:
     """An error message (stderr). The text is data and is never parsed as markup."""
-    err_console.print(
+    _stderr_console().print(
         Text.assemble((f"{label}: ", "bold red"), message), soft_wrap=True
     )
 
@@ -164,7 +247,23 @@ def _default_text(name: str) -> str:
     return f" (default: {default_value(name)})"
 
 
-def build_parser() -> argparse.ArgumentParser:
+class _NoExitParser(argparse.ArgumentParser):
+    """Parser for the daemon: a usage error must not print to its stderr or exit.
+
+    The client re-runs the command line locally instead, so the user sees
+    argparse's own message in their own terminal.
+    """
+
+    def error(self, message: str):  # type: ignore[override]
+        raise RunLocally(f"usage error: {message}")
+
+    def exit(self, status: int = 0, message: Optional[str] = None):  # type: ignore[override]
+        raise RunLocally("argparse exit")
+
+
+def build_parser(
+    parser_class: type = argparse.ArgumentParser,
+) -> argparse.ArgumentParser:
     """The one description of the command line; --help is generated from it.
 
     Options that map to a persistent setting are declared with
@@ -172,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     parsed namespace, which is what lets the config file and LENS_* variables
     take effect instead of being overridden by a hard-coded default.
     """
-    parser = argparse.ArgumentParser(
+    parser = parser_class(
         prog="lens_scan",
         usage="lens_scan <image_source> [ocr_lang] [options]",
         description="Performs OCR and optional translation on an image with Google Lens.",
@@ -386,11 +485,69 @@ def build_parser() -> argparse.ArgumentParser:
         help="Font size for the overlay (default: 20).",
     )
 
-    g = parser.add_argument_group("Daemon")
+    g = parser.add_argument_group("Daemon / fast mode")
+    setting(
+        g,
+        "--daemon",
+        choices=["auto", "on", "off"],
+        metavar="MODE",
+        help="Use a warm background daemon for speed: auto = use it if running "
+        "and start one for next time, on = wait for it, off = never"
+        + _default_text("daemon")
+        + ".",
+    )
+    setting(
+        g,
+        "--daemon-idle-timeout",
+        dest="daemon_idle_timeout",
+        type=int,
+        metavar="SECONDS",
+        help="An automatically started daemon exits after this long without "
+        "requests; 0 = never" + _default_text("daemon_idle_timeout") + ".",
+    )
+    g.add_argument(
+        "--daemon-status",
+        action="store_true",
+        help="Show whether the daemon is running, and its pid, uptime and load.",
+    )
+    g.add_argument(
+        "--daemon-start",
+        action="store_true",
+        help="Start the daemon in the background now.",
+    )
+    g.add_argument(
+        "--daemon-stop", action="store_true", help="Stop the running daemon."
+    )
+    g.add_argument(
+        "--install-service",
+        action="store_true",
+        help="Start the daemon at every login on a fixed port (ShareX uploader "
+        "mode): a Windows Startup shortcut, a macOS LaunchAgent or a Linux systemd --user unit.",
+    )
+    g.add_argument(
+        "--uninstall-service",
+        action="store_true",
+        help="Remove what --install-service set up.",
+    )
+
+    g = parser.add_argument_group("Server (foreground)")
     g.add_argument(
         "--serve",
         action="store_true",
-        help="Run as a local HTTP daemon instead of processing one image.",
+        help="Run as a local HTTP server instead of processing one image.",
+    )
+    g.add_argument(
+        "--auto",
+        action="store_true",
+        help="With --serve: run as the managed daemon (private socket or "
+        "ephemeral port, random token, idle exit). This is what --daemon-start "
+        "runs.",
+    )
+    g.add_argument(
+        "--service",
+        action="store_true",
+        help="With --serve: run as the persistent daemon on --port with the "
+        "token from --setup-sharex --mode uploader. No idle exit.",
     )
     g.add_argument(
         "--host",
@@ -398,12 +555,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ADDR",
         help="Address to bind (default: 127.0.0.1).",
     )
-    g.add_argument(
+    setting(
+        g,
         "--port",
+        dest="daemon_port",
         type=int,
-        default=8765,
         metavar="N",
-        help="Port to bind (default: 8765).",
+        help="Port to bind" + _default_text("daemon_port") + ".",
     )
     g.add_argument(
         "--token",
@@ -491,6 +649,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Configure ShareX to use lens_scan (Windows). Add -t LANG to make "
         "the hotkey translate.",
     )
+    g.add_argument(
+        "--mode",
+        choices=["program", "uploader"],
+        default="program",
+        help="With --setup-sharex: program = ShareX runs lens_scan per capture "
+        "(default); uploader = write a ShareX custom uploader (.sxcu) that "
+        "posts to the daemon, so no process is started per capture.",
+    )
     setting(
         g,
         "-l",
@@ -529,6 +695,20 @@ def print_help(parser: Optional[argparse.ArgumentParser] = None, file=None) -> N
 
 
 # ---------------------------------------------------------------- processing
+
+
+def api_cache_key(settings: Settings, env: Mapping[str, str]) -> Tuple[Any, ...]:
+    """Everything that decides how a LensAPI is *constructed*.
+
+    A daemon keeps one LensAPI (and so one pooled HTTP/2 connection) per key.
+    Overlay-rendering options are per call, not per instance, so they stay out.
+    """
+    kwargs = _api_kwargs(settings)
+    return (
+        tuple(sorted((k, repr(v)) for k, v in kwargs.items())),
+        settings.retries,  # not always in kwargs: see _api_kwargs
+        env.get("LENS_ENDPOINT", ""),
+    )
 
 
 def _api_kwargs(settings: Settings) -> Dict[str, Any]:
@@ -604,7 +784,7 @@ async def _image_size(api: Any, source: str) -> Optional[Tuple[int, int]]:
         if not is_url(source):
             from PIL import Image
 
-            with Image.open(source) as image:
+            with Image.open(real_path(source)) as image:
                 return image.size
 
         from ..core.image_processor import prepare_image_for_api
@@ -691,7 +871,7 @@ async def _run_region(
 
     try:
         result = await api.process_region(
-            source,
+            real_path(source),
             region=region,
             ocr_language=args.ocr_lang,
             text_query=args.text_query,
@@ -727,19 +907,21 @@ def _overlay_path_for(base: Optional[str], index: int, total: int) -> Optional[s
 
 
 def _collect_sources(source: str, quiet: bool) -> Optional[List[str]]:
-    if os.path.isdir(source):
+    # Names are kept as typed (they are echoed in results); real_path() is what
+    # touches the disk, so a daemon resolves them against the client's cwd.
+    if os.path.isdir(real_path(source)):
         if not quiet:
             note(f"Processing directory: [cyan]{escape(source)}[/cyan]")
         found = [
             os.path.join(source, name)
-            for name in sorted(os.listdir(source))
-            if is_image_file_supported(os.path.join(source, name))
+            for name in sorted(os.listdir(real_path(source)))
+            if is_image_file_supported(real_path(os.path.join(source, name)))
         ]
         if not found:
             fail(f"No supported image files found in directory '{source}'.")
             return None
         return found
-    if not is_image_file_supported(source):
+    if not is_image_file_supported(real_path(source)):
         fail(f"Source '{source}' is not a valid URL or supported image file.")
         return None
     return [source]
@@ -767,14 +949,13 @@ async def _run_batch(
     wants_size = fmt in ("json", "jsonl")
 
     async def process(index: int, path: str):
+        overlay_path = _overlay_path_for(args.output_overlay_path, index, total)
         result = await api.process_image(
-            image_path=path,
+            image_path=real_path(path),
             ocr_language=args.ocr_lang,
             target_translation_language=settings.target_lang,
             source_translation_language=args.source_lang,
-            output_overlay_path=_overlay_path_for(
-                args.output_overlay_path, index, total
-            ),
+            output_overlay_path=real_path(overlay_path) if overlay_path else None,
             ocr_preserve_line_breaks=settings.ocr_preserve_line_breaks,
             output_format=api_format,
             **_render_kwargs(settings),
@@ -916,11 +1097,9 @@ async def _run_batch(
         if fmt == "json" and records:
             emit(formats.format_json(records))
         elif fmt == "hocr" and pages:
-            sys.stdout.write(formats.format_hocr(pages))
-            sys.stdout.flush()
+            write_stdout(formats.format_hocr(pages))
         elif fmt == "tsv" and pages:
-            sys.stdout.write(formats.format_tsv(pages))
-            sys.stdout.flush()
+            write_stdout(formats.format_tsv(pages))
     finally:
         for task in workers:
             task.cancel()
@@ -943,8 +1122,8 @@ async def _run_serve(args: argparse.Namespace, settings: Settings) -> int:
 
     note(
         f"[bold green]chrome-lens-py daemon[/bold green] on "
-        f"[cyan]http://{escape(args.host)}:{args.port}[/cyan]  "
-        f"(POST /v1/ocr, POST /v1/region, GET /health)"
+        f"[cyan]http://{escape(args.host)}:{settings.daemon_port}[/cyan]  "
+        f"(POST /v1/ocr, POST /v1/region, POST /v1/ocr/raw, GET /health)"
     )
     if args.allow_origin:
         note(f"Allowed browser origins: {escape(', '.join(args.allow_origin))}")
@@ -956,7 +1135,7 @@ async def _run_serve(args: argparse.Namespace, settings: Settings) -> int:
     try:
         await run_server(
             host=args.host,
-            port=args.port,
+            port=settings.daemon_port,
             token=args.token,
             allowed_origins=frozenset(args.allow_origin),
             **_api_kwargs(settings),
@@ -965,6 +1144,31 @@ async def _run_serve(args: argparse.Namespace, settings: Settings) -> int:
         fail(str(e))
         return EXIT_FAILED
     return EXIT_OK
+
+
+async def _run_managed(args: argparse.Namespace, settings: Settings) -> int:
+    """--serve --auto / --serve --service: the daemon lens_scan talks to itself."""
+    from ..daemon import run_managed_daemon
+
+    if args.allow_origin:
+        fail("--allow-origin is not available on the managed daemon.")
+        return EXIT_FAILED
+    if args.auto and args.service:
+        fail("--auto and --service cannot be used together.")
+        return EXIT_FAILED
+    try:
+        return await run_managed_daemon(
+            settings,
+            service=bool(args.service),
+            port_override=(
+                settings.daemon_port
+                if settings.sources.get("daemon_port") == "command line"
+                else None
+            ),
+        )
+    except LensConfigError as e:
+        fail(str(e), "Configuration Error")
+        return EXIT_FAILED
 
 
 def _check_output_modes(args: argparse.Namespace) -> Optional[str]:
@@ -983,10 +1187,39 @@ def _check_output_modes(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
+# Things the daemon never runs itself: they act on the machine (ShareX, the
+# config file, services), print version/help, or are the daemon.
+_LOCAL_ONLY_ATTRS = (
+    "version",
+    "help",
+    "setup_sharex",
+    "update_config",
+    "serve",
+    "install_service",
+    "uninstall_service",
+    "daemon_status",
+    "daemon_start",
+    "daemon_stop",
+)
+
+
 async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
-    """Run the CLI and return its exit code (0 ok, 1 all failed, 2 some failed)."""
-    parser = build_parser()
+    """Run the CLI and return its exit code (0 ok, 1 all failed, 2 some failed).
+
+    Inside the daemon (a CliContext is set) this is the same code, writing to
+    that context's streams and resolving paths against its working directory.
+    Anything that must run in the user's own process raises RunLocally.
+    """
+    ctx = current_context()
+    parser = build_parser(_NoExitParser if ctx is not None else argparse.ArgumentParser)
     args = parser.parse_args(argv)
+
+    if ctx is not None:
+        for attr in _LOCAL_ONLY_ATTRS:
+            if getattr(args, attr, False):
+                raise RunLocally(f"--{attr.replace('_', '-')}")
+        if not args.image_source:
+            raise RunLocally("no image source")
 
     if args.version:
         print_version()
@@ -995,27 +1228,62 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
         print_help(parser)
         return EXIT_OK
     if args.setup_sharex:
+        lang = getattr(args, "target_lang", None)
+        if args.mode == "uploader":
+            ok = setup_sharex_uploader(lang, getattr(args, "daemon_port", None))
+        else:
+            ok = setup_sharex_config(lang)
+        return EXIT_OK if ok else EXIT_FAILED
+    if args.daemon_status or args.daemon_start or args.daemon_stop:
+        from .. import client
+
+        if args.daemon_status:
+            return client.daemon_status()
+        if args.daemon_stop:
+            return client.daemon_stop()
+        return client.daemon_start(
+            getattr(args, "daemon_idle_timeout", client.DEFAULT_IDLE_TIMEOUT)
+        )
+    if args.install_service or args.uninstall_service:
+        from ..utils import service
+
+        if args.uninstall_service:
+            return EXIT_OK if service.uninstall_service() else EXIT_FAILED
         return (
             EXIT_OK
-            if setup_sharex_config(getattr(args, "target_lang", None))
+            if service.install_service(getattr(args, "daemon_port", None))
             else EXIT_FAILED
         )
 
+    env = ctx.env if ctx is not None else None
     default_config_path = os.path.join(
-        get_default_config_dir(), DEFAULT_CONFIG_FILENAME
+        get_default_config_dir(environ=env), DEFAULT_CONFIG_FILENAME
     )
-    config_file_to_load = args.config_file_path_override or default_config_path
+    config_file_to_load = (
+        real_path(args.config_file_path_override)
+        if args.config_file_path_override
+        else default_config_path
+    )
 
     try:
-        settings = resolve_settings(vars(args), config_file_to_load)
+        settings = resolve_settings(vars(args), config_file_to_load, env=env)
     except LensConfigError as e:
         fail(str(e), "Configuration Error")
         return EXIT_FAILED
 
     level = settings.logging_level
+    managed = args.serve and (args.auto or args.service)
     if args.serve and settings.sources.get("logging_level") == "default":
         level = "INFO"  # a daemon with no log output looks hung
-    setup_logging(level)
+    if ctx is not None:
+        # The daemon's logging is installed once; a request only chooses how
+        # much of it to send back to its own client.
+        ctx.log_level = getattr(logging, level, logging.WARNING)
+    elif not managed:
+        setup_logging(level)
+
+    if settings.font_path:
+        settings.font_path = real_path(settings.font_path)
 
     if os.path.exists(config_file_to_load):
         logger.info("Using config file: %s", config_file_to_load)
@@ -1044,6 +1312,8 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
             return EXIT_OK
 
     if args.serve:
+        if args.auto or args.service:
+            return await _run_managed(args, settings)
         return await _run_serve(args, settings)
 
     if settings.concurrency > CONCURRENCY_WARNING_THRESHOLD:
@@ -1067,13 +1337,98 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
     if sources is None:
         return EXIT_FAILED
 
-    api = LensAPI(**_api_kwargs(settings))
+    owns_api = ctx is None or ctx.api_provider is None
+    if owns_api:
+        api = LensAPI(**_api_kwargs(settings))
+    else:
+        assert ctx is not None and ctx.api_provider is not None
+        api = await ctx.api_provider(settings, ctx.env)
     try:
         if args.region:
             return await _run_region(api, args, settings, sources[0])
         return await _run_batch(api, args, settings, sources)
     finally:
-        await api.aclose()
+        if owns_api:  # a daemon keeps its pooled connections for the next request
+            await api.aclose()
+
+
+class _Recorder(io.StringIO):
+    """A capture buffer that also remembers the order writes arrived in."""
+
+    def __init__(self, order: List[List[Any]], tag: str):
+        super().__init__()
+        self._order = order
+        self._tag = tag
+
+    def write(self, text: str) -> int:
+        if text:
+            if self._order and self._order[-1][0] == self._tag:
+                self._order[-1][1] += text
+            else:
+                self._order.append([self._tag, text])
+        return super().write(text)
+
+
+async def run_cli_request(
+    *,
+    argv: Sequence[str],
+    cwd: str,
+    env: Mapping[str, str],
+    stdin_is_tty: bool = False,
+    stdout_is_tty: bool = False,
+    stderr_is_tty: bool = False,
+    columns: Optional[int] = None,
+    api_provider: Optional[ApiProvider] = None,
+) -> Dict[str, Any]:
+    """Run one forwarded command line inside this (daemon) process.
+
+    Returns ``{"exit_code", "stdout", "stderr"}``, or ``{"run_locally": why}``
+    for a command the client has to run itself. `stdin_is_tty` is accepted for
+    completeness: no daemon-eligible command reads stdin or prompts.
+    """
+    order: List[List[Any]] = []
+    out, err = _Recorder(order, "out"), _Recorder(order, "err")
+    ctx = CliContext(
+        out=out,
+        err=err,
+        err_console=Console(
+            file=err,
+            force_terminal=stderr_is_tty,
+            width=columns,
+            # The daemon has no console to probe, so say what rich would have
+            # decided in the client: a Windows stdout that is not a terminal
+            # (ShareX's pipe) is "legacy" there, which also wraps one column
+            # narrower.
+            legacy_windows=sys.platform == "win32" and not stdout_is_tty,
+            _environ=dict(env),
+        ),
+        cwd=cwd,
+        env=dict(env),
+        api_provider=api_provider,
+    )
+    token = _CONTEXT.set(ctx)
+    try:
+        code = await cli_main(list(argv))
+    except RunLocally as e:
+        return {"run_locally": str(e)}
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # a bug must not turn into a hung or empty reply
+        logger.exception("Forwarded command crashed")
+        err.write(f"Error: {type(e).__name__}: {e}\n")
+        code = EXIT_FAILED
+    finally:
+        _CONTEXT.reset(token)
+    reply: Dict[str, Any] = {
+        "exit_code": code,
+        "stdout": out.getvalue(),
+        "stderr": err.getvalue(),
+    }
+    if reply["stdout"] and reply["stderr"]:
+        # On a terminal the two streams interleave ("OCR Results:" before the
+        # text it heads); the client replays them in the order they were written.
+        reply["events"] = order
+    return reply
 
 
 def force_utf8_streams(streams=None):

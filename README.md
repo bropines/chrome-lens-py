@@ -264,12 +264,16 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--manga-growth <N>` | | How much wider than the detected box to lay out in manga mode. |
 | `--region <cx,cy,w,h>` | | Re-read one region at native resolution (normalized 0..1). |
 | `--text-query <text>` | | Text to send alongside `--region`. |
-| `--serve` | | Run as a local HTTP daemon instead of processing one image. |
-| `--host <addr>` | | Address for the daemon (default `127.0.0.1`). |
-| `--port <N>` | | Port for the daemon (default `8765`). |
+| `--daemon <mode>` | | Warm-process fast mode: `auto` (default), `on` or `off`. See [Daemon / fast mode](#-daemon--fast-mode). |
+| `--daemon-idle-timeout <sec>` | | An automatically started daemon exits after this long without requests (default 600, `0` = never). |
+| `--daemon-status` / `--daemon-start` / `--daemon-stop` | | Inspect, start or stop the background daemon. |
+| `--install-service` / `--uninstall-service` | | Start the daemon at every login on a fixed port (ShareX uploader mode). |
+| `--serve` | | Run as a local HTTP server in the foreground instead of processing one image. |
+| `--host <addr>` | | Address for the server (default `127.0.0.1`). |
+| `--port <N>` | | Port for the server and for the service daemon (default `8765`). |
 | `--token <token>` | | Require a bearer token. Mandatory when `--host` is not loopback. |
 | `--allow-origin <origin>`| | Let one browser origin call the daemon (repeatable). None by default. |
-| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically (Windows). Add `-t <lang>` to make the hotkey translate. See [docs/sharex.md](docs/sharex.md). |
+| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically (Windows). Add `-t <lang>` to make the hotkey translate; add `--mode uploader` for the no-process-per-capture variant. See [docs/sharex.md](docs/sharex.md). |
 | `--logging-level <lvl>`| `-l` | Set logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `--version` | `-V` | Show the version and which copy of it is running. |
 | `--help` | `-h` | Show this help message and exit. The text is generated from the parser, so it always lists every option. |
@@ -619,6 +623,9 @@ asyncio.run(process_with_details())
   | `text_align` | `LENS_TEXT_ALIGN` | `--text-align` | `auto` |
   | `manga_mode` | `LENS_MANGA_MODE` | `--manga` | `false` |
   | `manga_box_growth` | `LENS_MANGA_BOX_GROWTH` | `--manga-growth` | `1.45` |
+  | `daemon` | `LENS_DAEMON` | `--daemon` | `auto` |
+  | `daemon_idle_timeout` | `LENS_DAEMON_IDLE_TIMEOUT` | `--daemon-idle-timeout` | `600` |
+  | `daemon_port` | `LENS_DAEMON_PORT` | `--port` | `8765` |
 
   The flag spellings `translate`, `font`, `outline`, `min_text_size`, `manga`, `manga_growth` and `no_env_proxy` are also accepted as config keys. Booleans in environment variables take `1/0`, `true/false`, `yes/no`, `on/off`. `--serve` reads the same settings.
 
@@ -642,11 +649,128 @@ asyncio.run(process_with_details())
 
 </details>
 
+## ⚡ Daemon / fast mode
+
+A cold `lens_scan` spends most of its time importing Pillow, protobuf and httpx
+and opening a fresh TLS connection to Google. A process that is already running
+has done both. ShareX can only *execute a program* per screenshot, so
+`lens_scan` is now a thin client that hands the command to a warm background
+daemon **by itself** - there is nothing to set up.
+
+Measured on Windows 11, Python 3.13, the real API through a local proxy, the same
+image each time, median of 7:
+
+| | median | range |
+|---|---|---|
+| cold `lens_scan` (`--daemon off`) | 3323 ms | 3233-3762 ms |
+| `lens_scan` -> warm daemon | **451 ms** | 392-481 ms |
+| `POST /v1/ocr/raw` with `curl` (no process at all) | **318 ms** | 304-363 ms |
+| *for scale:* `python -c pass` on this machine | 98 ms | 82-143 ms |
+| *client overhead:* whole `lens_scan` against an instant mock daemon | 136 ms | 114-176 ms |
+
+The last two rows are the floor: this machine's interpreter alone takes 98 ms
+(an editable-install `.pth` in `site` accounts for about half of that), and the
+client adds roughly 40 ms on top (about 19 ms to import, 10 ms for the first
+call, in a process that imports no Pillow, protobuf, httpx or rich).
+
+### How `auto` works (the default)
+
+1. `lens_scan` looks for the daemon's discovery file (below). If a daemon is
+   running and is the same version, it sends it the command line and prints
+   what comes back - same stdout, same stderr, same exit code.
+2. If none is running, it does the work in-process exactly as before **and** starts
+   a detached background daemon for the next call (no console window, nothing
+   inherited from the caller: ShareX can read the output to EOF without waiting
+   for the daemon).
+3. The daemon exits by itself after `daemon_idle_timeout` seconds (default 600) with
+   no requests, and removes its files.
+
+Correctness never depends on the daemon. If anything is off - no daemon, a stale
+file, a version mismatch, a refused or dropped connection (even mid-request), a
+reply that does not parse, a timeout - the client silently runs the command
+in-process instead. A daemon of a different version is asked to exit and is
+replaced. Several first calls at once start one daemon (a lock file), not
+several.
+
+What runs in the daemon is the same CLI code, with the client's working
+directory (so relative paths work), the client's `LENS_*` variables and config
+file (so settings behave the same), and `--sharex` copying to your clipboard
+from the daemon, which runs in your session. What never runs in the daemon:
+`--help`, `--version`, `--setup-sharex`, `--update-config`, `--serve`, the
+service and daemon commands, and any command line argparse would reject - they
+run in your own process, so they behave exactly as without a daemon.
+
+### Turning it on, off, or managing it
+
+```bash
+lens_scan img.png --daemon off          # this call only
+export LENS_DAEMON=off                  # this shell / CI job
+#   "daemon": "off"                     # in config.json, for good
+lens_scan img.png --daemon on           # wait (up to 5 s) for a starting daemon
+                                        # instead of running in-process
+
+lens_scan --daemon-status               # pid, version, uptime, transport, requests, idle time left
+lens_scan --daemon-stop
+lens_scan --daemon-start                # normally unnecessary
+lens_scan --daemon-idle-timeout 3600 img.png      # longer-lived daemon (0 = never exits)
+```
+
+Use `LENS_DAEMON=off` in CI and containers where a process that outlives the job
+is unwelcome. The daemon's log is `daemon.log` next to the state files.
+
+Things to know:
+
+- The client forwards `LENS_*` variables and a few rendering variables
+  (`NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, `TERM`, `XDG_CONFIG_HOME`). It does **not**
+  forward `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`: the daemon reads those from the
+  environment it was started in. If you change them, run `lens_scan --daemon-stop`
+  (or set `proxy` / `LENS_PROXY`, which *are* forwarded).
+- `-l DEBUG` in a forwarded run shows this package's debug log, not httpx's.
+- One daemon per user. It keeps one HTTP/2 connection per distinct combination of
+  API key, proxy, timeout, region and the other connection settings.
+
+### Where it lives, and who can talk to it
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| state directory | `%LOCALAPPDATA%\chrome-lens-py\` | `~/Library/Caches/chrome-lens-py/` | `$XDG_RUNTIME_DIR/chrome-lens-py/`, else `~/.cache/chrome-lens-py/` |
+| transport | `127.0.0.1`, ephemeral port | Unix socket in that directory | Unix socket in that directory |
+| directory / file mode | per-user ACL inherited from `%LOCALAPPDATA%` | `0700` / `0600` | `0700` / `0600` |
+
+`daemon.json` holds `{version, pid, transport, address, token, started_at}`, is
+written atomically, and is how a client finds the daemon. Every request must carry
+the random 32-byte token (`secrets.token_urlsafe`); on POSIX the socket's
+permissions already keep other users out, and the token is sent regardless. No
+browser can reach it: the client sends no `Origin`, and a request with one is
+refused (see [What can reach it](#what-can-reach-it)). Override the directory with
+`LENS_STATE_DIR` (the tests do).
+
+### ShareX without starting a process: uploader mode
+
+Program mode (`lens_scan --setup-sharex`, the default) runs `lens_scan` once per
+capture; with the daemon each run is fast, but it is still a process. Uploader mode
+removes it: ShareX posts the capture straight to the daemon and copies the reply.
+
+```bash
+lens_scan --setup-sharex --mode uploader -t ru      # -t is optional
+lens_scan --install-service                         # start the daemon at every login
+```
+
+The first command writes a ShareX custom uploader (`.sxcu`) pointing at
+`http://127.0.0.1:8765/v1/ocr/raw` with your token and starts the daemon; double-click
+the file and say yes. Details and the ShareX settings to check:
+[docs/sharex.md](docs/sharex.md). The `.sxcu` contains the token - do not share it.
+
+`--install-service` makes the daemon start at login on the fixed port
+(`--port`, setting `daemon_port`, default `8765`): a Startup-folder shortcut on
+Windows, a `KeepAlive` LaunchAgent on macOS, a `systemd --user` unit on Linux.
+`--uninstall-service` removes it (and forgets the token).
+
 ## 🖥️ Daemon mode
 
-Importing Pillow, protobuf and httpx costs roughly a second. If something calls
-`lens_scan` repeatedly — ShareX on every screenshot, say — run it as a daemon and
-pay that once:
+This is the plain HTTP server for your own programs (the *fast mode* above is
+the automatic one). Importing Pillow, protobuf and httpx costs roughly a second.
+If something calls it repeatedly, run it as a daemon and pay that once:
 
 ```bash
 lens_scan --serve                      # http://127.0.0.1:8765
@@ -657,12 +781,13 @@ lens_scan --serve --port 9000 --token secret
 |---|---|
 | `POST /v1/ocr` | `{"image": "<path or URL>"}` or `{"image_b64": "..."}`, plus any of `translate_to`, `translate_from`, `ocr_language`, `ocr_preserve_line_breaks`, `output_format`, `overlay_path`, `overlay_mode`, `vertical_text`, `erase_mode`, `hull_padding`, `outline_scale`, `min_readable_px`, `text_align`, `manga_mode`, `manga_box_growth` |
 | `POST /v1/region` | the same source, plus `"region": [center_x, center_y, width, height]` normalized 0..1, and optionally `text_query` |
+| `POST /v1/ocr/raw` | the image itself as the body (`Content-Type: image/png`, `image/jpeg`, `image/webp` or `image/bmp`); query `translate_to`, `translate_from`, `ocr_language`, `preserve_line_breaks`, `format=text\|json`. Answers `text/plain`: the translation if one was asked for, else the OCR text. Made for ShareX's custom uploader. |
 | `GET /health` | liveness check; reports the version |
 
 Every rendering option the CLI has is accepted here under the same name, so
 `--erase-mode hull --outline 3` on the command line is `"erase_mode": "hull",
 "outline_scale": 3` in the body. Requests must be `Content-Type:
-application/json`.
+application/json` (`/v1/ocr/raw` takes an image type instead).
 
 ### What can reach it
 
@@ -679,6 +804,16 @@ the defaults are deliberately closed:
   itself, which on a network listener means reading your disk, or fetching a
   host of the caller's choosing.
 - Tokens are compared in constant time.
+- **`/v1/ocr/raw` is closed to pages for the same reason as the JSON routes.** The
+  four image types it accepts are not ones a page may send without a CORS
+  preflight (only `text/plain`, form-encoded and multipart are), and the
+  preflight carries an `Origin`, which is refused. The tests cover both the
+  POST and the preflight.
+- **The background daemon of [fast mode](#-daemon--fast-mode) is stricter still:**
+  its private socket / ephemeral port is announced only in a file readable by
+  your user, every request needs its random token, and its extra routes
+  (`/v1/cli`, `/v1/status`, `/v1/shutdown`, which can run a `lens_scan` command
+  on your behalf) exist only on a local listener that has a token.
 
 ```bash
 # let one page you control use it

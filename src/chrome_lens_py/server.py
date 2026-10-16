@@ -16,8 +16,10 @@ relay. Three rules enforce that, and they are why the defaults look strict:
     refused unless that exact origin was named on the command line. The check
     is on the request, not the response, because a page can send a POST it is
     forbidden to read and still get the side effect it was after.
-  * POSTs must be JSON. A page cannot set application/json without a CORS
-    preflight, which closes the same hole from the other side.
+  * POSTs must be JSON (or, for /v1/ocr/raw, an image/* type). A page cannot
+    set either without a CORS preflight, which closes the same hole from the
+    other side: text/plain, form-encoded and multipart are the only types it
+    may send unasked, and none of them is accepted.
   * Binding anywhere but loopback requires a token, and then accepts only
     inline pixels - no paths to read, no URLs to go fetch.
 
@@ -26,10 +28,18 @@ Routes
   GET  /v1/version       version and capabilities
   POST /v1/ocr           OCR / translate one image
   POST /v1/region        re-read one region at native resolution
+  POST /v1/ocr/raw       OCR one image sent as raw bytes (ShareX custom uploader)
+
+Managed daemons (``lens_scan --serve --auto``) add three more, all needing the
+token and all unavailable to anything but a local listener:
+
+  POST /v1/cli           run a whole lens_scan command line, return its output
+  GET  /v1/status        pid, uptime, requests served, idle time left
+  POST /v1/shutdown      stop the daemon
 
 Status codes: 200 ok; 400 bad JSON, bad field or undecodable image; 401 bad
 token; 403 origin refused; 404 no such route; 405 wrong method; 413 body over
-the limit; 415 not application/json; 429 upstream rate limit (Retry-After is
+the limit; 415 wrong Content-Type; 429 upstream rate limit (Retry-After is
 forwarded); 502 Lens unreachable or erroring; 504 timeout (upstream, or this
 daemon's own per-request limit); 500 anything else.
 
@@ -50,6 +60,7 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import re
 import signal
 import sys
@@ -59,6 +70,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     FrozenSet,
@@ -68,7 +80,9 @@ from typing import (
     Set,
     Tuple,
 )
+from urllib.parse import parse_qs
 
+from . import runtime
 from .api import LensAPI
 from .core.request_handler import accept_encoding
 from .exceptions import (
@@ -106,6 +120,11 @@ _STATUS_TEXT = {
     502: "Bad Gateway",
     504: "Gateway Timeout",
 }
+# What /v1/ocr/raw accepts. None of these is a type a web page may send without
+# a CORS preflight, which the Origin rule then refuses.
+IMAGE_MEDIA_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/bmp"})
+MAX_ARGV_ITEMS = 512
+MAX_ARG_CHARS = 32 * 1024
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 _TRUE = frozenset({"true", "1", "yes", "on"})
 _FALSE = frozenset({"false", "0", "no", "off"})
@@ -208,9 +227,25 @@ class _HttpError(Exception):
 
 @dataclass
 class _Reply:
+    """`payload` is JSON-encoded, unless it is a str: then it is sent as is,
+    with `content_type`."""
+
     status: int
     payload: Any
     headers: Dict[str, str] = field(default_factory=dict)
+    content_type: Optional[str] = None
+
+
+@dataclass
+class _Route:
+    method: str
+    kind: str  # "json" body, "image" body, or "none"
+    handler: Callable[..., Awaitable[Any]]
+    # True for routes that do the daemon's actual work (so they count as
+    # activity for the idle timer); False for status/health style probes.
+    work: bool = False
+    # Cancel the work if the client hangs up (a forwarded CLI run).
+    watch_disconnect: bool = False
 
 
 @dataclass
@@ -220,6 +255,7 @@ class _RequestInfo:
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     method: str = "-"
     route: str = "-"
+    query: str = ""
     origin: Optional[str] = None
 
 
@@ -236,13 +272,35 @@ class LensServer:
         header_timeout: float = HEADER_TIMEOUT,
         body_timeout: float = BODY_TIMEOUT,
         shutdown_grace: float = SHUTDOWN_GRACE,
+        unix_path: Optional[str] = None,
+        cli_handler: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
+        idle_timeout: float = 0,
+        idle_check_interval: float = 1.0,
     ):
+        """
+        unix_path       listen on this AF_UNIX socket instead of host:port (POSIX).
+        cli_handler     enables the managed routes (/v1/cli, /v1/status,
+                        /v1/shutdown); it runs one forwarded lens_scan command.
+                        Needs a token and a local listener.
+        idle_timeout    seconds without work before the server stops itself
+                        (0 = never).
+        """
         self.api = api
         self.host = host
         self.port = port
         self.token = token
         self.allowed_origins = frozenset(allowed_origins)
-        self.local_only = is_loopback(host)
+        self.unix_path = unix_path
+        # A socket file inside a private directory is as local as it gets.
+        self.local_only = True if unix_path else is_loopback(host)
+        self.cli_handler = cli_handler
+        self.idle_timeout = idle_timeout
+        self.idle_check_interval = idle_check_interval
+        self.started_at = time.time()
+        self.requests_served = 0
+        self._busy = 0
+        self._last_activity = time.monotonic()
+        self._idle_task: Optional["asyncio.Task[None]"] = None
         self.max_body_bytes = max_body_bytes
         self.request_timeout = request_timeout
         self.header_timeout = header_timeout
@@ -253,6 +311,11 @@ class LensServer:
         self._stop_event: Optional[asyncio.Event] = None
         self._connections: Set["asyncio.Task[None]"] = set()
 
+        if cli_handler is not None and not (token and self.local_only):
+            raise ValueError(
+                "The managed routes (/v1/cli, /v1/shutdown) run commands on "
+                "this machine, so they need both a token and a local listener."
+            )
         if not self.local_only and not token:
             raise ValueError(
                 f"Refusing to listen on {host} without --token. A daemon reachable "
@@ -326,6 +389,96 @@ class LensServer:
             ocr_preserve_line_breaks=_bool(body, "ocr_preserve_line_breaks", True),
         )
 
+    async def handle_ocr_raw(
+        self, data: bytes, query: Dict[str, str], headers: Dict[str, str]
+    ) -> _Reply:
+        """POST the image itself; get the text back. For ShareX's custom uploader.
+
+        Query: translate_to, translate_from, ocr_language, format=text|json,
+        preserve_line_breaks. The reply is the translation when one was asked
+        for and found, else the OCR text, as text/plain - so an uploader that
+        copies the response body copies the answer.
+        """
+        if not data:
+            raise ValueError("The request body is empty; send the image bytes.")
+        fmt = query.get("format", "text")
+        if fmt not in ("text", "json"):
+            raise ValueError(f"'format' must be text or json; got {fmt!r}")
+        translate_to = query.get("translate_to") or None
+        result = await self.api.process_image(
+            data,
+            ocr_language=query.get("ocr_language") or None,
+            target_translation_language=translate_to,
+            source_translation_language=query.get("translate_from") or None,
+            ocr_preserve_line_breaks=_bool(query, "preserve_line_breaks", True),
+            output_format="full_text",
+        )
+        if fmt == "json":
+            return _Reply(200, json_safe(result))
+        text = (translate_to and result.get("translated_text")) or result.get(
+            "ocr_text"
+        )
+        return _Reply(200, text or "", content_type="text/plain; charset=utf-8")
+
+    async def handle_cli(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Run one forwarded lens_scan command line (see cli.main.run_cli_request)."""
+        assert self.cli_handler is not None
+        argv = body.get("argv")
+        if (
+            not isinstance(argv, list)
+            or len(argv) > MAX_ARGV_ITEMS
+            or not all(
+                isinstance(a, str) and len(a) <= MAX_ARG_CHARS and "\0" not in a
+                for a in argv
+            )
+        ):
+            raise ValueError("'argv' must be a list of strings")
+        cwd = body.get("cwd")
+        if not isinstance(cwd, str) or not os.path.isabs(cwd) or "\0" in cwd:
+            raise ValueError("'cwd' must be an absolute directory path")
+        env = body.get("env", {})
+        if not isinstance(env, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in env.items()
+        ):
+            raise ValueError("'env' must be an object of strings")
+        columns = body.get("columns")
+        if columns is not None and (
+            isinstance(columns, bool) or not isinstance(columns, int)
+        ):
+            raise ValueError("'columns' must be an integer or null")
+        return await self.cli_handler(
+            argv=argv,
+            cwd=cwd,
+            # Whatever the client sent, only this slice is ever used.
+            env=runtime.forwarded_env(env),
+            stdin_is_tty=_bool(body, "stdin_is_tty", False),
+            stdout_is_tty=_bool(body, "stdout_is_tty", False),
+            stderr_is_tty=_bool(body, "stderr_is_tty", False),
+            columns=columns,
+        )
+
+    async def handle_status(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        now = time.monotonic()
+        remaining = None
+        if self.idle_timeout:
+            remaining = max(0.0, self.idle_timeout - (now - self._last_activity))
+        return {
+            "service": "chrome-lens-py",
+            "pid": os.getpid(),
+            "version": _version(),
+            "uptime": time.time() - self.started_at,
+            "requests": self.requests_served,
+            "busy": self._busy,
+            "idle_timeout": self.idle_timeout,
+            "idle_remaining": remaining,
+        }
+
+    async def handle_shutdown(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        # After the reply has left: the stop waits for in-flight connections,
+        # this one included.
+        asyncio.get_running_loop().call_later(0.05, self.request_stop)
+        return {"ok": True, "stopping": True}
+
     async def handle_version(self, body: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "service": "chrome-lens-py",
@@ -394,10 +547,14 @@ class LensServer:
         payload: Any,
         origin: Optional[str] = None,
         extra: Optional[Dict[str, str]] = None,
+        content_type: Optional[str] = None,
     ) -> bytes:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if isinstance(payload, str):
+            body = payload.encode("utf-8", "replace")
+        else:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8", "replace")
         headers = {
-            "Content-Type": "application/json; charset=utf-8",
+            "Content-Type": content_type or "application/json; charset=utf-8",
             "Content-Length": str(len(body)),
             "Connection": "close",
             **self._cors_headers(origin),
@@ -490,6 +647,7 @@ class LensServer:
             info.request_id = supplied_id
         info.method = method
         info.route = path.split("?", 1)[0].rstrip("/") or "/"
+        info.query = path.partition("?")[2]
         info.origin = headers.get("origin")
         route, origin = info.route, info.origin
         length = self._content_length(headers)
@@ -526,30 +684,34 @@ class LensServer:
                 {"WWW-Authenticate": 'Bearer realm="chrome-lens-py"'},
             )
 
-        handlers: Dict[str, Tuple[str, Callable[..., Any]]] = {
-            "/v1/ocr": ("POST", self.handle_ocr),
-            "/v1/region": ("POST", self.handle_region),
-            "/v1/version": ("GET", self.handle_version),
-        }
-        entry = handlers.get(route)
+        entry = self._routes().get(route.split("?", 1)[0])
         if entry is None:
             await self._drain(reader, length)
             raise _HttpError(404, f"No such route: {route}")
-        allowed_method, handler = entry
-        if method != allowed_method:
+        if method != entry.method:
             await self._drain(reader, length)
             raise _HttpError(
-                405, f"Use {allowed_method}", {"Allow": f"{allowed_method}, OPTIONS"}
+                405, f"Use {entry.method}", {"Allow": f"{entry.method}, OPTIONS"}
             )
 
         body = b""
         if method == "POST":
             # The second half of the browser lock. text/plain, form-encoded and
             # multipart are the three types a page may post without asking
-            # permission first; insisting on JSON forces a preflight, which the
-            # Origin check above then refuses.
-            media_type = headers.get("content-type", "").split(";", 1)[0].strip()
-            if media_type.lower() != "application/json":
+            # permission first; insisting on JSON (or an image type) forces a
+            # preflight, which the Origin check above then refuses.
+            media_type = (
+                headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            )
+            if entry.kind == "image":
+                if media_type not in IMAGE_MEDIA_TYPES:
+                    await self._drain(reader, length)
+                    raise _HttpError(
+                        415,
+                        "Content-Type must be one of "
+                        + ", ".join(sorted(IMAGE_MEDIA_TYPES)),
+                    )
+            elif media_type != "application/json":
                 await self._drain(reader, length)
                 raise _HttpError(415, "Content-Type must be application/json")
             if length:
@@ -562,13 +724,20 @@ class LensServer:
                 except asyncio.TimeoutError:
                     raise _HttpError(400, "Timed out reading the request body")
 
+        if entry.work:
+            self._busy += 1
         try:
-            parsed = json.loads(body or b"{}")
-            if not isinstance(parsed, dict):
-                raise ValueError("Body must be a JSON object")
-            result = await asyncio.wait_for(
-                handler(parsed), timeout=self.request_timeout
-            )
+            if entry.kind == "image":
+                query = {k: v[0] for k, v in parse_qs(info.query).items() if v}
+                pending = entry.handler(body, query, headers)
+            else:
+                parsed = json.loads(body or b"{}")
+                if not isinstance(parsed, dict):
+                    raise ValueError("Body must be a JSON object")
+                pending = entry.handler(parsed)
+            result = await self._run(pending, reader, entry.watch_disconnect)
+            if isinstance(result, _Reply):
+                return result
             return _Reply(200, json_safe(result))
         except asyncio.TimeoutError:
             raise _HttpError(
@@ -591,9 +760,65 @@ class LensServer:
         except LensException as e:
             logger.warning("[%s] Lens error: %s", info.request_id, e)
             raise _HttpError(500, str(e))
+        except ConnectionResetError:
+            raise  # the client left mid-request; nobody to answer
         except Exception:
             logger.exception("[%s] Unhandled error on %s", info.request_id, route)
             raise _HttpError(500, "Internal server error")
+        finally:
+            if entry.work:
+                self._busy -= 1
+                self.requests_served += 1
+                self._last_activity = time.monotonic()
+
+    def _routes(self) -> Dict[str, _Route]:
+        routes = {
+            "/v1/ocr": _Route("POST", "json", self.handle_ocr, work=True),
+            "/v1/region": _Route("POST", "json", self.handle_region, work=True),
+            "/v1/ocr/raw": _Route("POST", "image", self.handle_ocr_raw, work=True),
+            "/v1/version": _Route("GET", "none", self.handle_version),
+        }
+        if self.cli_handler is not None:
+            routes["/v1/cli"] = _Route(
+                "POST", "json", self.handle_cli, work=True, watch_disconnect=True
+            )
+            routes["/v1/status"] = _Route("GET", "none", self.handle_status)
+            routes["/v1/shutdown"] = _Route("POST", "json", self.handle_shutdown)
+        return routes
+
+    async def _run(
+        self, pending: Awaitable[Any], reader: asyncio.StreamReader, watch: bool
+    ) -> Any:
+        """Await a handler under the request limit.
+
+        With `watch`, also notice the client hanging up (Ctrl+C on a forwarded
+        lens_scan) and cancel the work instead of finishing a Google request
+        nobody will read.
+        """
+        if not watch:
+            return await asyncio.wait_for(pending, timeout=self.request_timeout)
+        work = asyncio.ensure_future(pending)
+        gone = asyncio.ensure_future(reader.read(1))
+        deadline = time.monotonic() + self.request_timeout
+        try:
+            while True:
+                done, _ = await asyncio.wait(
+                    {work, gone},
+                    timeout=max(0.0, deadline - time.monotonic()),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if work in done:
+                    return work.result()
+                if not done:
+                    raise asyncio.TimeoutError
+                if gone.result() == b"":
+                    raise ConnectionResetError("client went away")
+                gone = asyncio.ensure_future(reader.read(1))  # stray byte: keep going
+        finally:
+            for task in (work, gone):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(work, gone, return_exceptions=True)
 
     @staticmethod
     async def _linger(
@@ -660,7 +885,13 @@ class LensServer:
                     reply.payload.setdefault("type", _error_type(reply.status))
             reply.headers["X-Request-ID"] = info.request_id
             writer.write(
-                self._respond(reply.status, reply.payload, info.origin, reply.headers)
+                self._respond(
+                    reply.status,
+                    reply.payload,
+                    info.origin,
+                    reply.headers,
+                    reply.content_type,
+                )
             )
             await writer.drain()
             if reply.status >= 400:
@@ -692,22 +923,52 @@ class LensServer:
     async def start(self) -> None:
         """Bind and begin accepting. ``self.port`` is updated if it was 0."""
         self._stop_event = asyncio.Event()
-        self._server = await asyncio.start_server(
-            self._handle_connection,
-            self.host,
-            self.port,
-            limit=MAX_HEADER_LINE_BYTES,
-        )
+        if self.unix_path:
+            # Created with the umask masked so the socket is never, even for an
+            # instant, reachable by anyone else; the directory is 0700 as well.
+            old_umask = os.umask(0o177)
+            try:
+                self._server = await asyncio.start_unix_server(
+                    self._handle_connection,
+                    path=self.unix_path,
+                    limit=MAX_HEADER_LINE_BYTES,
+                )
+            finally:
+                os.umask(old_umask)
+        else:
+            self._server = await asyncio.start_server(
+                self._handle_connection,
+                self.host,
+                self.port,
+                limit=MAX_HEADER_LINE_BYTES,
+            )
         sockets: Sequence[Any] = self._server.sockets or []
-        if sockets:
+        if sockets and not self.unix_path:
             self.port = sockets[0].getsockname()[1]
         addresses = ", ".join(str(s.getsockname()) for s in sockets)
+        self._last_activity = time.monotonic()
+        if self.idle_timeout:
+            self._idle_task = asyncio.ensure_future(self._watch_idle())
         logger.info("chrome-lens-py daemon listening on %s", addresses)
         if not self.allowed_origins:
             logger.info(
                 "No browser origin is allowed, so only local programs can use "
                 "this. Pass --allow-origin https://example.com to open it up."
             )
+
+    async def _watch_idle(self) -> None:
+        """Stop the server once it has had no work for `idle_timeout` seconds."""
+        while True:
+            await asyncio.sleep(self.idle_check_interval)
+            if self._busy:
+                self._last_activity = time.monotonic()
+                continue
+            if time.monotonic() - self._last_activity >= self.idle_timeout:
+                logger.info(
+                    "No requests for %ss; shutting down.", f"{self.idle_timeout:g}"
+                )
+                self.request_stop()
+                return
 
     def request_stop(self) -> None:
         """Ask serve_forever to shut down (call from the event loop thread)."""
@@ -717,6 +978,9 @@ class LensServer:
     async def stop(self, grace: Optional[float] = None) -> None:
         """Stop accepting, let in-flight requests finish for `grace` seconds."""
         grace = self.shutdown_grace if grace is None else grace
+        if self._idle_task is not None:
+            self._idle_task.cancel()
+            self._idle_task = None
         if self._server is not None:
             self._server.close()
         pending = {t for t in self._connections if not t.done()}
@@ -740,6 +1004,11 @@ class LensServer:
             except (asyncio.TimeoutError, Exception):
                 pass
             self._server = None
+        if self.unix_path:
+            try:
+                os.unlink(self.unix_path)
+            except OSError:
+                pass
 
     def _install_signal_handlers(
         self, loop: asyncio.AbstractEventLoop
@@ -794,13 +1063,20 @@ class LensServer:
             restore.append(partial(signal.signal, sig, previous))
         return undo
 
-    async def serve_forever(self, install_signal_handlers: bool = True) -> None:
+    async def serve_forever(
+        self,
+        install_signal_handlers: bool = True,
+        on_started: Optional[Callable[[], Awaitable[None]]] = None,
+    ) -> None:
+        """Serve until stopped. `on_started` runs once the socket is listening."""
         await self.start()
         assert self._stop_event is not None
         undo: Callable[[], None] = lambda: None  # noqa: E731
         if install_signal_handlers:
             undo = self._install_signal_handlers(asyncio.get_running_loop())
         try:
+            if on_started is not None:
+                await on_started()
             await self._stop_event.wait()
             logger.info("Stop requested; shutting down.")
         finally:

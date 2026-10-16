@@ -39,7 +39,7 @@ dependencies = [
 Homepage = "https://github.com/bropines/chrome-lens-py"
 
 [project.scripts]
-lens_scan = "chrome_lens_py.cli.main:run"
+lens_scan = "chrome_lens_py.client:entry"
 
 [project.optional-dependencies]
 clipboard = ["pyperclip>=1.8"]
