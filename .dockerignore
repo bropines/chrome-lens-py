@@ -1,0 +1,6 @@
+# Send the Docker daemon nothing but the Dockerfile and any built wheels.
+*
+!Dockerfile
+!dist/
+dist/*
+!dist/*.whl

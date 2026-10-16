@@ -1,7 +1,0 @@
-# Runtime dependencies. Kept in sync with pyproject.toml [project.dependencies];
-# optional extras live there (clipboard, rtl, fonts, numpy).
-httpx[socks,http2]>=0.20
-Pillow>=9.0
-protobuf
-filetype>=1.0
-rich>=10.0

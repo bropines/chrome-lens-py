@@ -55,7 +55,7 @@ fi
 # --upgrade covers both cases: a first install, and moving an existing one to
 # the current release.
 step 'Installing lens_scan'
-uv tool install --upgrade "$PACKAGE"
+uv tool install --upgrade --python 3.12 "$PACKAGE"
 
 step 'Putting it on your PATH'
 uv tool update-shell >/dev/null 2>&1 || true

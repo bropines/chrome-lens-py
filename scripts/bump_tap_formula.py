@@ -1,7 +1,8 @@
 """Point the Homebrew formula at a newly published release.
 
-Called by the release workflow once every platform has uploaded, so the formula
-never names an asset that failed to build.
+Called by the release workflow once the release is published with every
+platform's archive, so the formula never names an asset that failed to build.
+The formula must contain a url/sha256 pair for each of ASSETS.
 
     python scripts/bump_tap_formula.py v3.5.2 Formula/lens-scan.rb
 
@@ -15,7 +16,7 @@ import sys
 import urllib.request
 
 REPO = "bropines/chrome-lens-py"
-ASSETS = ("macos-arm64", "linux-amd64")
+ASSETS = ("macos-arm64", "macos-x86_64", "linux-amd64", "linux-arm64")
 
 
 def published_sha256(base: str, asset: str) -> str:

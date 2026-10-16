@@ -55,7 +55,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 # --upgrade covers both cases: a first install, and moving an existing one to
 # the current release.
 Write-Step 'Installing lens_scan'
-uv tool install --upgrade $Package
+uv tool install --upgrade --python 3.12 $Package
 if ($LASTEXITCODE -ne 0) { Write-Error 'uv tool install failed.' }
 
 Write-Step 'Putting it on your PATH'

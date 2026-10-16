@@ -42,6 +42,16 @@ def main() -> int:
             print(f"  {path.name}: {count} import(s)")
 
     print(f"Rewrote {changed} file(s).")
+
+    # Anything still bare would only fail at import time, in a user's hands.
+    leftovers = [
+        path.name
+        for path in sorted(PROTOBUFS.glob("*_pb2.py"))
+        if re.search(r"^import \w+_pb2", path.read_text(encoding="utf-8"), re.MULTILINE)
+    ]
+    if leftovers:
+        print(f"Bare pb2 imports remain in: {', '.join(leftovers)}", file=sys.stderr)
+        return 1
     return 0
 
 

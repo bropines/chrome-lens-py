@@ -1,0 +1,27 @@
+{
+    "version": "3.5.3",
+    "description": "Google Lens OCR and translation from the command line (compiled build)",
+    "homepage": "https://github.com/bropines/chrome-lens-py",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/bropines/chrome-lens-py/releases/download/v3.5.3/lens_scan-windows-amd64.zip",
+            "hash": "6f57d76916fb7a68e01ee2a4324fc977175945d3a8ce3208aa9d27c45cf0c107",
+            "extract_dir": "lens_scan-windows-amd64"
+        }
+    },
+    "bin": "lens_scan.exe",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/bropines/chrome-lens-py/releases/download/v$version/lens_scan-windows-amd64.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                },
+                "extract_dir": "lens_scan-windows-amd64"
+            }
+        }
+    },
+    "notes": "If antivirus quarantines lens_scan.exe, install the build made of signed Python files instead: scoop uninstall lens-scan; scoop install lens-scan-portable"
+}

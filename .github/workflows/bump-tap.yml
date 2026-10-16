@@ -21,10 +21,15 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   bump:
     name: Bump the formula
     runs-on: ubuntu-latest
+    permissions:
+      contents: read   # gh release view; the tap is written with TAP_TOKEN
     steps:
       - name: Work out which tag, and whether we have a token
         id: gate
@@ -32,6 +37,7 @@ jobs:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
           REQUESTED: ${{ inputs.tag }}
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ -z "$TAP_TOKEN" ]; then
@@ -42,7 +48,7 @@ jobs:
 
           tag="$REQUESTED"
           if [ -z "$tag" ]; then
-            tag=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)
+            tag=$(gh release view --repo "$REPO" --json tagName --jq .tagName)
             echo "No tag given; using the latest release: $tag"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -50,13 +56,15 @@ jobs:
 
       - name: Check out this repository (for the bump script)
         if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: source
+          persist-credentials: false
 
       - name: Check out the tap
         if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4.2.2
+        # Credentials stay: the push below needs them.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bropines/homebrew-tap
           token: ${{ secrets.TAP_TOKEN }}
@@ -64,9 +72,10 @@ jobs:
 
       - name: Rewrite the formula
         if: steps.gate.outputs.ok == 'true'
+        env:
+          TAG: ${{ steps.gate.outputs.tag }}
         run: |
-          python3 source/scripts/bump_tap_formula.py \
-            "${{ steps.gate.outputs.tag }}" tap/Formula/lens-scan.rb
+          python3 source/scripts/bump_tap_formula.py "$TAG" tap/Formula/lens-scan.rb
           grep -E 'url |sha256 ' tap/Formula/lens-scan.rb
 
       - name: Commit and push
