@@ -522,7 +522,7 @@ def build_parser(
         "--install-service",
         action="store_true",
         help="Start the daemon at every login on a fixed port (ShareX uploader "
-        "mode): Windows scheduled task, macOS LaunchAgent, Linux systemd --user.",
+        "mode): a Windows Startup shortcut, a macOS LaunchAgent or a Linux systemd --user unit.",
     )
     g.add_argument(
         "--uninstall-service",
