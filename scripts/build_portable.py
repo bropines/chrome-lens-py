@@ -45,10 +45,9 @@ EMBED_URL = "https://www.python.org/ftp/python/{v}/python-{v}-embed-amd64.zip"
 # Only these executables may exist in the result, and both must be signed.
 ALLOWED_EXE = {"python.exe", "pythonw.exe"}
 
-# `-c`, not `-m chrome_lens_py`: it works whether or not the package has a
-# __main__ module. -I ignores PYTHON* variables and the user site, so a stray
-# environment cannot change which code runs.
-SHIM = '@"%~dp0python.exe" -I -c "from chrome_lens_py.cli.main import run; run()" %*\r\n'
+# -I ignores PYTHON* variables and the user site, so a stray environment cannot
+# change which code runs. chrome_lens_py/__main__.py calls the CLI entry point.
+SHIM = '@"%~dp0python.exe" -I -m chrome_lens_py %*\r\n'
 
 
 def log(message: str) -> None:
