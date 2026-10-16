@@ -42,6 +42,9 @@ DEFAULT_IMAGE_JPEG_QUALITY = 40
 # Chromium uploads images that really use transparency as WebP at quality 40
 # (opaque ones stay JPEG).
 DEFAULT_IMAGE_WEBP_QUALITY = 40
+# What to upload for an image with real transparency: "webp" (Chromium parity),
+# "flatten" (JPEG on white) or "contrast" (JPEG on white/black by content).
+DEFAULT_ALPHA_MODE = "webp"
 
 # Transport
 DEFAULT_CONNECT_TIMEOUT = 10
