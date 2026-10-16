@@ -6,4 +6,4 @@ carries the version in code rather than depending on dist-info metadata
 being bundled.
 """
 
-__version__ = "3.5.3"
+__version__ = "3.6.0"

@@ -506,8 +506,24 @@ jobs:
       - name: Release notes
         run: |
           set -euo pipefail
-          python -m pip install "git-cliff==2.14.2"
-          git-cliff --latest --strip header --output RELEASE_NOTES.md
+          # The hand-written CHANGELOG section for this version reads far better
+          # than a list of commit subjects, so prefer it; git-cliff is the
+          # fallback for a release nobody wrote notes for.
+          version="${TAG#v}"
+          # Plain string comparison, not regex: awk implementations disagree on
+          # escaping brackets inside a dynamic regex.
+          awk -v head="## [$version]" '
+            index($0, head) == 1 { on = 1; next }
+            on && index($0, "## [") == 1 { exit }
+            on && index($0, "[") == 1 && index($0, "]: http") > 0 { exit }
+            on { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ -s RELEASE_NOTES.md ] && grep -q '[^[:space:]]' RELEASE_NOTES.md; then
+            echo "Using the CHANGELOG.md section for $version"
+          else
+            python -m pip install "git-cliff==2.14.2"
+            git-cliff --latest --strip header --output RELEASE_NOTES.md
+          fi
           if [ ! -s RELEASE_NOTES.md ]; then
             echo "Release ${TAG}" > RELEASE_NOTES.md
           fi

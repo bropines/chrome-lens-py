@@ -7,41 +7,94 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-10-17
+
+### Highlights
+
+- **Warm daemon, transparently.** `lens_scan` now talks to a background daemon
+  that keeps the imports loaded and the HTTP/2 connection to Google open. The
+  first call runs normally and starts one; later calls are forwarded to it.
+  Measured on Windows, same image, real API: **401 ms** through the daemon
+  against 3433 ms cold. Same flags, same output, same exit codes; any problem
+  with the daemon falls back to running in-process. `--daemon off` (or
+  `LENS_DAEMON=off`) disables it, `--daemon-status` / `--daemon-stop` manage it,
+  and it exits after 10 idle minutes.
+- **ShareX without starting a process**: `lens_scan --setup-sharex --mode
+  uploader` writes a ShareX custom uploader that POSTs the screenshot straight
+  to the daemon (`/v1/ocr/raw`, 318 ms). `--install-service` keeps that daemon
+  running from login (Startup folder / LaunchAgent / systemd user unit).
+- **Fallback paths**: several API keys (tried in order on an auth error, the
+  working one remembered), several endpoints (`LENS_ENDPOINT`), retries with
+  jittered backoff that honour `Retry-After`, and an overall deadline per
+  request so nothing hangs forever.
+
 ### Features
 
+- Output formats: `--format text|json|jsonl|hocr|tsv`, plus `--oneline` and
+  `--retries` (drop-in with the timminator fork used by SubtitleEdit/VideOCR).
+- One typed `Settings` with a single precedence: command line > config file >
+  `LENS_*` environment variables > defaults. Every option, including the
+  rendering ones, can now live in `config.json`; `--serve` reads it too.
+- `--help` is generated from the parser, so it can no longer drift from it.
+- The daemon returns the rendered overlay (`"return_overlay": true`), has
+  `/v1/version`, request IDs, size and time limits, and shuts down gracefully.
+- Typed exceptions: `LensRateLimitError` (with `retry_after`), `LensAuthError`,
+  `LensTimeoutError`, `LensConnectionError`.
+- Results carry `image_size` and `overlay_path`.
+- `--setup-sharex -t ru` makes the hotkey translate; the ShareX config is
+  backed up and written atomically.
 - `python -m chrome_lens_py` works.
-- json, jsonl, hOCR and tesseract-style TSV output formats.
-- Typed settings, more robust config file I/O, and a safer `--setup-sharex`.
-- Prebuilt standalone binaries for Linux arm64 and macOS Intel
-  (`lens_scan-linux-arm64.zip`, `lens_scan-macos-x86_64.zip`); the Linux
-  binaries are built on Ubuntu 22.04 so they run on older glibc.
-- A portable Windows build with no executable of ours in it
-  (`lens_scan-windows-amd64-portable.zip`): the official, signed embeddable
-  Python plus the package as plain files.
-- Docker image on `ghcr.io/bropines/chrome-lens-py`, and a Scoop bucket in this
-  repository.
+- Builds for Linux arm64 and macOS Intel; Linux builds target glibc 2.35.
+- A portable Windows build with no executable of ours in it (the signed
+  python.org `python.exe` plus the package); the installer falls back to it if
+  antivirus quarantines the compiled build.
+- Docker image (`ghcr.io/bropines/chrome-lens-py`), a Scoop bucket, build
+  provenance attestations on every archive.
+
+### Performance
+
+- Rendering 2-2.5x faster: fonts are cached by (path, face, size) instead of
+  being reopened up to 990 times per image.
+- Image decoding, encoding and rendering run off the event loop, so the
+  daemon keeps answering while it renders and `--concurrency` really is
+  concurrent.
 
 ### Bug Fixes
 
-- CLI exit codes, plain result output and logging.
-- Renderer: hull erase in reflowed paragraphs no longer paints the patches back;
-  fonts are cached and face-aware, with per-run fallback.
-- The protobuf modules are compiled with a protoc that understands protobuf
-  editions; before, most of them were silently skipped and had gone stale.
-  They are regenerated, and the runtime requirement is now `protobuf>=6.33.5`.
-- The weekly protobuf update can no longer reintroduce bare `import x_pb2`
-  lines: it rewrites imports, runs the tests, and opens a pull request.
+- Exit codes: 0 all succeeded, 1 all failed, 2 partial. Errors go to stderr,
+  results to stdout untouched by rich (which used to wrap long lines at 80
+  columns and delete `[...]` from `--get-coords` JSON).
+- `-l DEBUG` was silently ignored whenever a config file existed.
+- A failed overlay save was reported as saved.
+- `--outline 0` did not remove the outline, and the outline setting was
+  ignored in manga mode and for vertical text; `--min-text-size` was ignored
+  for vertical text.
+- Manga/hull mode painted inpaint patches back over the hull fill.
+- Text in `.ttc` fonts used the wrong regional face (SC/TC/KR); mixed-script
+  lines drew tofu instead of falling back per run. Vertical text uses vertical
+  presentation forms for dashes and brackets.
+- Transparent PNGs with dark text came back empty: the server composites
+  transparency onto black. Uploads now pick a contrasting background.
+- `Accept-Encoding: br` was advertised without a brotli decoder installed.
+- Concurrent calls on a shared session overwrote each other's routing state,
+  and `image_sequence_id` did not advance.
+- Python 3.9: `LensAPI` built outside an event loop failed on first use.
+- Daemon: error replies could be lost to a TCP reset on Linux; Ctrl+C handling
+  of an embedding program was not restored after the server stopped;
+  `"false"` was truthy for boolean options; a non-ASCII token crashed the
+  connection.
+- The protobuf modules are built with a protoc that understands editions (most
+  had been silently skipped since February), and the weekly update can no
+  longer reintroduce the bare import that breaks frozen builds - it now opens a
+  tested pull request instead of pushing.
 
-### Build
+### Changed
 
-- Installers read the release download URLs instead of the rate-limited API,
-  require a checksum for releases from 3.5.1, install into a staging directory
-  and roll back on failure; `LENS_SCAN_VERSION` pins a release.
-- `install.ps1` falls back to the portable build when antivirus removes the
-  compiled one.
-- One release pipeline: tag/version check, test matrix on Python 3.9-3.14,
-  binaries uploaded as artifacts, a draft release, PyPI publish, then publish.
-- Pillow requirement raised to 10.1 (`ImageFont.load_default(size)`).
+- Informational headers moved from stdout to stderr, so `lens_scan img >
+  out.txt` contains only the result.
+- Requires `Pillow>=10.1` and `protobuf>=6.33.5`.
+- `overlay_mode="legacy"`, `call_raw_endpoint` and `start_new_session` are
+  deprecated.
 
 ## [3.5.3] - 2026-09-17
 
@@ -108,7 +161,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.5.3...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...HEAD
+[3.6.0]: https://github.com/bropines/chrome-lens-py/compare/v3.5.3...v3.6.0
 [3.5.3]: https://github.com/bropines/chrome-lens-py/compare/v3.5.2...v3.5.3
 [3.5.2]: https://github.com/bropines/chrome-lens-py/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/bropines/chrome-lens-py/compare/v3.5.0...v3.5.1
