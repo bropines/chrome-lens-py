@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+  # scripts/requirements-protos.txt. Bumping grpcio-tools changes the protobuf
+  # gencode version; tests/test_protos.py fails until pyproject.toml follows.
+  - package-ecosystem: pip
+    directory: /scripts
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
