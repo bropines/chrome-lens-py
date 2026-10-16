@@ -71,6 +71,14 @@ class Settings:
     text_align: str = "auto"
     manga_mode: bool = False
     manga_box_growth: float = 1.45
+    # Warm-process fast mode (see chrome_lens_py/client.py). "auto" uses a
+    # background daemon when one is running and starts one for next time;
+    # "on" waits for it; "off" never touches it.
+    daemon: str = "auto"
+    # Seconds without a request before an auto-started daemon exits (0 = never).
+    daemon_idle_timeout: int = 600
+    # Fixed TCP port for the persistent daemon (ShareX uploader mode, --serve).
+    daemon_port: int = 8765
 
     # Bookkeeping, not options.
     sources: Dict[str, str] = field(default_factory=dict, repr=False, compare=False)
@@ -89,6 +97,7 @@ CHOICES: Dict[str, Tuple[str, ...]] = {
     "vertical_text": ("keep", "auto", "horizontal"),
     "erase_mode": ("patch", "hull"),
     "text_align": ("auto", "left", "center", "right"),
+    "daemon": ("auto", "on", "off"),
 }
 
 # Names accepted in config.json besides the canonical field names: the CLI flag
@@ -164,6 +173,8 @@ def _coerce(name: str, value: Any, origin: str) -> Any:
         raise LensConfigError(f"{problem}must be a number, got {value!r}.")
 
     # str
+    if name == "daemon" and isinstance(value, bool):
+        return "on" if value else "off"
     if not isinstance(value, str):
         raise LensConfigError(f"{problem}must be a string, got {value!r}.")
     if name == "logging_level":
@@ -202,16 +213,29 @@ def _validate(settings: Settings) -> None:
             raise bad(name, "must not be negative")
     if settings.manga_box_growth <= 0:
         raise bad("manga_box_growth", "must be greater than 0")
+    if settings.daemon_idle_timeout < 0:
+        raise bad("daemon_idle_timeout", "must not be negative (0 = never)")
+    if not 0 <= settings.daemon_port <= 65535:
+        raise bad("daemon_port", "must be between 0 and 65535")
 
 
 # --------------------------------------------------------------------- files
 
 
-def get_default_config_dir(app_name: str = APP_NAME_FOR_CONFIG) -> str:
-    """Returns the default configuration directory path for the application."""
+def get_default_config_dir(
+    app_name: str = APP_NAME_FOR_CONFIG, environ: Optional[Mapping[str, str]] = None
+) -> str:
+    """Returns the default configuration directory path for the application.
+
+    `environ` lets the daemon answer for a client whose XDG_CONFIG_HOME it does
+    not share.
+    """
     home_dir = os.path.expanduser("~")
+    environ = os.environ if environ is None else environ
     # This structure is a common convention
-    config_dir_base = os.getenv("XDG_CONFIG_HOME", os.path.join(home_dir, ".config"))
+    config_dir_base = environ.get("XDG_CONFIG_HOME") or os.path.join(
+        home_dir, ".config"
+    )
     return os.path.join(config_dir_base, app_name)
 
 
