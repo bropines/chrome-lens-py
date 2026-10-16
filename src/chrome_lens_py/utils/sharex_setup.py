@@ -312,3 +312,109 @@ def setup_sharex_config(target_lang: Optional[str] = None) -> bool:
     if saved or was_running:
         _restart_sharex(interactive=saved)
     return saved
+
+
+# ------------------------------------------------------------ uploader mode
+
+UPLOADER_FILENAME = "Google Lens OCR (chrome-lens-py).sxcu"
+UPLOADER_VERSION = "15.0.0"
+
+
+def build_uploader_config(
+    port: int, token: str, target_lang: Optional[str] = None
+) -> Dict[str, Any]:
+    """A ShareX custom uploader (.sxcu) that posts the capture to the daemon.
+
+    ImageUploader with a binary body: ShareX sends the picture's bytes with its
+    own Content-Type (image/png...), which is what POST /v1/ocr/raw requires.
+    The daemon answers with the recognised text as text/plain, and ``{response}``
+    makes ShareX treat that whole body as the "URL" of the upload - so the
+    ordinary after-upload task "Copy URL to clipboard" puts the text on the
+    clipboard. ``ErrorMessage`` surfaces the daemon's JSON error to the user.
+    """
+    if target_lang is not None and not _LANG_RE.match(target_lang):
+        raise ValueError(f"Invalid language code: {target_lang!r}")
+    config: Dict[str, Any] = {
+        "Version": UPLOADER_VERSION,
+        "Name": "Google Lens OCR (chrome-lens-py)",
+        "DestinationType": "ImageUploader",
+        "RequestMethod": "POST",
+        "RequestURL": f"http://127.0.0.1:{port}/v1/ocr/raw",
+    }
+    if target_lang:
+        config["Parameters"] = {"translate_to": target_lang}
+    config["Headers"] = {"Authorization": f"Bearer {token}"}
+    config["Body"] = "Binary"
+    config["URL"] = "{response}"
+    config["ErrorMessage"] = "{json:error}"
+    return config
+
+
+def uploader_output_path() -> Path:
+    sharex_dir = get_documents_path() / "ShareX"
+    if sharex_dir.is_dir():
+        return sharex_dir / UPLOADER_FILENAME
+    from .. import runtime
+
+    return Path(runtime.data_dir(create=True)) / UPLOADER_FILENAME
+
+
+def setup_sharex_uploader(
+    target_lang: Optional[str] = None, port: Optional[int] = None
+) -> bool:
+    """Write the .sxcu file and make sure the persistent daemon is up.
+
+    Does not touch ShareX's own configuration: importing the file (a double
+    click) is ShareX's documented way to add an uploader, and it asks first.
+    """
+    from .. import client, runtime
+    from ..daemon import ensure_service_config
+
+    try:
+        service = ensure_service_config(port)
+        config = build_uploader_config(service["port"], service["token"], target_lang)
+    except (ValueError, OSError) as e:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+        return False
+
+    path = uploader_output_path()
+    try:
+        # It holds the token, so: this user only (POSIX; on Windows the folder's
+        # own ACL is what applies).
+        from . import config_manager
+
+        config_manager.atomic_write_text(str(path), json.dumps(config, indent=2))
+        if sys.platform != "win32":
+            os.chmod(path, 0o600)
+    except OSError as e:
+        console.print(
+            f"[bold red]Error writing {escape(str(path))}:[/bold red] {escape(str(e))}"
+        )
+        return False
+
+    console.print(f"Custom uploader written: [cyan]{escape(str(path))}[/cyan]")
+    console.print(
+        "\n[bold]Next:[/bold]\n"
+        "  1. Double-click that file. ShareX asks to add the uploader and to set "
+        "it as the image destination - say yes.\n"
+        "  2. In ShareX: After capture -> make sure [cyan]Upload image to host[/cyan] "
+        "is on, and under After upload -> [cyan]Copy URL to clipboard[/cyan].\n"
+        "  3. Capture a region. The recognised text lands on the clipboard.\n"
+        "\nThe file contains your daemon token; do not share it.\n"
+        "The daemon must be running on port "
+        f"{service['port']}: run [cyan]lens_scan --install-service[/cyan] to start "
+        "it at every login."
+    )
+
+    # Bring it up now, as the persistent flavour, so step 3 works at once.
+    info = client.live_daemon()
+    if info is None or info.get("managed") != "service":
+        if info is not None:
+            client.shutdown(info)
+        client.start_daemon()
+        if client.wait_for_daemon() is None:
+            console.print(
+                "[yellow]The daemon is not answering yet; see "
+                f"{escape(os.path.join(runtime.data_dir(), runtime.LOG_FILE))}.[/yellow]"
+            )
+    return True
