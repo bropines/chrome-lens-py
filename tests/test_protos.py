@@ -39,10 +39,14 @@ def test_module_imports(name):
 def test_module_uses_relative_imports_only(name):
     source = (PROTOBUF_DIR / f"{name}.py").read_text(encoding="utf-8")
     bare = re.findall(r"^import \w+_pb2\b.*$", source, re.MULTILINE)
-    assert not bare, f"{name} has bare imports (run scripts/fix_proto_imports.py): {bare}"
+    assert (
+        not bare
+    ), f"{name} has bare imports (run scripts/fix_proto_imports.py): {bare}"
     # Anything between our own modules must be `from . import`; an absolute
     # `from chrome_lens_py...`/`from x_pb2 import` would break the same way.
-    absolute = re.findall(r"^from (?!\.|google\b)\w+_pb2 import.*$", source, re.MULTILINE)
+    absolute = re.findall(
+        r"^from (?!\.|google\b)\w+_pb2 import.*$", source, re.MULTILINE
+    )
     assert not absolute, f"{name} has absolute pb2 imports: {absolute}"
 
 
@@ -63,7 +67,10 @@ def test_gencode_is_not_newer_than_declared_runtime_floor():
     versions = set()
     for name in MODULES:
         source = (PROTOBUF_DIR / f"{name}.py").read_text(encoding="utf-8")
-        match = re.search(r"ValidateProtobufRuntimeVersion\(\s*_runtime_version\.Domain\.PUBLIC,\s*(\d+),\s*(\d+),\s*(\d+)", source)
+        match = re.search(
+            r"ValidateProtobufRuntimeVersion\(\s*_runtime_version\.Domain\.PUBLIC,\s*(\d+),\s*(\d+),\s*(\d+)",
+            source,
+        )
         assert match, f"{name} has no ValidateProtobufRuntimeVersion call"
         versions.add(tuple(int(x) for x in match.groups()))
     assert len(versions) == 1, f"mixed gencode versions: {sorted(versions)}"
@@ -73,24 +80,51 @@ def test_gencode_is_not_newer_than_declared_runtime_floor():
     declared = re.search(r'"protobuf\s*>=\s*(\d+)\.(\d+)\.(\d+)', pyproject)
     assert declared, "pyproject.toml has no `protobuf >= X.Y.Z` lower bound"
     floor = tuple(int(x) for x in declared.groups())
-    assert floor >= gencode, f"protobuf floor {floor} is below the gencode version {gencode}"
+    assert (
+        floor >= gencode
+    ), f"protobuf floor {floor} is below the gencode version {gencode}"
 
 
 # What the client actually builds and reads. If a regeneration drops or renames
 # one of these, the failure should be here rather than in a user's request.
 EXPECTED_FIELDS = {
-    ("lens_overlay_server_pb2", "LensOverlayServerRequest"): {"objects_request", "interaction_request", "client_logs"},
-    ("lens_overlay_server_pb2", "LensOverlayServerResponse"): {"error", "objects_response", "interaction_response"},
-    ("lens_overlay_service_deps_pb2", "LensOverlayObjectsRequest"): {"request_context", "image_data"},
-    ("lens_overlay_service_deps_pb2", "LensOverlayObjectsResponse"): {"overlay_objects", "text"},
-    ("lens_overlay_service_deps_pb2", "LensOverlayRequestContext"): {"request_id", "client_context"},
+    ("lens_overlay_server_pb2", "LensOverlayServerRequest"): {
+        "objects_request",
+        "interaction_request",
+        "client_logs",
+    },
+    ("lens_overlay_server_pb2", "LensOverlayServerResponse"): {
+        "error",
+        "objects_response",
+        "interaction_response",
+    },
+    ("lens_overlay_service_deps_pb2", "LensOverlayObjectsRequest"): {
+        "request_context",
+        "image_data",
+    },
+    ("lens_overlay_service_deps_pb2", "LensOverlayObjectsResponse"): {
+        "overlay_objects",
+        "text",
+    },
+    ("lens_overlay_service_deps_pb2", "LensOverlayRequestContext"): {
+        "request_id",
+        "client_context",
+    },
     ("lens_overlay_image_data_pb2", "ImageData"): {"payload", "image_metadata"},
     ("lens_overlay_image_data_pb2", "ImagePayload"): {"image_bytes"},
     ("lens_overlay_image_data_pb2", "ImageMetadata"): {"width", "height"},
     ("lens_overlay_text_pb2", "Text"): {"text_layout"},
     ("lens_overlay_text_pb2", "TextLayout"): {"paragraphs"},
-    ("lens_overlay_client_context_pb2", "LensOverlayClientContext"): {"platform", "surface", "locale_context"},
-    ("lens_overlay_request_id_pb2", "LensOverlayRequestId"): {"uuid", "sequence_id", "image_sequence_id"},
+    ("lens_overlay_client_context_pb2", "LensOverlayClientContext"): {
+        "platform",
+        "surface",
+        "locale_context",
+    },
+    ("lens_overlay_request_id_pb2", "LensOverlayRequestId"): {
+        "uuid",
+        "sequence_id",
+        "image_sequence_id",
+    },
 }
 
 
@@ -106,9 +140,16 @@ def test_key_messages_and_fields_exist(module, message):
 def test_nested_text_layout_messages():
     from chrome_lens_py.utils.protobufs.lens_overlay_text_pb2 import TextLayout
 
-    assert {f.name for f in TextLayout.Paragraph.DESCRIPTOR.fields} >= {"lines", "geometry"}
+    assert {f.name for f in TextLayout.Paragraph.DESCRIPTOR.fields} >= {
+        "lines",
+        "geometry",
+    }
     assert {f.name for f in TextLayout.Line.DESCRIPTOR.fields} >= {"words", "geometry"}
-    assert {f.name for f in TextLayout.Word.DESCRIPTOR.fields} >= {"plain_text", "text_separator", "geometry"}
+    assert {f.name for f in TextLayout.Word.DESCRIPTOR.fields} >= {
+        "plain_text",
+        "text_separator",
+        "geometry",
+    }
 
 
 def test_request_round_trips():
@@ -123,13 +164,26 @@ def test_request_round_trips():
     request.objects_request.image_data.image_metadata.height = 20
     parsed = LensOverlayServerRequest.FromString(request.SerializeToString())
     assert parsed.objects_request.image_data.payload.image_bytes == b"\x89PNG"
-    assert (parsed.objects_request.image_data.image_metadata.width, parsed.objects_request.image_data.image_metadata.height) == (10, 20)
+    assert (
+        parsed.objects_request.image_data.image_metadata.width,
+        parsed.objects_request.image_data.image_metadata.height,
+    ) == (10, 20)
 
     response = LensOverlayServerResponse()
-    word = response.objects_response.text.text_layout.paragraphs.add().lines.add().words.add()
+    word = (
+        response.objects_response.text.text_layout.paragraphs.add()
+        .lines.add()
+        .words.add()
+    )
     word.plain_text, word.text_separator = "hello", " "
     parsed = LensOverlayServerResponse.FromString(response.SerializeToString())
-    assert parsed.objects_response.text.text_layout.paragraphs[0].lines[0].words[0].plain_text == "hello"
+    assert (
+        parsed.objects_response.text.text_layout.paragraphs[0]
+        .lines[0]
+        .words[0]
+        .plain_text
+        == "hello"
+    )
 
 
 def test_public_facade_still_imports():

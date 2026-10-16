@@ -35,8 +35,7 @@ def test_loop_local_is_created_per_loop():
 
 def test_api_built_outside_a_loop_works_under_two_asyncio_runs():
     # In a subprocess so no event loop policy state leaks in from pytest.
-    script = textwrap.dedent(
-        """
+    script = textwrap.dedent("""
         import asyncio
         from chrome_lens_py import LensAPI
 
@@ -55,8 +54,7 @@ def test_api_built_outside_a_loop_works_under_two_asyncio_runs():
         asyncio.run(use())
         asyncio.run(use())
         print("ok")
-        """
-    )
+        """)
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True,

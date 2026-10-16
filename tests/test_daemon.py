@@ -518,9 +518,13 @@ def real_daemon_cleanup():
     run_lens("--daemon-stop", timeout=30)
 
 
-def test_start_status_stop_of_a_real_daemon(real_daemon_cleanup, monkeypatch, tmp_path):
+def test_start_status_stop_of_a_real_daemon(
+    real_daemon_cleanup, monkeypatch, short_tmp
+):
     monkeypatch.undo()  # undo the fixture's spawn blocker; keep nothing else
-    monkeypatch.setenv("LENS_STATE_DIR", str(tmp_path / "rs"))
+    # Short on purpose: on macOS a tmp_path is too long for an AF_UNIX path,
+    # and the daemon would (correctly) fall back to TCP.
+    monkeypatch.setenv("LENS_STATE_DIR", os.path.join(short_tmp, "rs"))
     assert run_lens("--daemon-status").returncode == 1
 
     started = run_lens("--daemon-start")
@@ -624,3 +628,20 @@ def test_two_real_requests_through_a_real_auto_daemon(
     assert "warm" in first.stdout.lower() and first.stdout == second.stdout
     status = run_lens("--daemon-status")
     assert "requests   2" in status.stdout
+
+
+@pytest.mark.skipif(os.name != "posix", reason="AF_UNIX path limit")
+def test_daemon_falls_back_to_tcp_when_the_socket_path_is_too_long(
+    real_daemon_cleanup, monkeypatch, short_tmp
+):
+    # A state directory deep enough that the socket path cannot fit in
+    # sun_path. The daemon must still come up - over loopback TCP with its
+    # token - rather than fail to bind.
+    monkeypatch.undo()
+    deep = os.path.join(short_tmp, *(["d" * 40] * 3))
+    monkeypatch.setenv("LENS_STATE_DIR", deep)
+    started = run_lens("--daemon-start")
+    assert started.returncode == 0, started.stderr
+    info = runtime.read_daemon()
+    assert info and info["transport"] == "tcp"
+    assert run_lens("--daemon-status").returncode == 0

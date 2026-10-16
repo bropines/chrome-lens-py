@@ -504,8 +504,8 @@ async def test_a_request_in_flight_is_never_cut_off_by_the_idle_timer():
 
 @pytest.mark.skipif(not POSIX, reason="AF_UNIX sockets")
 @pytest.mark.asyncio
-async def test_unix_socket_transport_is_private_and_removed_on_stop(tmp_path):
-    path = str(tmp_path / "d.sock")
+async def test_unix_socket_transport_is_private_and_removed_on_stop(short_tmp):
+    path = os.path.join(short_tmp, "d.sock")
     api = FakeAPI()
     api.result = {"ocr_text": "over unix"}
     server = LensServer(api, port=0, token=TOKEN, unix_path=path, cli_handler=cli_ok)
