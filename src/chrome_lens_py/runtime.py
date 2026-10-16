@@ -262,7 +262,11 @@ def acquire_spawn_lock(stale_after: float = LOCK_STALE_SECONDS) -> bool:
                 age = time.time() - os.stat(path).st_mtime
             except OSError:
                 continue  # vanished between the two calls: try again
-            if age < stale_after:
+            # A file written a moment ago can carry an mtime a hair *ahead* of
+            # time.time() on Windows (different clock sources and resolution),
+            # making the age negative; that must not count as "fresher than
+            # zero". stale_after <= 0 means any existing lock is stale.
+            if stale_after > 0 and age < stale_after:
                 return False
             try:
                 os.unlink(path)
