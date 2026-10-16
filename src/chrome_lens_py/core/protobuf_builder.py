@@ -1,6 +1,7 @@
 # src/chrome_lens_py/core/protobuf_builder.py
 import logging
 import random
+import time
 from typing import Optional, Tuple
 
 from ..constants import (
@@ -23,6 +24,11 @@ from ..utils.lens_betterproto import (
 logger = logging.getLogger(__name__)
 
 
+def _now_usec() -> int:
+    """Microseconds since the Unix epoch, as Chromium stamps request ids."""
+    return int(time.time() * 1_000_000)
+
+
 def create_ocr_translate_request(
     image_bytes: bytes,
     width: int,
@@ -36,7 +42,13 @@ def create_ocr_translate_request(
     sequence_id: int = 1,
     image_sequence_id: int = 1,
     routing_info: Optional["LensOverlayRoutingInfo"] = None,
+    mime_type: Optional[str] = None,
 ) -> Tuple[bytes, int]:
+    """Build the objects (full image OCR/translate) request.
+
+    `mime_type` is the upload's content type. Chromium states it only for the
+    WebP-with-alpha case, so callers pass None for the usual JPEG.
+    """
     try:
         server_request = LensOverlayServerRequest()
 
@@ -52,6 +64,9 @@ def create_ocr_translate_request(
         req_ctx.request_id.uuid = uuid_to_use
         req_ctx.request_id.sequence_id = sequence_id
         req_ctx.request_id.image_sequence_id = image_sequence_id
+        req_ctx.request_id.time_usec = _now_usec()
+        if mime_type:
+            req_ctx.request_id.mime_type = mime_type
         if routing_info:
             req_ctx.request_id.routing_info.CopyFrom(routing_info)
 
@@ -140,6 +155,7 @@ def create_region_request(
         req_ctx.request_id.image_sequence_id = image_sequence_id
         # Chromium mints a fresh 16-byte analytics id for every interaction.
         req_ctx.request_id.analytics_id = random.randbytes(16)
+        req_ctx.request_id.time_usec = _now_usec()
         if routing_info:
             req_ctx.request_id.routing_info.CopyFrom(routing_info)
 

@@ -1,30 +1,37 @@
 # src/chrome_lens_py/api.py
 import asyncio
+import io
 import logging
-import random
+import warnings
 from math import pi
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import httpx
+from PIL import Image
 
 from .constants import (
+    DEFAULT_ALPHA_MODE,
     DEFAULT_API_KEY,
+    DEFAULT_BACKOFF_BASE,
+    DEFAULT_BACKOFF_MAX,
     DEFAULT_CLIENT_REGION,
     DEFAULT_CLIENT_TIME_ZONE,
+    DEFAULT_MAX_RETRIES,
     DEFAULT_OCR_LANG,
-    LENS_CRUPLOAD_ENDPOINT,
 )
 from .core.image_processor import (
     crop_region,
     draw_overlay_on_image,
+    encode_image_for_api,
     get_word_geometry_data,
-    prepare_image_for_api,
+    load_image,
+    prepare_image,
 )
 from .core.protobuf_builder import create_ocr_translate_request, create_region_request
-from .core.request_handler import LensRequestHandler
+from .core.request_handler import LensRequestHandler, raise_for_response
 from .core.text_renderer import render_translation_overlay
-from .exceptions import LensException
+from .exceptions import LensException, LensImageError
 from .utils.font_manager import FontType, get_default_system_font_path, get_font
 from .utils.lens_betterproto import (
     Alignment,
@@ -48,23 +55,67 @@ _UNRESOLVED = object()
 class LensAPI:
     def __init__(
         self,
-        api_key: str = DEFAULT_API_KEY,
+        api_key: Union[str, Sequence[str]] = DEFAULT_API_KEY,
         client_region: Optional[str] = None,
         client_time_zone: Optional[str] = None,
         proxy: Optional[Union[str, Dict[str, httpx.AsyncBaseTransport]]] = None,
-        timeout: int = 60,
+        timeout: float = 60,
         font_path: Optional[str] = None,
         font_size: Optional[int] = None,
         max_concurrent: int = 10,
         trust_env: bool = True,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        backoff_base: float = DEFAULT_BACKOFF_BASE,
+        backoff_max: float = DEFAULT_BACKOFF_MAX,
+        deadline: Optional[float] = None,
+        endpoints: Optional[Union[str, Sequence[str]]] = None,
+        direct_fallback: bool = False,
+        alpha_mode: str = DEFAULT_ALPHA_MODE,
     ):
+        """
+        Resilience options (all optional):
+
+        api_key         one key, or a list tried in order. On a key rejection
+                        (HTTP 401, or 400/403 that names the API key) the next
+                        key is used and remembered.
+        max_retries     retries per request for transient failures (connection
+                        errors, timeouts, HTTP 429/500/502/503/504).
+        backoff_base,
+        backoff_max     jittered exponential backoff between retries, seconds.
+                        Retry-After on 429/503 replaces the computed delay.
+        deadline        wall-clock cap in seconds for one request including all
+                        retries and fallbacks (default: 3 * timeout).
+        endpoints       URL or list of URLs, tried in order on connection
+                        failure. Defaults to $LENS_ENDPOINT, else Google's
+                        crupload endpoint.
+        direct_fallback if the *environment* proxy (HTTPS_PROXY/ALL_PROXY) is
+                        unreachable, retry once without it. Off by default: a
+                        proxy is often an egress policy, and silently routing
+                        around it is not a call a library should make. An
+                        explicit ``proxy=`` is never bypassed.
+        alpha_mode      how to upload an image that really uses transparency.
+                        "webp" (default) is what Chromium does, but the server
+                        composites onto black, so dark text on a transparent
+                        PNG reads back empty. "flatten" = JPEG on white;
+                        "contrast" = JPEG on white or black, whichever the
+                        content stands out against.
+        """
         self.request_handler = LensRequestHandler(
             api_key=api_key,
             proxy=proxy,
             timeout=timeout,
             trust_env=trust_env,
             max_connections=max(max_concurrent * 2, 8),
+            max_retries=max_retries,
+            backoff_base=backoff_base,
+            backoff_max=backoff_max,
+            deadline=deadline,
+            endpoints=endpoints,
+            direct_fallback=direct_fallback,
         )
+        if alpha_mode not in ("webp", "flatten", "contrast"):
+            raise ValueError(f"Unknown alpha_mode {alpha_mode!r}")
+        self.alpha_mode = alpha_mode
         self.client_region = client_region
         self.client_time_zone = client_time_zone
         self.font_path = font_path
@@ -80,10 +131,11 @@ class LensAPI:
     async def __aenter__(self) -> "LensAPI":
         return self
 
-    async def __aexit__(self, *exc_info) -> None:
+    async def __aexit__(self, *exc_info: Any) -> None:
         await self.aclose()
 
     def _get_font(self) -> FontType:
+        # Blocking (reads font files); callers on the event loop use to_thread.
         if not self._font_object:
             self._font_object = get_font(
                 font_path_override=self.font_path, font_size_override=self.font_size
@@ -419,6 +471,76 @@ class LensAPI:
             )
         return blocks
 
+    def _render_overlay(
+        self,
+        original: Image.Image,
+        objects_response: Any,
+        word_data: List[Dict[str, Any]],
+        translated_text: str,
+        overlay_mode: str,
+        render_options: Dict[str, Any],
+    ) -> Image.Image:
+        """Blocking: paint the translation. Run in a worker thread."""
+        if overlay_mode == "chromium":
+            return render_translation_overlay(
+                original,
+                objects_response,
+                font_path=self._get_font_path(),
+                **render_options,
+            )
+
+        word_boxes_norm = []
+        for data in word_data:
+            geom = data.get("geometry")
+            if geom:
+                x1 = geom["center_x"] - geom["width"] / 2
+                y1 = geom["center_y"] - geom["height"] / 2
+                x2 = geom["center_x"] + geom["width"] / 2
+                y2 = geom["center_y"] + geom["height"] / 2
+                word_boxes_norm.append((x1, y1, x2, y2))
+
+        return draw_overlay_on_image(
+            original, word_boxes_norm, translated_text, self._get_font()
+        )
+
+    @staticmethod
+    def _save_and_encode_overlay(
+        image: Image.Image,
+        path: Optional[str],
+        return_format: Optional[str],
+    ) -> Optional[bytes]:
+        """Blocking: write the overlay to disk and/or encode it for the caller.
+
+        Raises LensImageError on failure. A caller who asked for a file must not
+        be told the request succeeded when no file exists.
+        """
+        if path:
+            try:
+                to_save = image
+                if image.mode == "RGBA" and str(path).lower().endswith(
+                    (".jpg", ".jpeg")
+                ):
+                    to_save = image.convert("RGB")
+                to_save.save(path)
+            except Exception as e:
+                logger.error("Error saving overlay image to '%s': %s", path, e)
+                raise LensImageError(
+                    f"Could not save the translation overlay to '{path}': {e}"
+                ) from e
+        if not return_format:
+            return None
+        try:
+            buffer = io.BytesIO()
+            if return_format == "webp":
+                image.save(buffer, format="WEBP", quality=90)
+            else:
+                image.save(buffer, format="PNG")
+            return buffer.getvalue()
+        except Exception as e:
+            raise LensImageError(
+                f"Could not encode the overlay as {return_format}: {e}"
+            ) from e
+
     async def process_image(
         self,
         image_path: Any,
@@ -441,20 +563,45 @@ class LensAPI:
         manga_mode: bool = False,
         manga_box_growth: float = 1.45,
         include_raw_response: bool = False,
+        return_overlay: bool = False,
+        overlay_format: Literal["png", "webp"] = "png",
     ) -> Dict[str, Any]:
+        """OCR (and optionally translate) one image.
+
+        Overlay output: when ``output_overlay_path`` is given and the image
+        contains translatable text, the rendered overlay is written there and
+        ``result["overlay_path"]`` echoes the path. If the file cannot be
+        written, LensImageError is raised: the caller asked for a file, so a
+        quiet "success" without one would be a lie. When the image has no
+        translated text no overlay exists and ``overlay_path`` is None.
+        ``return_overlay=True`` additionally returns the encoded picture as
+        ``result["overlay_image"]`` (bytes, in ``overlay_format``) with
+        ``result["overlay_mime_type"]``, for callers with no shared disk.
+
+        ``new_session=False`` reuses one session across calls (requests on it
+        are serialized, since each reply carries the routing info for the next);
+        every image still gets a fresh image_sequence_id.
+        """
+        if overlay_mode == "legacy" and (output_overlay_path or return_overlay):
+            warnings.warn(
+                "overlay_mode='legacy' (white boxes) is deprecated and will be "
+                "removed; use the default 'chromium' mode.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         async with self._semaphore:
             if isinstance(image_path, Path):
                 image_path = str(image_path)
+            want_overlay = bool(output_overlay_path) or return_overlay
 
             try:
                 client = await self.request_handler.get_client()
-                img_bytes, width, height, original_pil_img = (
-                    await prepare_image_for_api(
-                        image_path,
-                        client=client,
-                        keep_original=bool(output_overlay_path),
-                    )
+                encoded, original_pil_img, source_size = await prepare_image(
+                    image_path,
+                    client=client,
+                    keep_original=want_overlay,
+                    alpha_mode=self.alpha_mode,
                 )
 
                 # A fresh session per call, so concurrent workers no longer
@@ -464,34 +611,43 @@ class LensAPI:
                     if new_session
                     else self.request_handler.default_session
                 )
-                session_uuid_for_request, seq_id, img_seq_id = await session.next_ids(
-                    is_new_image_payload=new_session
-                )
+                async with session.exclusive():
+                    # Every call uploads a new image, shared session or not.
+                    session_uuid_for_request, seq_id, img_seq_id = (
+                        await session.next_ids(is_new_image_payload=True)
+                    )
 
-                proto_payload, uuid_for_this_request = create_ocr_translate_request(
-                    image_bytes=img_bytes,
-                    width=width,
-                    height=height,
-                    ocr_language=ocr_language or DEFAULT_OCR_LANG,
-                    target_translation_language=target_translation_language,
-                    source_translation_language=source_translation_language,
-                    client_region=self.client_region or DEFAULT_CLIENT_REGION,
-                    client_time_zone=self.client_time_zone or DEFAULT_CLIENT_TIME_ZONE,
-                    session_uuid=session_uuid_for_request,
-                    sequence_id=seq_id,
-                    image_sequence_id=img_seq_id,
-                    routing_info=(
-                        session.cluster_info.routing_info
-                        if session.cluster_info
-                        else None
-                    ),
-                )
+                    proto_payload, uuid_for_this_request = create_ocr_translate_request(
+                        image_bytes=encoded.data,
+                        width=encoded.width,
+                        height=encoded.height,
+                        ocr_language=ocr_language or DEFAULT_OCR_LANG,
+                        target_translation_language=target_translation_language,
+                        source_translation_language=source_translation_language,
+                        client_region=self.client_region or DEFAULT_CLIENT_REGION,
+                        client_time_zone=(
+                            self.client_time_zone or DEFAULT_CLIENT_TIME_ZONE
+                        ),
+                        session_uuid=session_uuid_for_request,
+                        sequence_id=seq_id,
+                        image_sequence_id=img_seq_id,
+                        routing_info=(
+                            session.cluster_info.routing_info
+                            if session.cluster_info
+                            else None
+                        ),
+                        mime_type=(
+                            encoded.mime_type
+                            if encoded.mime_type != "image/jpeg"
+                            else None
+                        ),
+                    )
 
-                response_proto = await self.request_handler.send_request(
-                    proto_payload,
-                    request_uuid_used=uuid_for_this_request,
-                    session=session,
-                )
+                    response_proto = await self.request_handler.send_request(
+                        proto_payload,
+                        request_uuid_used=uuid_for_this_request,
+                        session=session,
+                    )
 
                 ocr_result, word_data = self._extract_ocr_data_from_response(
                     response_proto, ocr_preserve_line_breaks, output_format
@@ -503,12 +659,19 @@ class LensAPI:
                     else None
                 )
 
-                if output_overlay_path and translated_text and original_pil_img:
-                    if overlay_mode == "chromium":
-                        overlay_image = render_translation_overlay(
-                            original_pil_img,
-                            response_proto.objects_response,
-                            font_path=self._get_font_path(),
+                saved_path: Optional[str] = None
+                overlay_bytes: Optional[bytes] = None
+                if want_overlay and translated_text and original_pil_img:
+                    # Rendering and encoding are pure CPU; keep them off the
+                    # loop so other requests (and /health) stay responsive.
+                    overlay_image = await asyncio.to_thread(
+                        self._render_overlay,
+                        original_pil_img,
+                        response_proto.objects_response,
+                        word_data,
+                        translated_text,
+                        overlay_mode,
+                        dict(
                             vertical_text=vertical_text,
                             erase_mode=erase_mode,
                             hull_padding=hull_padding,
@@ -517,38 +680,17 @@ class LensAPI:
                             text_align=text_align,
                             manga_mode=manga_mode,
                             manga_box_growth=manga_box_growth,
-                        )
-                    else:
-                        word_boxes_norm = []
-                        for data in word_data:
-                            geom = data.get("geometry")
-                            if geom:
-                                x1 = geom["center_x"] - geom["width"] / 2
-                                y1 = geom["center_y"] - geom["height"] / 2
-                                x2 = geom["center_x"] + geom["width"] / 2
-                                y2 = geom["center_y"] + geom["height"] / 2
-                                word_boxes_norm.append((x1, y1, x2, y2))
+                        ),
+                    )
+                    overlay_bytes = await asyncio.to_thread(
+                        self._save_and_encode_overlay,
+                        overlay_image,
+                        output_overlay_path,
+                        overlay_format if return_overlay else None,
+                    )
+                    saved_path = output_overlay_path or None
 
-                        overlay_image = draw_overlay_on_image(
-                            original_pil_img,
-                            word_boxes_norm,
-                            translated_text,
-                            self._get_font(),
-                        )
-                    try:
-                        if overlay_image.mode == "RGBA" and str(
-                            output_overlay_path
-                        ).lower().endswith((".jpg", ".jpeg")):
-                            overlay_image = overlay_image.convert("RGB")
-                        overlay_image.save(output_overlay_path)
-                    except Exception as e_save:
-                        logger.error(
-                            "Error saving overlay image to '%s': %s",
-                            output_overlay_path,
-                            e_save,
-                        )
-
-                final_result = {
+                final_result: Dict[str, Any] = {
                     "translated_text": translated_text,
                     "word_data": word_data,
                     "detected_language": (
@@ -560,7 +702,13 @@ class LensAPI:
                         if target_translation_language
                         else []
                     ),
+                    "overlay_path": saved_path,
+                    # Original pixel size, before any upload downscale.
+                    "image_size": [source_size[0], source_size[1]],
                 }
+                if overlay_bytes is not None:
+                    final_result["overlay_image"] = overlay_bytes
+                    final_result["overlay_mime_type"] = f"image/{overlay_format}"
                 if include_raw_response:
                     # Opt-in: this is a live protobuf object, not JSON-safe, and
                     # leaking it by default made the public result awkward to
@@ -610,35 +758,37 @@ class LensAPI:
 
             try:
                 client = await self.request_handler.get_client()
-                _, _, _, original = await prepare_image_for_api(
-                    image_path, client=client, keep_original=True
-                )
-                if original is None:
-                    raise LensException("Could not load the source image.")
+                # Decode once; the full pass and the crop both start from it.
+                original = await load_image(image_path, client=client)
 
                 # 1. Full-image pass, purely to establish the session.
                 session = self.request_handler.new_session()
                 uuid_seed, seq_id, img_seq_id = await session.next_ids(True)
-                full_bytes, full_w, full_h, _ = await prepare_image_for_api(
-                    original, client=client, keep_original=False
+                full = await asyncio.to_thread(
+                    encode_image_for_api, original, alpha_mode=self.alpha_mode
                 )
                 payload, uuid_used = create_ocr_translate_request(
-                    image_bytes=full_bytes,
-                    width=full_w,
-                    height=full_h,
+                    image_bytes=full.data,
+                    width=full.width,
+                    height=full.height,
                     ocr_language=ocr_language or DEFAULT_OCR_LANG,
                     client_region=self.client_region or DEFAULT_CLIENT_REGION,
                     client_time_zone=self.client_time_zone or DEFAULT_CLIENT_TIME_ZONE,
                     session_uuid=uuid_seed,
                     sequence_id=seq_id,
                     image_sequence_id=img_seq_id,
+                    mime_type=(
+                        full.mime_type if full.mime_type != "image/jpeg" else None
+                    ),
                 )
                 await self.request_handler.send_request(
                     payload, request_uuid_used=uuid_used, session=session
                 )
 
                 # 2. Region pass. sequence_id advances; image_sequence_id does not.
-                crop_bytes, crop_w, crop_h = crop_region(original, region)
+                crop_bytes, crop_w, crop_h = await asyncio.to_thread(
+                    crop_region, original, region
+                )
                 _, seq_id, img_seq_id = await session.next_ids(False)
                 region_payload = create_region_request(
                     crop_bytes=crop_bytes,
@@ -647,7 +797,9 @@ class LensAPI:
                     parent_height=original.height,
                     crop_width=crop_w,
                     ocr_language=ocr_language or DEFAULT_OCR_LANG,
-                    session_uuid=session.uuid,
+                    session_uuid=(
+                        session.uuid if session.uuid is not None else uuid_used
+                    ),
                     sequence_id=seq_id,
                     image_sequence_id=img_seq_id,
                     client_region=self.client_region or DEFAULT_CLIENT_REGION,
@@ -685,6 +837,7 @@ class LensAPI:
                     "detected_language": text.content_language or None,
                     "region": region,
                     "crop_size": (crop_w, crop_h),
+                    "image_size": [original.width, original.height],
                     "encoded_response": response.interaction_response.encoded_response,
                 }
 
@@ -697,13 +850,35 @@ class LensAPI:
         self, protobuf_payload: bytes, new_session: bool = False
     ) -> bytes:
         """
-        [TEST METHOD] Отправляет сырые байты Protobuf напрямую в эндпоинт Lens и возвращает ответ.
-        Идеально для реверс-инжиниринга и тестов новых фич (например, aim_query или gemini_mode).
-        """
-        async with self._semaphore:
-            if new_session:
-                self.request_handler.start_new_session()
+        [TEST METHOD, deprecated] POST raw protobuf bytes to the Lens endpoint.
 
-            response = await self.request_handler.post_raw(protobuf_payload)
-            response.raise_for_status()
-            return await response.aread()
+        Useful for reverse-engineering new features. Errors are Lens exceptions
+        (not httpx ones), and follow-up calls carry ``gsessionid`` once a reply
+        has provided routing info. Prefer ``process_image`` / ``process_region``,
+        or ``request_handler.send_request`` with an explicit session.
+        """
+        warnings.warn(
+            "call_raw_endpoint() is deprecated; use process_image(), "
+            "process_region() or request_handler.send_request().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        async with self._semaphore:
+            handler = self.request_handler
+            if new_session:
+                handler.default_session = handler.new_session()
+            session = handler.default_session
+
+            async with session.exclusive():
+                response = await handler.post_raw(protobuf_payload, session=session)
+                body = await response.aread()
+                raise_for_response(response, body)
+                try:
+                    parsed = LensOverlayServerResponse.FromString(body)
+                    if parsed.HasField("objects_response") and (
+                        parsed.objects_response.HasField("cluster_info")
+                    ):
+                        session.cluster_info = parsed.objects_response.cluster_info
+                except Exception:  # raw bytes may be any message; best effort
+                    logger.debug("call_raw_endpoint: reply is not a server response")
+                return body
