@@ -20,6 +20,7 @@ from .constants import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_OCR_LANG,
 )
+from .core.aio import LoopLocal
 from .core.image_processor import (
     crop_region,
     draw_overlay_on_image,
@@ -122,7 +123,7 @@ class LensAPI:
         self.font_size = font_size
         self._font_object: Optional[FontType] = None
         self._font_path_resolved: Any = _UNRESOLVED
-        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._semaphore = LoopLocal(lambda: asyncio.Semaphore(max_concurrent))
 
     async def aclose(self) -> None:
         """Release the pooled HTTP connections."""
@@ -590,7 +591,7 @@ class LensAPI:
                 stacklevel=2,
             )
 
-        async with self._semaphore:
+        async with self._semaphore.get():
             if isinstance(image_path, Path):
                 image_path = str(image_path)
             want_overlay = bool(output_overlay_path) or return_overlay
@@ -752,7 +753,7 @@ class LensAPI:
         the full image. Returned geometry is rescaled back to full-image
         coordinates, so it is directly comparable with process_image output.
         """
-        async with self._semaphore:
+        async with self._semaphore.get():
             if isinstance(image_path, Path):
                 image_path = str(image_path)
 
@@ -863,7 +864,7 @@ class LensAPI:
             DeprecationWarning,
             stacklevel=2,
         )
-        async with self._semaphore:
+        async with self._semaphore.get():
             handler = self.request_handler
             if new_session:
                 handler.default_session = handler.new_session()

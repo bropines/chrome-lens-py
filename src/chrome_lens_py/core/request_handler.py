@@ -59,6 +59,7 @@ from ..utils.lens_betterproto import (
     LensOverlayClusterInfo,
     LensOverlayServerResponse,
 )
+from .aio import LoopLocal
 
 logger = logging.getLogger(__name__)
 
@@ -221,13 +222,17 @@ class LensSession:
     sequence_id: int = 0
     image_sequence_id: int = 0
     cluster_info: Optional["LensOverlayClusterInfo"] = None
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
-    _exchange_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _lock: LoopLocal[asyncio.Lock] = field(
+        default_factory=lambda: LoopLocal(asyncio.Lock), repr=False
+    )
+    _exchange_lock: LoopLocal[asyncio.Lock] = field(
+        default_factory=lambda: LoopLocal(asyncio.Lock), repr=False
+    )
 
     async def next_ids(
         self, is_new_image_payload: bool
     ) -> Tuple[Optional[int], int, int]:
-        async with self._lock:
+        async with self._lock.get():
             self.sequence_id += 1
             if is_new_image_payload:
                 self.image_sequence_id += 1
@@ -240,7 +245,7 @@ class LensSession:
         interleaving on one session would overwrite each other's cluster_info.
         A private session never contends for this.
         """
-        return self._exchange_lock
+        return self._exchange_lock.get()
 
 
 class LensRequestHandler:
@@ -325,7 +330,7 @@ class LensRequestHandler:
         self._client: Optional[httpx.AsyncClient] = None
         self._direct_client: Optional[httpx.AsyncClient] = None
         self._prefer_direct = False
-        self._client_lock = asyncio.Lock()
+        self._client_lock = LoopLocal(asyncio.Lock)
 
         # Kept so callers written against the old single-session handler work.
         self.default_session = LensSession()
@@ -362,14 +367,14 @@ class LensRequestHandler:
         every time, which dominates wall clock when scanning a directory.
         """
         if self._client is None or self._client.is_closed:
-            async with self._client_lock:
+            async with self._client_lock.get():
                 if self._client is None or self._client.is_closed:
                     self._client = self._build_client(**self.proxy_settings)
         return self._client
 
     async def _get_direct_client(self) -> httpx.AsyncClient:
         if self._direct_client is None or self._direct_client.is_closed:
-            async with self._client_lock:
+            async with self._client_lock.get():
                 if self._direct_client is None or self._direct_client.is_closed:
                     self._direct_client = self._build_client(trust_env=False)
         return self._direct_client
