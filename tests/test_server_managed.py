@@ -474,7 +474,14 @@ async def test_work_postpones_the_idle_stop_but_probes_do_not():
         assert (await raw(server))[0] == 200
     assert not serving.done()
     for _ in range(10):  # probes do not
-        await request(server, "GET", "/health")
+        # A probe that lands while the server is closing may never be
+        # answered: on Windows the proactor can accept the socket at the very
+        # moment the listener closes and then drop it (a CPython race in
+        # _start_serving). Real clients time out and fall back; so does this.
+        try:
+            await asyncio.wait_for(request(server, "GET", "/health"), 1)
+        except (asyncio.TimeoutError, ConnectionError, OSError):
+            pass
         await asyncio.sleep(0.1)
         if serving.done():
             break
