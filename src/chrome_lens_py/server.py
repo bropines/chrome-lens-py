@@ -44,6 +44,7 @@ WEBP via ``"overlay_format": "webp"``, under ``overlay_image``).
 import asyncio
 import base64
 import binascii
+import contextlib
 import hmac
 import ipaddress
 import json
@@ -594,6 +595,40 @@ class LensServer:
             logger.exception("[%s] Unhandled error on %s", info.request_id, route)
             raise _HttpError(500, "Internal server error")
 
+    @staticmethod
+    async def _linger(
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        timeout: float = 0.5,
+        limit: int = 1 << 20,
+    ) -> None:
+        """Let the client read an error reply before the socket goes away.
+
+        An error is often sent before the request has been read to the end - a
+        431 on an oversized header, a 413 on a big body. Closing a socket that
+        still has unread input makes the kernel answer with RST instead of
+        FIN, and on Linux the RST can overtake the reply: the client sees
+        "connection reset" and never learns why. So half-close our side (FIN
+        goes out after the reply), then swallow what the client is still
+        sending, briefly and boundedly, before closing for real. The same thing
+        nginx calls lingering_close.
+        """
+        try:
+            if writer.can_write_eof():
+                writer.write_eof()
+            deadline = time.monotonic() + timeout
+            drained = 0
+            while drained < limit:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                chunk = await asyncio.wait_for(reader.read(65536), remaining)
+                if not chunk:
+                    break
+                drained += len(chunk)
+        except (asyncio.TimeoutError, ConnectionError, OSError):
+            pass
+
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -628,6 +663,8 @@ class LensServer:
                 self._respond(reply.status, reply.payload, info.origin, reply.headers)
             )
             await writer.drain()
+            if reply.status >= 400:
+                await self._linger(reader, writer)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -728,12 +765,26 @@ class LensServer:
             sig = getattr(signal, name, None)
             if sig is None:
                 continue
+            # remove_signal_handler resets the signal to SIG_DFL/default_int_handler,
+            # not to whatever was there before - under asyncio.run that is the
+            # Runner's own SIGINT handler, and losing it means Ctrl+C no longer
+            # cancels the host program cleanly once the server stops. Save the
+            # Python-level handler and put it back after removing ours.
+            previous_handler = signal.getsignal(sig)
             try:
                 loop.add_signal_handler(sig, trigger)
-                restore.append(partial(loop.remove_signal_handler, sig))
-                continue
             except (NotImplementedError, RuntimeError, ValueError):
                 pass
+            else:
+
+                def remove(sig: int = sig, previous: Any = previous_handler) -> None:
+                    loop.remove_signal_handler(sig)
+                    if previous is not None:
+                        with contextlib.suppress(ValueError, OSError, TypeError):
+                            signal.signal(sig, previous)
+
+                restore.append(remove)
+                continue
             try:
                 previous = signal.signal(
                     sig, lambda *_: loop.call_soon_threadsafe(trigger)
