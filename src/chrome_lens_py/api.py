@@ -797,7 +797,9 @@ class LensAPI:
                     parent_height=original.height,
                     crop_width=crop_w,
                     ocr_language=ocr_language or DEFAULT_OCR_LANG,
-                    session_uuid=session.uuid,
+                    session_uuid=(
+                        session.uuid if session.uuid is not None else uuid_used
+                    ),
                     sequence_id=seq_id,
                     image_sequence_id=img_seq_id,
                     client_region=self.client_region or DEFAULT_CLIENT_REGION,

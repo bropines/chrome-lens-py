@@ -180,8 +180,8 @@ def has_meaningful_alpha(pil_image: Image.Image) -> bool:
         alpha = pil_image.convert("RGBA").getchannel("A")
     else:
         return False
-    low, _ = alpha.getextrema()
-    return low < 255
+    extrema: Tuple[int, int] = alpha.getextrema()  # type: ignore[assignment]
+    return extrema[0] < 255
 
 
 def _webp_available() -> bool:
@@ -434,7 +434,7 @@ def draw_overlay_on_image(
     if current_line:
         lines_to_draw.append(current_line)
 
-    current_y = px_overall_y1 + padding
+    current_y: float = px_overall_y1 + padding
     line_spacing = 2
     for line_str in lines_to_draw:
         try:
@@ -455,11 +455,8 @@ def draw_overlay_on_image(
             current_y += line_height + line_spacing
         except Exception as e:
             logger.warning("Could not draw line '%s': %s", line_str, e)
-            if hasattr(font, "size"):
-                line_height = font.size  # type: ignore [attr-defined]
-            else:
-                line_height = 12
-            current_y += line_height + line_spacing
+            fallback_height: float = getattr(font, "size", 12)
+            current_y += fallback_height + line_spacing
             continue
 
     return img_draw
