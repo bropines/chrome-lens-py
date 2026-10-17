@@ -1,12 +1,12 @@
 {
-    "version": "3.8.1",
+    "version": "3.8.2",
     "description": "Google Lens OCR and translation from the command line (compiled build)",
     "homepage": "https://github.com/bropines/chrome-lens-py",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/bropines/chrome-lens-py/releases/download/v3.8.1/lens_scan-windows-amd64.zip",
-            "hash": "b5b2d287b44f91a4e8360febd40706892ae84c7ff38102d311d7c380ccc19a18",
+            "url": "https://github.com/bropines/chrome-lens-py/releases/download/v3.8.2/lens_scan-windows-amd64.zip",
+            "hash": "3884c3e71c473f1fa9aa9c078d77ce13882e87be721abc1054023d320d617495",
             "extract_dir": "lens_scan-windows-amd64"
         }
     },
