@@ -1,6 +1,16 @@
-## Custom ShareX OCR with Google Lens
+# ShareX integration
 
-It's possible to use the `chrome-lens-py` package with ShareX to OCR images using the Google Lens API, providing a significant upgrade over the default OCR in ShareX.
+[Back to the README](../README.md)
+
+Use `chrome-lens-py` with ShareX to OCR (or translate) a screen capture with Google Lens, instead of ShareX's default OCR. One command sets it up on Windows.
+
+## Contents
+
+- [Two hotkeys, and why you want both](#two-hotkeys-and-why-you-want-both)
+- [Automated setup](#recommended-automated-setup-windows)
+- [Uploader mode](#uploader-mode-no-process-per-capture)
+- [Manual setup](#manual-setup-fallback)
+- [Troubleshooting](#troubleshooting)
 
 ## Two hotkeys, and why you want both
 
@@ -22,16 +32,16 @@ the daemon as a login service, supervised so that a crash is restarted (below).
 **Program mode is already fast.** `lens_scan` hands each capture to a warm background
 daemon (starting one after the first call), so a capture costs a few hundred
 milliseconds instead of three seconds, with no extra setup. See
-[Daemon / fast mode](../README.md#-daemon--fast-mode) in the README for how it works,
-how to turn it off (`--daemon off`) and what it measures.
+[Fast mode](daemon.md#fast-mode) for how it works, how to turn it off
+(`--daemon off`) and what it measures.
 
 ---
 
-### 🚀 Recommended: Automated Setup (Windows)
+## Recommended: Automated Setup (Windows)
 
 The easiest way to set up ShareX is to use the built-in automation command.
 
-1.  **Install the library** (if you haven't already):
+1.  **Install `lens_scan`** (if you haven't already) with any method on the [install page](install.md). The `[clipboard]` extra is what makes `--sharex` copy; the uv installer includes it:
     ```bash
     pip install "chrome-lens-py[clipboard]"
     ```
@@ -55,7 +65,7 @@ lens_scan --setup-sharex --translate ru     # same as -t ru
 ```
 The action's arguments become `-t ru --sharex "$input"`. Run the command again with another language (or none) to change it; the existing `lens` action is updated in place. Language codes may contain only letters, digits, `-` and `_`.
 
-**Other defaults** (proxy, timeout, region, `target_lang`, ...) do not need to be baked into the hotkey: `lens_scan` reads `config.json` and `LENS_*` environment variables on every run, so changing them later needs no ShareX re-setup. See the configuration table in the README.
+**Other defaults** (proxy, timeout, region, `target_lang`, ...) do not need to be baked into the hotkey: `lens_scan` reads `config.json` and `LENS_*` environment variables on every run, so changing them later needs no ShareX re-setup. See the [configuration table](cli.md#configuration).
 
 **Exit status.** `--setup-sharex` exits `0` on success and `1` if it could not complete.
 
@@ -63,7 +73,7 @@ The action's arguments can include `--daemon off` if you would rather ShareX alw
 
 ---
 
-### Uploader mode (no process per capture)
+## Uploader mode (no process per capture)
 
 ```bash
 lens_scan --setup-sharex --mode uploader          # or --mode both; add -t ru to translate
@@ -101,7 +111,7 @@ the auto daemon that program mode starts, idle exit is 10 minutes by default:
 until reboot.
 
 Why a web page cannot use this endpoint and why it needs the token: see
-[What can reach it](../README.md#what-can-reach-it).
+[What can reach it](daemon.md#what-can-reach-it). The service and its supervisor are described under [Running it as a login service](daemon.md#running-it-as-a-login-service).
 
 **Troubleshooting uploader mode.** The daemon logs to `daemon.log`, the Windows
 supervisor (crashes and restarts) to `supervisor.log`, both in
@@ -120,7 +130,7 @@ then needs the setup run again.
 
 ---
 
-### 🛠️ Manual Setup (Fallback)
+## Manual Setup (Fallback)
 
 If the automated setup fails or you want custom settings, follow these steps:
 
@@ -145,8 +155,8 @@ If the automated setup fails or you want custom settings, follow these steps:
 ## Troubleshooting
 If something went wrong with the automated setup, restore the previous configuration by closing ShareX and copying `Documents\ShareX\HotkeysConfig.json.bak-<timestamp>` (and `UploadersConfig.json.bak-<timestamp>`, for uploader mode) over the originals.
 
-If the hotkey runs but nothing lands on the clipboard, `lens_scan` now exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra: `pip install "chrome-lens-py[clipboard]"`.
+If the hotkey runs but nothing lands on the clipboard, `lens_scan` exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra: `pip install "chrome-lens-py[clipboard]"`.
 
 If it takes a long time to process and nothing is copied, try unchecking **"Hidden window"** in your ShareX action settings to see the error console. 
 
-**Antivirus Warning**: some antivirus software distrusts unsigned compiled executables. The Windows installer detects a quarantined binary and installs the portable build instead, which runs the package through python.org's signed `python.exe`. You can also install with `uv tool install "chrome-lens-py[clipboard]"`.
+**Antivirus warning**: some antivirus software distrusts unsigned compiled executables. The Windows installer detects a quarantined binary and installs the [portable build](install.md#the-portable-build-windows) instead. You can also install with `uv tool install "chrome-lens-py[clipboard]"`.
