@@ -5,4 +5,4 @@
 # until the two agree.
 grpcio-tools==1.81.1
 black==26.5.1
-isort==9.0.1
+isort==9.0.2
