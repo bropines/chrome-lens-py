@@ -47,11 +47,20 @@ from ..utils.sharex_setup import setup_sharex, setup_sharex_config
 
 logger = logging.getLogger(__name__)
 
-# Exit codes. 2 is also what argparse uses for a usage error, which is fine:
-# both mean "not everything you asked for happened".
+# Exit codes.
+#
+#   0   everything asked for happened (even if the image held no text)
+#   1   it all failed: one image that failed, or a command that could not run
+#   2   a batch where some images worked and some did not
+#   64  the command line was wrong (sysexits.h's EX_USAGE)
+#   130 interrupted
+#
+# 64 rather than argparse's own 2: a caller that sees 2 should know that the
+# work started and partly succeeded, not have to guess whether it was a typo.
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_PARTIAL = 2
+EXIT_USAGE = 64
 
 CONCURRENCY_WARNING_THRESHOLD = 20
 
@@ -247,6 +256,22 @@ def _default_text(name: str) -> str:
     return f" (default: {default_value(name)})"
 
 
+class _Parser(argparse.ArgumentParser):
+    """argparse, with a usage error that exits 64 and points at the short help.
+
+    argparse's own 2 is this CLI's "some images failed", and the full option
+    list is sixty lines - neither is what someone who typed `--fromat json`
+    needs to see.
+    """
+
+    def error(self, message: str):  # type: ignore[override]
+        self.exit(
+            EXIT_USAGE,
+            f"lens_scan: {message}\nTry `lens_scan -h`, or `lens_scan help options` "
+            "for every option.\n",
+        )
+
+
 class _NoExitParser(argparse.ArgumentParser):
     """Parser for the daemon: a usage error must not print to its stderr or exit.
 
@@ -262,7 +287,7 @@ class _NoExitParser(argparse.ArgumentParser):
 
 
 def build_parser(
-    parser_class: type = argparse.ArgumentParser,
+    parser_class: type = _Parser,
 ) -> argparse.ArgumentParser:
     """The one description of the command line; --help is generated from it.
 
@@ -273,7 +298,9 @@ def build_parser(
     """
     parser = parser_class(
         prog="lens_scan",
-        usage="lens_scan <image_source> [ocr_lang] [options]",
+        usage="lens_scan <image_source> [ocr_lang] [options]\n"
+        "       lens_scan <command> [options]   (status, daemon, service, "
+        "sharex, update, config, serve)",
         description="Performs OCR and optional translation on an image with Google Lens.",
         add_help=False,
         formatter_class=_HelpFormatter,
@@ -505,31 +532,6 @@ def build_parser(
         help="An automatically started daemon exits after this long without "
         "requests; 0 = never" + _default_text("daemon_idle_timeout") + ".",
     )
-    g.add_argument(
-        "--daemon-status",
-        action="store_true",
-        help="Show whether the daemon is running, and its pid, uptime and load.",
-    )
-    g.add_argument(
-        "--daemon-start",
-        action="store_true",
-        help="Start the daemon in the background now.",
-    )
-    g.add_argument(
-        "--daemon-stop", action="store_true", help="Stop the running daemon."
-    )
-    g.add_argument(
-        "--install-service",
-        action="store_true",
-        help="Start the daemon at every login on a fixed port (ShareX uploader "
-        "mode): a Windows Startup shortcut, a macOS LaunchAgent or a Linux systemd --user unit.",
-    )
-    g.add_argument(
-        "--uninstall-service",
-        action="store_true",
-        help="Remove what --install-service set up.",
-    )
-
     g = parser.add_argument_group("Server (foreground)")
     g.add_argument(
         "--serve",
@@ -644,19 +646,16 @@ def build_parser(
         "config file (never the API key).",
     )
     g.add_argument(
-        "--setup-sharex",
+        "--show-config",
         action="store_true",
-        help="Configure ShareX to use lens_scan (Windows). Add -t LANG to make "
-        "the hotkey translate.",
+        help="Print every setting, its value and where that value came from "
+        "(what `lens_scan config show` runs).",
     )
     g.add_argument(
-        "--mode",
-        choices=["program", "uploader", "both"],
-        default="program",
-        help="With --setup-sharex: program = Ctrl+O runs lens_scan per capture "
-        "(default, works with nothing running); uploader = Ctrl+Shift+O posts the "
-        "capture straight to an always-on daemon, no process per capture; both = "
-        "both hotkeys. uploader/both install the daemon as a login service.",
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="With --show-config: print it as JSON.",
     )
     setting(
         g,
@@ -676,23 +675,133 @@ def build_parser(
     g.add_argument(
         "-h", "--help", action="store_true", help="Show this help message and exit."
     )
+
+    # The commands replaced these in 3.8. They keep working - ShareX
+    # configurations, Startup shortcuts, LaunchAgents and systemd units on
+    # people's machines were written with them, and so were scripts.
+    g = parser.add_argument_group("Older flags (the commands above replaced these)")
+    g.add_argument(
+        "--daemon-status",
+        action="store_true",
+        help="Now `lens_scan daemon status`.",
+    )
+    g.add_argument(
+        "--daemon-start",
+        action="store_true",
+        help="Now `lens_scan daemon start`.",
+    )
+    g.add_argument(
+        "--daemon-stop", action="store_true", help="Now `lens_scan daemon stop`."
+    )
+    g.add_argument(
+        "--install-service",
+        action="store_true",
+        help="Now `lens_scan service install`.",
+    )
+    g.add_argument(
+        "--uninstall-service",
+        action="store_true",
+        help="Now `lens_scan service uninstall`.",
+    )
+    g.add_argument(
+        "--setup-sharex",
+        action="store_true",
+        help="Now `lens_scan sharex`.",
+    )
+    g.add_argument(
+        "--mode",
+        choices=["program", "uploader", "both"],
+        default="program",
+        help="With --setup-sharex / `lens_scan sharex`: program = Ctrl+O runs "
+        "lens_scan per capture (default, works with nothing running); uploader = "
+        "Ctrl+Shift+O posts the capture straight to an always-on daemon, no "
+        "process per capture; both = both hotkeys. uploader/both install the "
+        "daemon as a login service.",
+    )
     return parser
 
 
 def print_help(parser: Optional[argparse.ArgumentParser] = None, file=None) -> None:
-    """Render --help from the parser, so it cannot drift from the real options."""
+    """Render the full option reference from the parser, so it cannot drift.
+
+    This is `lens_scan help options`. The front door is the short help in
+    chrome_lens_py/manage.py, which lists the commands and the dozen options
+    most people need; everything below is the reference behind it.
+    """
     parser = parser or build_parser()
     file = file or sys.stdout
     header = Console(file=file)
     header.print("\n[bold cyan]Google Lens CLI (chrome-lens-py)[/bold cyan]")
     file.write(parser.format_help())
     file.write(
+        "\nCommands: status, daemon, service, sharex, update, config, serve, "
+        "version, help.\n"
+        "  lens_scan status            is the daemon up, the service installed, "
+        "ShareX wired?\n"
+        "  lens_scan help <command>    what one command does\n"
         "\nEnvironment: any setting can also be given as LENS_<NAME> "
         "(LENS_API_KEY, LENS_PROXY, LENS_TIMEOUT, ...).\n"
         "Precedence: command line > config file > environment > defaults.\n"
-        "Exit codes: 0 all images processed, 1 all failed, 2 some failed.\n"
+        "Exit codes: 0 all images processed, 1 all failed, 2 some failed, "
+        "64 wrong command line, 130 interrupted.\n"
     )
     file.flush()
+
+
+def print_resolved_config(settings: Settings, path: str, as_json: bool) -> int:
+    """Every setting, its value, and which layer decided it.
+
+    The layers (command line > config file > LENS_* > default) are the first
+    thing to check when a setting "does not work": usually it does, and
+    something further up is overriding it.
+    """
+    from ..utils.config_manager import SETTING_NAMES
+
+    rows = []
+    for name in SETTING_NAMES:
+        value = getattr(settings, name)
+        rows.append(
+            (
+                name,
+                "<hidden>" if name in SECRET_FIELDS and value else value,
+                settings.sources.get(name, "default"),
+            )
+        )
+    if as_json:
+        emit(
+            json.dumps(
+                {
+                    "config_file": path,
+                    "config_file_exists": os.path.isfile(path),
+                    "settings": {
+                        name: {"value": value, "source": source}
+                        for name, value, source in rows
+                    },
+                },
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        return EXIT_OK
+
+    console.print(
+        f"Config file: [cyan]{escape(path)}[/cyan]"
+        + ("" if os.path.isfile(path) else "  [dim](no file yet)[/dim]")
+    )
+    table = Table(box=None, pad_edge=False, padding=(0, 2))
+    table.add_column("setting", style="green")
+    table.add_column("value", overflow="fold")
+    table.add_column("from", style="dim")
+    for name, value, source in rows:
+        table.add_row(name, escape(str(value)), source)
+    _stderr_console().print(table)
+    note(
+        "\n[dim]Precedence: command line > config file > LENS_* environment > "
+        "default. Write the current command line into the file with "
+        "--update-config.[/dim]"
+    )
+    return EXIT_OK
 
 
 # ---------------------------------------------------------------- processing
@@ -868,7 +977,7 @@ async def _run_region(
             "--region takes four numbers: center_x,center_y,width,height "
             "(normalized 0..1)."
         )
-        return EXIT_FAILED
+        return EXIT_USAGE
 
     try:
         result = await api.process_region(
@@ -1119,7 +1228,7 @@ async def _run_serve(args: argparse.Namespace, settings: Settings) -> int:
             "API key on Google requests.\n"
             "Either bind 127.0.0.1, or pass --token."
         )
-        return EXIT_FAILED
+        return EXIT_USAGE
 
     note(
         f"[bold green]chrome-lens-py daemon[/bold green] on "
@@ -1153,10 +1262,10 @@ async def _run_managed(args: argparse.Namespace, settings: Settings) -> int:
 
     if args.allow_origin:
         fail("--allow-origin is not available on the managed daemon.")
-        return EXIT_FAILED
+        return EXIT_USAGE
     if args.auto and args.service:
         fail("--auto and --service cannot be used together.")
-        return EXIT_FAILED
+        return EXIT_USAGE
     try:
         return await run_managed_daemon(
             settings,
@@ -1195,6 +1304,7 @@ _LOCAL_ONLY_ATTRS = (
     "help",
     "setup_sharex",
     "update_config",
+    "show_config",
     "serve",
     "install_service",
     "uninstall_service",
@@ -1297,6 +1407,11 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
             shown = "<hidden>" if name in SECRET_FIELDS else getattr(settings, name)
             logger.debug("Setting %s = %s (from %s)", name, shown, source)
 
+    if args.show_config:
+        return print_resolved_config(
+            settings, config_file_to_load, getattr(args, "as_json", False)
+        )
+
     if args.update_config:
         if args.config_file_path_override:
             note(
@@ -1325,14 +1440,17 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
         )
 
     if not args.image_source:
-        fail("The 'image_source' argument is required.")
-        print_help(parser, file=sys.stderr)
-        return EXIT_FAILED
+        from ..manage import short_help
+
+        fail("nothing to read. Give an image, a URL or a folder - or a command.")
+        sys.stderr.write("\n" + short_help())
+        sys.stderr.flush()
+        return EXIT_USAGE
 
     problem = _check_output_modes(args)
     if problem:
         fail(problem)
-        return EXIT_FAILED
+        return EXIT_USAGE
 
     sources = _collect_sources(args.image_source, args.quiet)
     if sources is None:

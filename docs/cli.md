@@ -4,18 +4,22 @@
 
 ```bash
 lens_scan <image_source> [ocr_lang] [options]
+lens_scan <command> [options]
 ```
 
 - **`image_source`**: a path to an image file, an image URL, or a directory. A directory is processed file by file (supported images only, sorted by name).
 - **`ocr_lang`** (optional): BCP 47 code of the language to recognise (`en`, `ja`). Auto-detected if omitted.
+- **`command`**: one of the verbs that manage `lens_scan` itself rather than read an image, see [Commands](#commands).
 
-`lens_scan --help` prints the same list; it is generated from the argument parser.
+`lens_scan -h` prints a short help: the commands and the dozen most-used scan options. `lens_scan help options` prints the full list of options; it is generated from the argument parser and is what the [Options](#options) table below follows. `lens_scan help <command>` (or `lens_scan <command> -h`) explains one command.
 
 ## Contents
 
 - [Options](#options)
 - [Output formats](#output-formats)
 - [Examples](#examples)
+- [Commands](#commands)
+- [The old flags](#the-old-flags)
 - [Exit codes and streams](#exit-codes-and-streams)
 - [Configuration](#configuration)
 
@@ -55,17 +59,11 @@ Defaults are in the description. Options marked "setting" can also be set in the
 | **Daemon / fast mode** (details in [daemon.md](daemon.md)) | | |
 | `--daemon MODE` | | `auto` (default), `on` or `off`. Setting. |
 | `--daemon-idle-timeout SEC` | | An automatically started daemon exits after this long without requests (default `600`, `0` = never). Setting. |
-| `--daemon-status` | | Show whether the daemon runs, with its pid, uptime and load. |
-| `--daemon-start` | | Start the daemon in the background now. |
-| `--daemon-stop` | | Stop the running daemon. |
-| `--install-service` | | Start the daemon at every login on a fixed port. A Windows Startup shortcut, a macOS LaunchAgent or a Linux `systemd --user` unit. |
-| `--uninstall-service` | | Remove what `--install-service` set up. |
-| **Server (foreground)** | | |
-| `--serve` | | Run a local HTTP server instead of processing an image. |
-| `--auto` | | With `--serve`: run as the managed daemon (private socket or ephemeral port, random token, idle exit). This is what `--daemon-start` runs. |
-| `--service` | | With `--serve`: run as the persistent daemon on `--port`, with the token written by `--setup-sharex --mode uploader`. No idle exit. |
+| **Server (foreground; the `serve` command)** | | |
+| `--auto` | | With `serve`: run as the managed daemon (private socket or ephemeral port, random token, idle exit). This is what `daemon start` runs. |
+| `--service` | | With `serve`: run as the persistent daemon on `--port`, with the token written by `sharex --mode uploader` or `service install`. No idle exit. |
 | `--host ADDR` | | Address to bind (default `127.0.0.1`). |
-| `--port N` | | Port to bind (default `8765`). Setting (`daemon_port`). |
+| `--port N` | | Port to bind (default `8765`). Also the port of `service install` and `sharex`. Setting (`daemon_port`). |
 | `--token TOKEN` | | Require this bearer token. Mandatory when `--host` is not loopback. |
 | `--allow-origin ORIGIN` | | Let one browser origin call the server. Repeatable. None by default. |
 | **Connection** | | |
@@ -80,11 +78,11 @@ Defaults are in the description. Options marked "setting" can also be set in the
 | **Configuration and setup** | | |
 | `--config-file FILE` | | Read this JSON config file instead of the default one. |
 | `--update-config` | | Save the settings given on this command line into the default config file, never the API key. The previous file is kept as `config.json.bak`. Works without an image. Has no effect together with `--config-file`. |
-| `--setup-sharex` | | Wire `lens_scan` into ShareX (Windows). `-t LANG` makes the hotkey translate. See [sharex.md](sharex.md). |
-| `--mode MODE` | | With `--setup-sharex`: `program` (default, **Ctrl + O** runs `lens_scan`), `uploader` (**Ctrl + Shift + O** posts to the daemon) or `both`. |
+| `--show-config` | | Print every setting, its value and which layer set it. This is what `lens_scan config show` runs. |
+| `--json` | | With `--show-config`: print it as JSON. |
 | `--logging-level LEVEL` | `-l` | `DEBUG`, `INFO`, `WARNING` (default) or `ERROR`. Setting. |
 | `--version` | `-V` | Print the version and which copy is running: its kind, the interpreter, the package path, and whether the clipboard extra is installed. |
-| `--help` | `-h` | Show the help and exit. |
+| `--help` | `-h` | Show the short help and exit. `lens_scan help options` prints this full list. |
 
 Mutually exclusive: `-b`, `-ol`, `--get-coords`, `--oneline` and `--format` other than `text`. None of them combines with `--region`.
 
@@ -127,21 +125,90 @@ lens_scan page.png --region 0.8,0.82,0.35,0.06 --text-query "what does this say"
 
 The four numbers are the centre x, centre y, width and height, as fractions of the full image. Returned geometry is in full-image coordinates. From Python: [`process_region`](api.md#process_region).
 
+## Commands
+
+Reading an image is one job; keeping the machinery around it healthy is another: the warm daemon, the login service, the ShareX hotkeys, updates. That second job used to be a row of flags that behaved like commands (they ignore the image and each other), so it has verbs now. They run in your own process and never go through the daemon.
+
+A first argument that names a command is always the command, even if a file of that name exists, so `lens_scan status` does not depend on the directory you are in. `lens_scan ./status` scans the file. This is the rule git, docker and cargo use.
+
+| Command | What it does |
+| :--- | :--- |
+| `lens_scan status [--json]` | One screen: the version and how this copy was installed, the daemon, the login service, the ShareX hotkeys, the clipboard extra, the config file path and the state directory. No network. Exits 0 unless a daemon is recorded but does not answer, or the login service is installed and no daemon is running. |
+| `lens_scan daemon status\|start\|stop\|restart\|logs` | The warm background daemon, see [daemon.md](daemon.md#controlling-the-daemon). `--json` on `status`, `--lines N` on `logs` (default 40), `--idle-timeout SEC` on `start` and `restart`. `status` exits 0 when the daemon runs and 1 when it does not, like `systemctl is-active`. |
+| `lens_scan service status\|install\|uninstall\|start\|stop\|restart\|logs` | The daemon as a login service, see [daemon.md](daemon.md#running-it-as-a-login-service). `--port N` on `install`, `--lines N` on `logs`, `--json` on `status`. |
+| `lens_scan sharex [--mode MODE] [-t LANG] [--port N]` | Wire `lens_scan` into ShareX (Windows), see [sharex.md](sharex.md). `--mode` is `program` (default, **Ctrl + O** runs `lens_scan`), `uploader` (**Ctrl + Shift + O** posts to the daemon) or `both`. `-t LANG` makes the hotkey translate. |
+| `lens_scan update [--check] [--dry-run] [--json]` | Update this copy the way it was installed, see [below](#lens_scan-update). |
+| `lens_scan config show\|path [--json]` | `show` (the default) prints every setting, its value and which layer set it; `path` prints the config file's location. See [Configuration](#configuration). |
+| `lens_scan serve [options]` | Run the [HTTP API](daemon.md#http-api) in this terminal. Takes the options of the Server group above. |
+| `lens_scan version [--json]` | What `--version` prints; `--json` gives the same facts as an object. |
+| `lens_scan help [<command>\|options]` | The short help, the help of one command, or the full option list. |
+
+```bash
+lens_scan status
+lens_scan daemon restart
+lens_scan service install --port 9000
+lens_scan sharex --mode both -t en
+lens_scan update --check
+lens_scan config show --json
+```
+
+### `lens_scan update`
+
+Half a dozen things can own the name `lens_scan`, and each has its own idea of an update. Running the wrong one is worse than running none: `pip install -U` into a Homebrew install leaves two copies and the wrong one first on `PATH`. So `update` finds out how this copy was installed and runs that installer's own upgrade:
+
+| Installed with | What runs |
+| :--- | :--- |
+| uv tool | `uv tool upgrade --refresh chrome-lens-py`. uv caches the package index for ten minutes, which is long enough to miss a release that has just gone out. |
+| pipx | `pipx upgrade chrome-lens-py` |
+| Homebrew | `brew upgrade bropines/tap/lens-scan` |
+| Scoop | `scoop update <app>`, with the app name taken from the install path, so `lens-scan-portable` stays portable. |
+| a standalone build from `install.ps1` / `install.sh` | The same installer, run again. On Windows it gets a new console window of its own, because Windows will not let a program replace its own running executable. |
+| pip | `pip install --upgrade chrome-lens-py`, with the `[clipboard]` extra only if `pyperclip` is already installed. |
+| a git checkout, a Docker image, a hand-unzipped archive | Nothing. A printed instruction instead of a guess. |
+
+The newest version comes from PyPI's JSON API. Every channel is published from one release run, so one number describes them all, and PyPI needs no token. The command is always printed before it runs.
+
+- `--check` only compares this version with the newest one.
+- `--dry-run` prints the command without running it.
+- `--json` reports what it found (`version`, `latest`, `update_available`, `method`, `command`, `hint`) and never updates, so a script can decide for itself.
+
+A running daemon is stopped first because it holds the files being replaced, and started again afterwards: through the login service if that is what owned it. Run on a copy that is already the newest, `update` still runs the installer, since reinstalling is a reasonable thing to want; it says so first. `--check` and `--json` exit 1 if pypi.org could not be reached.
+
+## The old flags
+
+These still work and are not going away: ShareX configurations, Startup shortcuts, LaunchAgents and systemd units on people's machines contain them. They are no longer the documented spelling.
+
+| Old flag | Now |
+| :--- | :--- |
+| `--daemon-status` | `lens_scan daemon status` |
+| `--daemon-start` | `lens_scan daemon start` |
+| `--daemon-stop` | `lens_scan daemon stop` |
+| `--install-service` | `lens_scan service install` |
+| `--uninstall-service` | `lens_scan service uninstall` |
+| `--setup-sharex` (with `--mode`) | `lens_scan sharex` (with `--mode`) |
+| `--serve` | `lens_scan serve` |
+
 ## Exit codes and streams
 
 | Code | Meaning |
 | :--- | :--- |
-| `0` | Every image succeeded. |
-| `1` | All images failed, or the arguments were invalid. |
-| `2` | Some images failed. |
+| `0` | Every image succeeded. An image that contains no text is still a success. |
+| `1` | All images failed, or the run could not start: a source that is not an image, a directory with no images in it, a bad config file. |
+| `2` | Some of several images failed. |
+| `64` | The command line was wrong: an unknown option, a value of the wrong kind, nothing to read, options that exclude each other, a command used wrongly, or `--serve` on a public address without `--token`. |
+| `130` | Interrupted. |
 
-Headers, progress and errors go to stderr, so `lens_scan img.png > out.txt` holds only the text.
+64 is `EX_USAGE` from `sysexits.h`. It used to be argparse's `2`, which is also "some images failed"; a caller could not tell a typo from a half-finished batch. Commands exit 0 or 1, and 64 when they are used wrongly; the cases where `status`, `daemon status` and `update` exit 1 are listed above.
+
+Headers, progress and errors go to stderr, so `lens_scan img.png > out.txt` holds only the text. A command's own report - `status`, `daemon status`, `config show`, `update` - is what that command is for, so it goes to stdout, with or without `--json`.
 
 ## Configuration
 
 Precedence, highest first: **a flag given explicitly > the config file > a `LENS_*` environment variable > the default**. A flag you did not type never overrides the file.
 
-The default config file is `config.json` in `$XDG_CONFIG_HOME/chrome-lens-py/`, or in `~/.config/chrome-lens-py/` if that variable is not set. This is the same rule on Linux, macOS and Windows (`C:\Users\<user>\.config\chrome-lens-py\config.json`). Use `--config-file` for another file.
+The default config file is `config.json` in `$XDG_CONFIG_HOME/chrome-lens-py/`, or in `~/.config/chrome-lens-py/` if that variable is not set. This is the same rule on Linux, macOS and Windows (`C:\Users\<user>\.config\chrome-lens-py\config.json`). Use `--config-file` for another file. `lens_scan config path` prints where the default one is, whether or not it exists yet.
+
+When a setting seems not to work, `lens_scan config show` lists every setting with its value and the layer that decided it (`command line`, `config file <path>`, `env LENS_<NAME>` or `default`): usually the setting works and something above it is overriding it. `--json` gives the same as an object. To look at another file, pass `--config-file FILE` to it. The API key and the proxy URL, which may carry a password, are shown as `<hidden>`.
 
 Every key is optional. A file that is not a JSON object, or a value of the wrong type, stops the run with a message that names the key. Unknown keys are ignored with a warning, and `null` means "not set". Keys are case-insensitive and may use `-` for `_`.
 
@@ -173,7 +240,7 @@ Every key is optional. A file that is not a JSON object, or a value of the wrong
 | `daemon_idle_timeout` | `LENS_DAEMON_IDLE_TIMEOUT` | `--daemon-idle-timeout` | `600` |
 | `daemon_port` | `LENS_DAEMON_PORT` | `--port` | `8765` |
 
-Also accepted as config keys: the flag spellings `translate`, `font`, `outline`, `min_text_size`, `manga`, `manga_growth` and `no_env_proxy`. Booleans in environment variables take `1/0`, `true/false`, `yes/no`, `on/off`. An empty variable counts as unset. `--serve` reads the same settings.
+Also accepted as config keys: the flag spellings `translate`, `font`, `outline`, `min_text_size`, `manga`, `manga_growth` and `no_env_proxy`. Booleans in environment variables take `1/0`, `true/false`, `yes/no`, `on/off`. An empty variable counts as unset. `serve` reads the same settings.
 
 Variables that are not settings:
 

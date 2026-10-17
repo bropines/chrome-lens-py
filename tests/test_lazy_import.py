@@ -25,7 +25,15 @@ def run_python(code: str) -> str:
     return done.stdout.strip()
 
 
-@pytest.mark.parametrize("module", ["chrome_lens_py", "chrome_lens_py.client"])
+@pytest.mark.parametrize(
+    "module",
+    [
+        "chrome_lens_py",
+        "chrome_lens_py.client",
+        "chrome_lens_py.manage",
+        "chrome_lens_py.update",
+    ],
+)
 def test_importing_does_not_pull_in_the_heavy_dependencies(module):
     out = run_python(
         f"import sys, {module}; " f"print([m for m in {HEAVY!r} if m in sys.modules])"

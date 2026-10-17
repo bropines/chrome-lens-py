@@ -15,8 +15,10 @@ Use `chrome-lens-py` with ShareX to OCR (or translate) a screen capture with Goo
 ## Two hotkeys, and why you want both
 
 ```bash
-lens_scan --setup-sharex --mode both          # add -t ru to translate
+lens_scan sharex --mode both          # add -t ru to translate
 ```
+
+Earlier versions spelled this `lens_scan --setup-sharex --mode both`. That still works, and so does whatever an earlier setup wrote into ShareX, so a hotkey you set up before does not need redoing.
 
 | | **Ctrl + O** - program mode | **Ctrl + Shift + O** - uploader mode |
 |---|---|---|
@@ -47,7 +49,7 @@ The easiest way to set up ShareX is to use the built-in automation command.
     ```
 2.  **Run the setup command**:
     ```bash
-    lens_scan --setup-sharex
+    lens_scan sharex
     ```
 
 **What this does:**
@@ -57,17 +59,17 @@ The easiest way to set up ShareX is to use the built-in automation command.
 *   Adds/updates a hotkey (**Ctrl + O**) that captures a region and sends it to Google Lens. The new file is written atomically, so a crash cannot leave a half-written config.
 *   Restarts ShareX automatically.
 
-If anything fails (for example the config is not valid JSON) the original file is left untouched.
+If anything fails (for example the config is not valid JSON) the original file is left untouched. Afterwards `lens_scan status` shows which hotkeys are configured.
 
 **Translate instead of just OCR.** Pass a target language and the hotkey's action gets `-t <lang>`:
 ```bash
-lens_scan --setup-sharex --translate ru     # same as -t ru
+lens_scan sharex --translate ru     # same as -t ru
 ```
 The action's arguments become `-t ru --sharex "$input"`. Run the command again with another language (or none) to change it; the existing `lens` action is updated in place. Language codes may contain only letters, digits, `-` and `_`.
 
 **Other defaults** (proxy, timeout, region, `target_lang`, ...) do not need to be baked into the hotkey: `lens_scan` reads `config.json` and `LENS_*` environment variables on every run, so changing them later needs no ShareX re-setup. See the [configuration table](cli.md#configuration).
 
-**Exit status.** `--setup-sharex` exits `0` on success and `1` if it could not complete.
+**Exit status.** `lens_scan sharex` exits `0` on success and `1` if it could not complete. It exits `64` if the command line itself was wrong, such as a `--mode` other than `program`, `uploader` or `both`.
 
 The action's arguments can include `--daemon off` if you would rather ShareX always ran `lens_scan` cold.
 
@@ -76,7 +78,7 @@ The action's arguments can include `--daemon off` if you would rather ShareX alw
 ## Uploader mode (no process per capture)
 
 ```bash
-lens_scan --setup-sharex --mode uploader          # or --mode both; add -t ru to translate
+lens_scan sharex --mode uploader          # or --mode both; add -t ru to translate
 ```
 
 What it does, in order:
@@ -87,8 +89,8 @@ What it does, in order:
     *   **Windows**: a Startup-folder shortcut runs a small **supervisor** that keeps
         the daemon alive: if the daemon crashes, it is restarted after 1 s, then 2,
         4, ... up to 60 s while it keeps crashing, back to 1 s once it has run for a
-        minute. A deliberate stop (`--daemon-stop`, `--uninstall-service`) exits with
-        code 0 and ends the supervisor too. No console window: `pythonw.exe` for a
+        minute. A deliberate stop (`lens_scan daemon stop`, `lens_scan service stop`,
+        `lens_scan service uninstall`) exits with code 0 and ends the supervisor too. No console window: `pythonw.exe` for a
         Python install, `conhost.exe --headless` for the compiled `lens_scan.exe`.
     *   **macOS**: a LaunchAgent with `KeepAlive`. **Linux**: a `systemd --user` unit
         with `Restart=on-failure`.
@@ -115,17 +117,18 @@ Why a web page cannot use this endpoint and why it needs the token: see
 
 **Troubleshooting uploader mode.** The daemon logs to `daemon.log`, the Windows
 supervisor (crashes and restarts) to `supervisor.log`, both in
-`%LOCALAPPDATA%\chrome-lens-py\`. An error reply is JSON
+`%LOCALAPPDATA%\chrome-lens-py\`; `lens_scan service logs` prints the end of both. An error reply is JSON
 (`{"error": ...}`) and ShareX shows its `error` text. `401` means the token no longer
 matches (run the setup again); `415` means ShareX did not send an image `Content-Type`; a
-connection error means no daemon is listening - `lens_scan --daemon-status`, and meanwhile
+connection error means no daemon is listening - `lens_scan status` shows whether one is
+running and `lens_scan service restart` starts it again, and meanwhile
 **Ctrl + O** still works. You can test the same request without ShareX:
 
 ```bash
 curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: image/png" --data-binary @shot.png "http://127.0.0.1:8765/v1/ocr/raw?translate_to=ru"
 ```
 
-`--uninstall-service` removes the login item and forgets the token; the ShareX uploader
+`lens_scan service uninstall` removes the login item and forgets the token; the ShareX uploader
 then needs the setup run again.
 
 ---
@@ -153,9 +156,11 @@ If the automated setup fails or you want custom settings, follow these steps:
 ---
 
 ## Troubleshooting
+Run `lens_scan status` first. It shows whether the ShareX hotkeys are configured and which keys they use, whether the clipboard extra is installed, and whether the daemon and the login service are up.
+
 If something went wrong with the automated setup, restore the previous configuration by closing ShareX and copying `Documents\ShareX\HotkeysConfig.json.bak-<timestamp>` (and `UploadersConfig.json.bak-<timestamp>`, for uploader mode) over the originals.
 
-If the hotkey runs but nothing lands on the clipboard, `lens_scan` exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra: `pip install "chrome-lens-py[clipboard]"`.
+If the hotkey runs but nothing lands on the clipboard, `lens_scan` exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra (`lens_scan status` reports it): `pip install "chrome-lens-py[clipboard]"`.
 
 If it takes a long time to process and nothing is copied, try unchecking **"Hidden window"** in your ShareX action settings to see the error console. 
 

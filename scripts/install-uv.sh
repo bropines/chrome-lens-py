@@ -78,7 +78,7 @@ printf '\nInstalled to %s\n' "$binary"
 found=$(command -v lens_scan 2>/dev/null || true)
 if [ -n "$found" ] && [ "$found" != "$binary" ]; then
   printf '\033[33mNote: typing '"'"'lens_scan'"'"' runs %s, not the copy just installed.\033[0m\n' "$found"
-  printf '      That one comes earlier on your PATH. Run '"'"'lens_scan --version'"'"' to see which is which.\n'
+  printf '      That one comes earlier on your PATH. Run '"'"'lens_scan version'"'"' to see which is which.\n'
 fi
 printf '\n'
 case ":$PATH:" in
@@ -86,7 +86,7 @@ case ":$PATH:" in
   *) printf '\033[33m%s is not on this shell'"'"'s PATH yet - open a new terminal.\033[0m\n' "$bin_dir" ;;
 esac
 printf '\033[32m  lens_scan image.png -t ru        translate an image\033[0m\n'
-printf '  lens_scan --serve                run as a local daemon\n'
+printf '  lens_scan status                 check what is installed and running\n'
 printf '\n'
-printf '  uv tool upgrade chrome-lens-py   update later\n'
+printf '  lens_scan update                 update later\n'
 printf '  uv tool uninstall chrome-lens-py remove it\n'

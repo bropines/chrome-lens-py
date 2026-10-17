@@ -351,6 +351,47 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return data
 
 
+def describe() -> Dict[str, Any]:
+    """What ShareX currently has of ours, for ``lens_scan status``.
+
+    Reads, never writes. A ShareX that was never started, a config that is not
+    valid JSON and a config with none of our hotkeys all come back the same
+    way - "not configured" - because for the person reading `status` they mean
+    the same thing.
+    """
+    if sys.platform != "win32":
+        return {"supported": False}
+    state: Dict[str, Any] = {
+        "supported": True,
+        "configured": False,
+        "program_hotkey": None,
+        "program_args": None,
+        "program_path": None,
+        "uploader_hotkey": None,
+    }
+    try:
+        sharex_dir = get_documents_path() / "ShareX"
+        state["config_dir"] = str(sharex_dir)
+        config = _load_json(sharex_dir / "HotkeysConfig.json")
+    except (OSError, ValueError):
+        return state
+
+    for hotkey in config.get("Hotkeys") or []:
+        if not isinstance(hotkey, dict):
+            continue
+        info = hotkey.get("HotkeyInfo") or {}
+        task = hotkey.get("TaskSettings") or {}
+        for program in task.get("ExternalPrograms") or []:
+            if isinstance(program, dict) and program.get("Name") == "lens":
+                state["program_hotkey"] = info.get("Hotkey")
+                state["program_args"] = program.get("Args")
+                state["program_path"] = program.get("Path")
+        if task.get("Description") == UPLOADER_HOTKEY_DESCRIPTION:
+            state["uploader_hotkey"] = info.get("Hotkey")
+    state["configured"] = bool(state["program_hotkey"] or state["uploader_hotkey"])
+    return state
+
+
 def setup_sharex(
     mode: str = "program",
     target_lang: Optional[str] = None,

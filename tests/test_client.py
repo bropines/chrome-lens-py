@@ -583,9 +583,9 @@ def test_stop_asks_the_daemon_and_waits_until_it_is_gone(fake, capsys):
 
 
 def test_manage_dispatches_on_the_flag(fake, capsys):
-    assert client.manage(["img.png"]) is None
-    assert client.manage(["--daemon-status"]) == 1
-    assert client.manage(["--daemon-stop", "--daemon-status"]) == 1
+    assert client.legacy_manage(["img.png"]) is None
+    assert client.legacy_manage(["--daemon-status"]) == 1
+    assert client.legacy_manage(["--daemon-stop", "--daemon-status"]) == 1
     assert "cannot be used together" in capsys.readouterr().err
 
 

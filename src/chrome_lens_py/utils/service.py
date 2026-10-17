@@ -1,4 +1,4 @@
-"""Run the persistent daemon at every login: ``--install-service``.
+"""Run the persistent daemon at every login: ``lens_scan service install``.
 
 ShareX's uploader mode posts screenshots to a daemon on a *fixed* port, so that
 daemon has to be there without anyone having run a lens_scan command first.
@@ -31,9 +31,11 @@ from .. import client, runtime
 console = Console()
 logger = logging.getLogger(__name__)
 
-SERVICE_NAME = "chrome-lens-py"
-LAUNCH_AGENT_LABEL = "com.bropines.chrome-lens-py"
-SHORTCUT_NAME = "Chrome Lens OCR daemon.lnk"
+# The names and paths live in runtime.py, where `lens_scan status` can read
+# them without importing rich, this module or anything else heavy.
+SERVICE_NAME = runtime.SERVICE_NAME
+LAUNCH_AGENT_LABEL = runtime.LAUNCH_AGENT_LABEL
+SHORTCUT_NAME = runtime.SHORTCUT_NAME
 
 
 def service_command() -> List[str]:
@@ -52,10 +54,7 @@ def service_command() -> List[str]:
 
 
 def systemd_unit_path() -> str:
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
-        os.path.expanduser("~"), ".config"
-    )
-    return os.path.join(base, "systemd", "user", f"{SERVICE_NAME}.service")
+    return runtime.login_item_path()
 
 
 def _systemd_quote(arg: str) -> str:
@@ -189,7 +188,7 @@ def _run(cmd: List[str]) -> bool:
     return True
 
 
-def _start_supervised_now() -> None:
+def _start_supervised_now() -> bool:
     """Replace whatever daemon runs with the supervised service one, now."""
     info = client.live_daemon()
     if info is not None:
@@ -198,12 +197,101 @@ def _start_supervised_now() -> None:
         console.print(
             "[yellow]Could not start it now; it starts at next login.[/yellow]"
         )
-        return
+        return False
     if client.wait_for_daemon() is None:
         console.print(
             "[yellow]The daemon did not answer yet; see "
-            f"{escape(os.path.join(runtime.data_dir(), runtime.LOG_FILE))}.[/yellow]"
+            f"{escape(runtime.log_file())}.[/yellow]"
         )
+        return False
+    return True
+
+
+# ------------------------------------------------------- start / stop / restart
+
+
+def control(action: str) -> bool:
+    """``lens_scan service start|stop|restart``.
+
+    Where the platform has a manager, the manager is asked. Stopping a daemon
+    that launchd or systemd is watching only makes it start the thing again a
+    second later, so "stop" has to mean "stop supervising it" - which is what
+    ``launchctl bootout`` and ``systemctl --user stop`` do, while leaving the
+    login item in place for the next login.
+    """
+    if not os.path.isfile(runtime.login_item_path()) and action != "stop":
+        console.print(
+            "[yellow]No service is installed.[/yellow] Run "
+            "[cyan]lens_scan service install[/cyan] first."
+        )
+        return False
+    if sys.platform == "win32":
+        return _control_windows(action)
+    if sys.platform == "darwin":
+        return _control_launchd(action)
+    return _control_systemd(action)
+
+
+def _control_windows(action: str) -> bool:
+    """The supervisor is the service here: stopping the daemon ends it too.
+
+    `runtime.supervise` treats exit code 0 as a deliberate stop and does not
+    restart, which is exactly what a shutdown request gives it.
+    """
+    if action in ("stop", "restart"):
+        info = client.live_daemon()
+        if info is None:
+            if action == "stop":
+                console.print("lens_scan service: not running")
+                return True
+        elif not client.shutdown(info):
+            console.print("[red]The daemon did not stop in time.[/red]")
+            return False
+        if action == "stop":
+            console.print("lens_scan service: stopped")
+            return True
+    if action == "start":
+        info = client.live_daemon()
+        if info is not None and client._responsive(info):
+            console.print(f"lens_scan service: already running (pid {info['pid']})")
+            return True
+    if not _start_supervised_now():
+        return False
+    console.print(
+        f"lens_scan service: {'started' if action == 'start' else 'restarted'}"
+    )
+    return True
+
+
+def _control_launchd(action: str) -> bool:
+    domain = f"gui/{os.getuid()}"
+    target = f"{domain}/{LAUNCH_AGENT_LABEL}"
+    path = launch_agent_path()
+    if action == "stop":
+        if not os.path.isfile(path):
+            console.print("lens_scan service: not installed")
+            return True
+        ok = _run(["launchctl", "bootout", target])
+        if ok:
+            console.print("lens_scan service: stopped (it starts again at login)")
+        return ok
+    if action == "restart" and _run(["launchctl", "kickstart", "-k", target]):
+        console.print("lens_scan service: restarted")
+        return True
+    # Not loaded yet (after a logout, or a plist written while booted out).
+    _run(["launchctl", "bootout", domain, path])
+    if not _run(["launchctl", "bootstrap", domain, path]):
+        return False
+    console.print(f"lens_scan service: {action}ed")
+    return True
+
+
+def _control_systemd(action: str) -> bool:
+    unit = f"{SERVICE_NAME}.service"
+    if not _run(["systemctl", "--user", action, unit]):
+        return False
+    console.print(f"lens_scan service: {action} requested ({unit})")
+    return True
 
 
 def install_service(port: Optional[int] = None) -> bool:

@@ -250,5 +250,6 @@ if (($userPath -split ';') -notcontains $InstallDir) {
 Write-Host ''
 Write-Host "Installed $tag ($flavor build) to $InstallDir" -ForegroundColor Green
 Write-Host '  lens_scan image.png -t ru        translate an image'
-Write-Host '  lens_scan --setup-sharex         wire it into ShareX'
-Write-Host '  lens_scan --serve                run as a local daemon'
+Write-Host '  lens_scan sharex                 wire it into ShareX'
+Write-Host '  lens_scan status                 check what is installed and running'
+Write-Host '  lens_scan update                 update later'

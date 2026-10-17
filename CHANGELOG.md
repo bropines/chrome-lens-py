@@ -7,6 +7,69 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-10-17
+
+### Highlights
+
+- **Commands.** The half of `lens_scan` that manages the program rather than
+  reading an image has verbs now: `lens_scan status`, `daemon
+  status|start|stop|restart|logs`, `service
+  install|uninstall|status|start|stop|restart|logs`, `sharex`, `update`,
+  `config show|path`, `serve`, `version`, `help`. They were flags
+  (`--daemon-status`, `--install-service`, `--setup-sharex`) that looked like
+  options but behaved like commands - they ignore the image, they ignore each
+  other, and `--help` buried them among sixty other lines. Every old flag
+  still works: ShareX configurations, Startup shortcuts, LaunchAgents and
+  systemd units written by earlier versions contain them.
+- **`lens_scan status`** answers "is this working?" on one screen: the version
+  and how this copy was installed, the daemon, the login service, the ShareX
+  hotkeys, the clipboard extra, the config file. It asks nothing of the
+  network, and exits 1 when something is actually wrong - a login service with
+  no daemon behind it, or a daemon that stopped answering.
+- **`lens_scan update`** updates this copy the way it was installed: `uv tool
+  upgrade --refresh`, `pipx upgrade`, `brew upgrade`, `scoop update`, `pip
+  install -U`, or the install script that put a standalone build here. Running
+  the wrong one of those is worse than running none, so it works out which
+  install it belongs to first; a git checkout, a Docker image or a
+  hand-unzipped archive gets a printed instruction instead of a guess. A
+  running daemon is stopped before and put back afterwards.
+- **`lens_scan -h` is short again** - the commands and the dozen options people
+  use - and `lens_scan help options` prints the full reference. `lens_scan help
+  <command>` explains one command.
+
+### Features
+
+- Anything that reports takes `--json`: `status`, `daemon status`, `service
+  status`, `config show`, `version`, `update`. The human output and the JSON
+  are rendered from the same data, so they cannot disagree.
+- `lens_scan config show` lists every setting with its value and the layer that
+  decided it (command line > config file > `LENS_*` > default), which is the
+  first thing to look at when a setting "does not work". `config path` prints
+  where the file is. Also available as `--show-config`.
+- `lens_scan daemon logs` and `lens_scan service logs [--lines N]` print the end
+  of the daemon and supervisor logs, instead of leaving you to find them.
+- `lens_scan service start|stop|restart` go through the platform's own manager
+  (the Windows supervisor, `launchctl`, `systemctl --user`), because a daemon
+  that launchd or systemd watches would be started again a second after being
+  killed.
+- `lens_scan daemon restart` replaces the stop-then-start pair, and does not
+  start a second daemon if the first one would not stop.
+
+### Changed
+
+- **A wrong command line now exits 64** (`EX_USAGE` from `sysexits.h`) instead
+  of 1 or argparse's 2. 2 is this CLI's "some images of several failed", so a
+  caller could not tell a typo from a half-finished batch. Unknown options, a
+  malformed `--region`, two output formats at once, a command used wrongly and
+  `--serve` on a public address without `--token` are all 64 now.
+- A command whose name matches a file still runs as a command, as in git,
+  docker and cargo; `lens_scan ./status` scans the file.
+- The commands run in your own process, before the client looks for a daemon,
+  and the whole command layer is standard-library-only - so a scan pays nothing
+  for it and `lens_scan status` answers in milliseconds.
+- The README leads with one install command per platform; everything else moved
+  to `docs/install.md`, which now has an "Updating" section.
+
 ## [3.7.1] - 2026-10-17
 
 ### Bug Fixes
@@ -197,7 +260,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...HEAD
+[3.8.0]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...v3.8.0
 [3.7.1]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/bropines/chrome-lens-py/compare/v3.5.3...v3.6.0

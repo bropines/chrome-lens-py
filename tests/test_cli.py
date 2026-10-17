@@ -154,10 +154,13 @@ def test_unsupported_source_exits_one(tmp_path, capsys):
     assert out == "" and "not a valid" in err
 
 
-def test_missing_image_source_exits_one_and_help_goes_to_stderr(capsys):
-    assert run([]) == 1
+def test_missing_image_source_is_a_usage_error_with_help_on_stderr(capsys):
+    assert run([]) == 64
     out, err = capsys.readouterr()
-    assert out == "" and "--translate" in err
+    # The short help, not the sixty-line reference: commands and the options
+    # most people want. stdout stays empty, so a pipe gets no stray text.
+    assert out == ""
+    assert "--translate" in err and "Commands:" in err and "status" in err
 
 
 def test_clipboard_failure_is_a_failure(images, monkeypatch, capsys):
@@ -287,10 +290,25 @@ def test_format_tsv(images, capsys):
     assert rows[0][0] == "level" and rows[-1][-1] == "hello"
 
 
+def test_a_wrong_command_line_exits_64_and_says_where_to_look(capsys):
+    """One code for "you typed it wrong", whoever noticed: argparse or us."""
+    with pytest.raises(SystemExit) as stop:
+        cli.build_parser().parse_args(["--fromat", "json"])
+    assert stop.value.code == 64
+    assert "lens_scan -h" in capsys.readouterr().err
+
+
+def test_a_malformed_region_is_a_usage_error(images, capsys):
+    assert run([images[0], "--region", "0.5,0.5"]) == 64
+    assert "four numbers" in capsys.readouterr().err
+
+
 def test_format_cannot_be_combined_with_other_modes(images, capsys):
-    assert run([images[0], "--format", "json", "--get-coords"]) == 1
+    # 64, not 1: two output formats at once is a wrong command line, and a
+    # caller should be able to tell that from an image that failed to read.
+    assert run([images[0], "--format", "json", "--get-coords"]) == 64
     assert "cannot be used together" in capsys.readouterr().err
-    assert run([images[0], "--oneline", "-b"]) == 1
+    assert run([images[0], "--oneline", "-b"]) == 64
 
 
 def test_sharex_copies_ocr_text_from_a_detailed_format(images, monkeypatch, capsys):
@@ -411,7 +429,7 @@ def test_serve_uses_the_merged_settings(tmp_path, monkeypatch):
 
 
 def test_serve_refuses_a_public_bind_without_a_token(capsys):
-    assert run(["--serve", "--host", "0.0.0.0"]) == 1
+    assert run(["--serve", "--host", "0.0.0.0"]) == 64
     assert "--token" in capsys.readouterr().err
 
 

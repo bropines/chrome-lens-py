@@ -43,8 +43,8 @@ curl -fsSL {RAW}/install.sh | sh
 `pip install chrome-lens-py`. **Daemon in Docker**:
 `docker run -d -p 127.0.0.1:8765:8765 -e LENS_TOKEN=change-me ghcr.io/{REPO}:@VERSION@`.
 
-Already installed? `brew upgrade lens-scan`, `uv tool upgrade chrome-lens-py`,
-`scoop update lens-scan`, or re-run the installer.
+Already installed? **`lens_scan update`** - it updates the copy you have the
+way it was installed. `lens_scan status` shows what you have.
 """
 
 ASSETS = f"""## Which file do I need?

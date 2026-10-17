@@ -58,6 +58,7 @@ LOCAL_ONLY_LONG = (
     "--help",
     "--install-service",
     "--uninstall-service",
+    "--show-config",
 )
 LOCAL_ONLY_SHORT = ("-V", "-h")
 MANAGE_FLAGS = ("--daemon-status", "--daemon-stop", "--daemon-start")
@@ -112,6 +113,11 @@ def _config_path(argv) -> str:
         os.path.expanduser("~"), ".config"
     )
     return os.path.join(base, "chrome-lens-py", "config.json")
+
+
+def config_path(argv=()) -> str:
+    """The config file this command line would read (same rule as the CLI's)."""
+    return _config_path(list(argv))
 
 
 def _normalise_mode(value):
@@ -473,44 +479,49 @@ def try_remote(argv):
 # ------------------------------------------------------------------ management
 
 
-def _duration(seconds: float) -> str:
-    seconds = int(max(0, seconds))
-    hours, rest = divmod(seconds, 3600)
-    minutes, secs = divmod(rest, 60)
-    if hours:
-        return f"{hours}h {minutes:02d}m {secs:02d}s"
-    if minutes:
-        return f"{minutes}m {secs:02d}s"
-    return f"{secs}s"
+def daemon_report() -> dict:
+    """What the daemon is doing, as data. One shape, three states.
+
+    ``state`` is ``"running"``, ``"stopped"``, or ``"unresponsive"`` - recorded
+    in daemon.json but not answering, which is what a killed daemon or a
+    half-started one looks like. Both the human output and ``--json`` are
+    rendered from this, so they can never disagree.
+    """
+    info = live_daemon()
+    if info is None:
+        return {"state": "stopped"}
+    base = {
+        "pid": info["pid"],
+        "version": info["version"],
+        "transport": info["transport"],
+        "address": info["address"],
+        "managed": info.get("managed"),
+    }
+    try:
+        status, reply = call(info, "GET", "/v1/status", timeout=CONTROL_TIMEOUT)
+    except _Unavailable as e:
+        return dict(base, state="unresponsive", error=str(e))
+    if status != 200 or not isinstance(reply, dict):
+        return dict(base, state="unresponsive", error=f"unexpected reply ({status})")
+    return dict(
+        base,
+        state="running",
+        pid=reply.get("pid", info["pid"]),
+        version=reply.get("version", info["version"]),
+        uptime=reply.get("uptime", 0),
+        requests=reply.get("requests", 0),
+        idle_timeout=reply.get("idle_timeout") or 0,
+        idle_remaining=reply.get("idle_remaining"),
+    )
 
 
 def daemon_status() -> int:
     """Print what the daemon is doing. Exit 0 if running, 1 if not."""
-    info = live_daemon()
-    if info is None:
-        print("lens_scan daemon: not running")
-        return 1
-    try:
-        status, reply = call(info, "GET", "/v1/status", timeout=CONTROL_TIMEOUT)
-    except _Unavailable as e:
-        print(f"lens_scan daemon: recorded (pid {info['pid']}) but not answering: {e}")
-        return 1
-    if status != 200 or not isinstance(reply, dict):
-        print(f"lens_scan daemon: unexpected reply ({status})")
-        return 1
-    idle_timeout = reply.get("idle_timeout") or 0
-    idle_left = reply.get("idle_remaining")
-    print("lens_scan daemon: running")
-    print(f"  pid        {reply.get('pid', info['pid'])}")
-    print(f"  version    {reply.get('version', info['version'])}")
-    print(f"  transport  {info['transport']} {info['address']}")
-    print(f"  uptime     {_duration(reply.get('uptime', 0))}")
-    print(f"  requests   {reply.get('requests', 0)}")
-    if idle_timeout and idle_left is not None:
-        print(f"  idle       exits in {_duration(idle_left)} (timeout {idle_timeout}s)")
-    else:
-        print("  idle       never exits on its own")
-    return 0
+    from . import manage
+
+    report = daemon_report()
+    manage.print_daemon(report)
+    return 0 if report["state"] == "running" else 1
 
 
 def daemon_stop() -> int:
@@ -546,8 +557,13 @@ def daemon_start(idle_timeout: int = DEFAULT_IDLE_TIMEOUT) -> int:
     return 0
 
 
-def manage(argv):
-    """Handle --daemon-status/-stop/-start. Returns an exit code, or None if absent."""
+def legacy_manage(argv):
+    """Handle --daemon-status/-stop/-start. Returns an exit code, or None if absent.
+
+    The flags `lens_scan daemon status|start|stop` replaced in 3.8. They stay
+    because they are written into ShareX configurations and login items that
+    were set up by earlier versions.
+    """
     chosen = [f for f in MANAGE_FLAGS if f in argv]
     if not chosen:
         return None
@@ -573,8 +589,24 @@ def entry(argv=None) -> None:
         if runtime.should_respawn_direct():
             sys.exit(0 if runtime.spawn_detached([runtime.SUPERVISE_FLAG]) else 1)
         sys.exit(runtime.supervise())
+
+    # `lens_scan status`, `daemon restart`, `update`, ... - the commands that
+    # manage this program rather than read an image. Routed before anything
+    # else so they neither reach the daemon nor pay for the heavy imports.
+    from . import manage
+
+    routed = manage.route(argv)
+    if routed is not None:
+        what, value = routed
+        if what == "exit":
+            sys.exit(value)
+        argv = list(value)
+        # Downstream (print_help, the parser, run()) reads sys.argv, so the
+        # rewritten command line has to be the real one from here on.
+        sys.argv[1:] = argv
+
     try:
-        managed = manage(argv)
+        managed = legacy_manage(argv)
         if managed is not None:
             sys.exit(managed)
         code = try_remote(argv)

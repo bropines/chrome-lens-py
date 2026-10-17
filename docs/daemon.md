@@ -34,7 +34,7 @@ Measured on Windows 11 and Python 3.13 against the real API through a local prox
 
 Correctness never depends on the daemon. If anything is off, the client silently runs the command in-process instead: no daemon, a stale file, a version mismatch, a refused or dropped connection (even mid-request), a reply that does not parse, a timeout. A daemon of a different version is asked to exit and is replaced. Several first calls at once start one daemon (a lock file), not several.
 
-The daemon runs the same CLI code, with the client's working directory (so relative paths work), the client's `LENS_*` variables and config file, and `--sharex` copying to the clipboard of your session. These never run in the daemon: `--help`, `--version`, `--setup-sharex`, `--update-config`, `--serve`, the service and daemon commands, and any command line that argparse would reject. They run in your own process and behave exactly as without a daemon.
+The daemon runs the same CLI code, with the client's working directory (so relative paths work), the client's `LENS_*` variables and config file, and `--sharex` copying to the clipboard of your session. These never run in the daemon: `--help`, `--version`, `--show-config`, `--update-config`, `--serve`, and any command line that argparse would reject. They run in your own process and behave exactly as without a daemon. The commands (`status`, `daemon`, `service`, `sharex`, `update`, `config`, `serve`, `version`, `help`) and the old flags they replaced (`--daemon-status`, `--setup-sharex` and the rest) never run in the daemon either; `lens_scan` handles them in your own process before it looks for one.
 
 ## Controlling the daemon
 
@@ -45,13 +45,17 @@ export LENS_DAEMON=off                  # this shell or CI job
 lens_scan img.png --daemon on           # wait up to 5 s for a starting daemon
                                         # instead of running in-process
 
-lens_scan --daemon-status               # pid, version, uptime, transport, requests, idle time left
-lens_scan --daemon-stop
-lens_scan --daemon-start                # normally unnecessary
+lens_scan daemon status                 # pid, version, uptime, transport, requests, idle time left
+lens_scan daemon stop
+lens_scan daemon start                  # normally unnecessary
+lens_scan daemon restart                # stop, then start
+lens_scan daemon logs --lines 100       # the end of daemon.log (default 40 lines)
 
-lens_scan --daemon-idle-timeout 3600 img.png    # longer-lived daemon
-lens_scan --daemon-idle-timeout 0 img.png       # never exits on its own
+lens_scan daemon start --idle-timeout 3600     # longer-lived daemon
+lens_scan --daemon-idle-timeout 0 img.png      # never exits on its own
 ```
+
+`daemon status` exits 0 when a daemon is running and 1 when not, like `systemctl is-active`, and `--json` gives the same facts as an object. A daemon that is recorded in `daemon.json` but does not answer (a killed or half-started one) is reported as such rather than as running. `lens_scan status` shows the daemon next to the login service, ShareX and the config file on one screen.
 
 To keep the automatic daemon alive for good, set `daemon_idle_timeout` to `0` in `config.json` or `LENS_DAEMON_IDLE_TIMEOUT=0`.
 
@@ -59,7 +63,7 @@ Use `LENS_DAEMON=off` in CI and containers, where a process that outlives the jo
 
 Things to know:
 
-- The client forwards `LENS_*` variables and a few rendering variables (`NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, `TERM`, `XDG_CONFIG_HOME`). It does **not** forward `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY`: the daemon reads those from the environment it was started in. After changing them run `lens_scan --daemon-stop`, or set `proxy` / `LENS_PROXY`, which are forwarded.
+- The client forwards `LENS_*` variables and a few rendering variables (`NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, `TERM`, `XDG_CONFIG_HOME`). It does **not** forward `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY`: the daemon reads those from the environment it was started in. After changing them run `lens_scan daemon restart`, or set `proxy` / `LENS_PROXY`, which are forwarded.
 - `-l DEBUG` in a forwarded run shows this package's debug log, not httpx's.
 - There is one daemon per user. It keeps one HTTP/2 connection per distinct combination of API key, proxy, timeout, region and the other connection settings.
 
@@ -72,15 +76,16 @@ Things to know:
 | directory / file mode | per-user ACL inherited from `%LOCALAPPDATA%` | `0700` / `0600` | `0700` / `0600` |
 | log and `service.json` | the state directory | the state directory | `~/.cache/chrome-lens-py/` (the runtime directory vanishes at logout) |
 
-`daemon.json` in the state directory holds `{version, pid, transport, address, token, started_at}`. It is written atomically and is how a client finds the daemon. The log is `daemon.log`. Override the state directory with `LENS_STATE_DIR`.
+`daemon.json` in the state directory holds `{version, pid, transport, address, token, started_at}`. It is written atomically and is how a client finds the daemon. The log is `daemon.log`. Override the state directory with `LENS_STATE_DIR`. `lens_scan status` prints the one in use, and `lens_scan daemon logs` shows the end of the log without you having to find it.
 
 ## Running it as a login service
 
-The ShareX uploader mode needs a daemon that is always there, on a fixed port. `--install-service` sets that up:
+The ShareX uploader mode needs a daemon that is always there, on a fixed port. `service install` sets that up:
 
 ```bash
-lens_scan --install-service              # port from --port / daemon_port, default 8765
-lens_scan --uninstall-service
+lens_scan service install                # port from --port / daemon_port, default 8765
+lens_scan service uninstall
+lens_scan service status                 # installed? running? on which port?
 ```
 
 | OS | What is installed |
@@ -91,17 +96,34 @@ lens_scan --uninstall-service
 
 The service daemon has a token that survives restarts (`service.json`) and is never stopped for being idle.
 
-The Windows supervisor restarts a crashed daemon after 1 s, then 2, 4, and so on up to 60 s while it keeps crashing. A daemon that stayed up for a minute resets the delay to 1 s. A deliberate stop (`--daemon-stop`, `--uninstall-service`) exits with code 0 and ends the supervisor too. Its log is `supervisor.log` next to `daemon.log`.
+The Windows supervisor restarts a crashed daemon after 1 s, then 2, 4, and so on up to 60 s while it keeps crashing. A daemon that stayed up for a minute resets the delay to 1 s. A deliberate stop (`daemon stop`, `service stop`, `service uninstall`) exits with code 0 and ends the supervisor too. Its log is `supervisor.log` next to `daemon.log`.
 
-`lens_scan --setup-sharex --mode uploader` and `--mode both` install this service for you, see [sharex.md](sharex.md).
+`lens_scan sharex --mode uploader` and `--mode both` install this service for you, see [sharex.md](sharex.md).
+
+### Starting and stopping it
+
+```bash
+lens_scan service start | stop | restart
+lens_scan service logs --lines 100       # supervisor.log (Windows) and daemon.log
+```
+
+`service status` exits 0 when the service is installed and a daemon is running, and 1 otherwise; `--json` prints the service and the daemon as one object. `service start`, `stop` and `restart` go through the platform's own manager, because a daemon that launchd or systemd watches would simply be started again a second after you killed it:
+
+| OS | Goes through |
+|---|---|
+| Windows | The supervisor. `stop` ends the daemon and the supervisor with it; `start` and `restart` launch the supervisor again. |
+| macOS | `launchctl bootout` (stop), `bootstrap` (start), `kickstart -k` (restart). |
+| Linux | `systemctl --user start`, `stop` or `restart` on the unit. |
+
+On macOS and Linux `service stop` stops it for this session only. The login item stays, so the service comes back at the next login; `service uninstall` is what removes it. On Windows the Startup shortcut does the same.
 
 ## HTTP API
 
-`lens_scan --serve` runs a plain HTTP server in the foreground, for your own programs. Importing Pillow, protobuf and httpx costs about a second; if something calls `lens_scan` repeatedly, run the server and pay that once.
+`lens_scan serve` runs a plain HTTP server in the foreground, for your own programs. Importing Pillow, protobuf and httpx costs about a second; if something calls `lens_scan` repeatedly, run the server and pay that once.
 
 ```bash
-lens_scan --serve                      # http://127.0.0.1:8765
-lens_scan --serve --port 9000 --token secret
+lens_scan serve                        # http://127.0.0.1:8765
+lens_scan serve --port 9000 --token secret
 ```
 
 | Route | Body |
@@ -125,7 +147,7 @@ curl -X POST -H "Authorization: Bearer secret" -H "Content-Type: image/png" \
 
 ### The managed daemon
 
-The background daemon of fast mode is the same server, started with `--serve --auto`, and adds three routes. They all need the token and exist only on a local listener:
+The background daemon of fast mode is the same server, started with `--serve --auto` (this is what `daemon start` runs), and adds three routes. They all need the token and exist only on a local listener:
 
 | Route | Purpose |
 |---|---|
@@ -145,10 +167,10 @@ The server holds an API key and will call Google for anyone who reaches it, so t
 
 ```bash
 # let one page you control use it
-lens_scan --serve --allow-origin https://yoursite.example
+lens_scan serve --allow-origin https://yoursite.example
 
 # on the network: token required, pixels only
-lens_scan --serve --host 0.0.0.0 --token "$(openssl rand -hex 24)"
+lens_scan serve --host 0.0.0.0 --token "$(openssl rand -hex 24)"
 ```
 
 The Tampermonkey userscript does **not** need any of this. It talks to Google directly through `GM_xmlhttpRequest`, which is not subject to CORS. Opening the server to a browser origin is only for pages you write yourself.

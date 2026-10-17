@@ -11,6 +11,7 @@
 - [Scoop](#scoop)
 - [pip](#pip)
 - [Docker](#docker)
+- [Updating](#updating)
 - [Verifying a download](#verifying-a-download)
 - [Which copy is running](#which-copy-is-running)
 
@@ -18,12 +19,14 @@
 
 | | Needs Python? | Install | Update with |
 |---|---|---|---|
-| [Homebrew](#homebrew) (macOS, Linux) | no | `brew install bropines/tap/lens-scan` | `brew upgrade lens-scan` |
-| [uv](#uv) | no, uv fetches one | `install-uv.ps1` / `install-uv.sh` | `uv tool upgrade chrome-lens-py` |
-| [Standalone](#standalone-build) | no | `install.ps1` / `install.sh` | re-run the installer |
-| [Scoop](#scoop) (Windows) | no | `scoop install lens-scan` | `scoop update lens-scan` |
-| [pip](#pip) | yes, your own (3.9+) | `pip install chrome-lens-py` | `pip install -U chrome-lens-py` |
-| [Docker](#docker) | no | `docker run ... ghcr.io/bropines/chrome-lens-py` | `docker pull` |
+| [Homebrew](#homebrew) (macOS, Linux) | no | `brew install bropines/tap/lens-scan` | `lens_scan update` |
+| [uv](#uv) | no, uv fetches one | `install-uv.ps1` / `install-uv.sh` | `lens_scan update` |
+| [Standalone](#standalone-build) | no | `install.ps1` / `install.sh` | `lens_scan update` |
+| [Scoop](#scoop) (Windows) | no | `scoop install lens-scan` | `lens_scan update` |
+| [pip](#pip) | yes, your own (3.9+) | `pip install chrome-lens-py` | `lens_scan update` |
+| [Docker](#docker) | no | `docker run ... ghcr.io/bropines/chrome-lens-py` | `docker pull`; `lens_scan update` says so |
+
+`lens_scan update` works out which of these installed the copy you are running and runs that one's own upgrade; see [Updating](#updating).
 
 Startup time and download size (Windows, `--help` only, median of six runs):
 
@@ -62,7 +65,7 @@ With uv already installed you can skip the script:
 
 ```bash
 uv tool install "chrome-lens-py[clipboard]"      # pipx install works too
-uv tool upgrade chrome-lens-py
+lens_scan update                                  # runs: uv tool upgrade --refresh chrome-lens-py
 uv tool uninstall chrome-lens-py
 ```
 
@@ -85,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/bropines/chrome-lens-py/main/script
 | Windows | `%LOCALAPPDATA%\Programs\lens-scan`, added to the user PATH |
 | Linux, macOS | `~/.local/share/lens-scan` (or `$XDG_DATA_HOME/lens-scan`), linked into `~/.local/bin` |
 
-Re-running the installer replaces the existing install. It unpacks into a staging folder first, so a download that fails verification leaves the old install untouched.
+Re-running the installer replaces the existing install, and that is what `lens_scan update` does for this build. It unpacks into a staging folder first, so a download that fails verification leaves the old install untouched.
 
 **Pin a version** with `LENS_SCAN_VERSION` (`3.6.0` or `v3.6.0`):
 
@@ -157,6 +160,31 @@ Tags: `latest`, the full version (`3.7.0`) and `major.minor` (`3.7`). The image 
 - Extra `docker run` arguments are appended to `lens_scan`, for example `--allow-origin https://yoursite.example`.
 - The container runs as a non-root user and has a health check on `/health`.
 
+## Updating
+
+```bash
+lens_scan update             # update this copy the way it was installed
+lens_scan update --check     # only say whether a newer release exists
+lens_scan update --dry-run   # print the command it would run, and stop
+```
+
+Every install method has its own idea of what an update is, and running the wrong one leaves two copies with the wrong one first on PATH: `pip install -U` over a Homebrew install, or an installer script over a uv tool. So `lens_scan update` first works out which install it belongs to and then runs that one's own command. The command is always printed before it runs.
+
+| Installed with | `lens_scan update` runs |
+|---|---|
+| uv tool | `uv tool upgrade --refresh chrome-lens-py` (`--refresh` because uv caches the package index for ten minutes, long enough to miss a release that has just gone out) |
+| pipx | `pipx upgrade chrome-lens-py` |
+| Homebrew | `brew upgrade bropines/tap/lens-scan` |
+| Scoop | `scoop update <app>`, where `<app>` is `lens-scan` or `lens-scan-portable`, whichever you have |
+| Standalone build from `install.ps1` / `install.sh` | the install script again. On Windows it opens in a new console window, because Windows will not let a program replace its own running `.exe`; the window stays open so you can read it. |
+| pip | `pip install --upgrade chrome-lens-py`, with the `[clipboard]` extra only if `pyperclip` is already installed |
+
+Three kinds of copy are not updated for you, because there is nothing safe to run. `lens_scan update` prints what to do instead: `git pull` for a git checkout, `docker pull ghcr.io/bropines/chrome-lens-py` and recreating the container for a Docker image, and downloading the archive from the [releases page](https://github.com/bropines/chrome-lens-py/releases/latest) and unzipping it over the folder for a standalone build you unpacked by hand.
+
+`--check` compares the version you have with the newest release on PyPI and changes nothing. PyPI answers for every channel, since uv, pip, Homebrew, Scoop and the install scripts are all published from the same release. `--json` does the same and prints the result for a script (it never updates). Run without either, `lens_scan update` on a copy that is already current reinstalls it, and says so first.
+
+A running [daemon](daemon.md) holds the files being replaced, so it is stopped before the update. If the [login service](daemon.md#running-it-as-a-login-service) owns it, the service is restarted afterwards; if it was just the on-demand daemon, it is started again. If the update command fails, the daemon is started again as it was.
+
 ## Verifying a download
 
 Every release publishes a `.sha256` next to each archive, and the installers check it before unpacking. To check one by hand:
@@ -178,7 +206,10 @@ gh attestation verify lens_scan-linux-amd64.zip --repo bropines/chrome-lens-py
 A pip install, a `uv tool` install, an editable checkout and a standalone build can all own the name `lens_scan`, and the one earlier on your PATH wins. The uv installers warn when they notice this. To be sure:
 
 ```bash
-lens_scan --version
+lens_scan status
+lens_scan version
 ```
 
-It prints the version, the kind of copy (installed package, source checkout or standalone build), the interpreter and package paths, and whether the clipboard extra is available.
+`status` is the first thing to run when something does not work. It fits on one screen: the version and how this copy was installed (uv tool, Homebrew, standalone build and so on), whether the [daemon](daemon.md) is running, whether the login service is installed, whether the ShareX hotkeys are set up, whether the clipboard extra is there, and which config file is in effect. `lens_scan status --json` gives the same for a script. It exits `1` when something is actually wrong, for example a login service with no daemon behind it; a machine with no daemon running is fine, because one starts on the next scan.
+
+`version` prints the version, the kind of copy (installed package, source checkout or standalone build), the interpreter and package paths, and whether the clipboard extra is available. `lens_scan --version` prints the same.

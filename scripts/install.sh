@@ -175,4 +175,5 @@ case ":$PATH:" in
      printf '  export PATH="%s:$PATH"\n' "$BIN_DIR" ;;
 esac
 printf '  lens_scan image.png -t ru        translate an image\n'
-printf '  lens_scan --serve                run as a local daemon\n'
+printf '  lens_scan status                 check what is installed and running\n'
+printf '  lens_scan update                 update later\n'

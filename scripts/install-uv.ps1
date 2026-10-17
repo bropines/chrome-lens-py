@@ -88,12 +88,12 @@ $found = (Get-Command lens_scan -ErrorAction SilentlyContinue).Source
 if ($found -and $found -ne $exe) {
     Write-Host ''
     Write-Host "Note: typing 'lens_scan' runs $found, not the copy just installed." -ForegroundColor Yellow
-    Write-Host "      That one comes earlier on your PATH. Run 'lens_scan --version' to see which is which."
+    Write-Host "      That one comes earlier on your PATH. Run 'lens_scan version' to see which is which."
 }
 Write-Host ''
 Write-Host '  lens_scan image.png -t ru        translate an image' -ForegroundColor Green
-Write-Host '  lens_scan --setup-sharex         wire it into ShareX'
-Write-Host '  lens_scan --serve                run as a local daemon'
+Write-Host '  lens_scan sharex                 wire it into ShareX'
+Write-Host '  lens_scan status                 check what is installed and running'
 Write-Host ''
-Write-Host '  uv tool upgrade chrome-lens-py   update later'
+Write-Host '  lens_scan update                 update later'
 Write-Host '  uv tool uninstall chrome-lens-py remove it'

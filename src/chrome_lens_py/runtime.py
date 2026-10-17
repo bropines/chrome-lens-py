@@ -105,6 +105,58 @@ def daemon_file() -> str:
     return os.path.join(state_dir(), DAEMON_FILE)
 
 
+def service_file() -> str:
+    return os.path.join(data_dir(), SERVICE_FILE)
+
+
+def log_file() -> str:
+    return os.path.join(data_dir(), LOG_FILE)
+
+
+def supervisor_log_file() -> str:
+    return os.path.join(data_dir(), SUPERVISOR_LOG_FILE)
+
+
+# What starts the daemon at login, per platform. The files are written by
+# utils/service.py; the paths live here because `lens_scan status` reports them
+# and must not import anything heavy to do it.
+SERVICE_NAME = "chrome-lens-py"
+LAUNCH_AGENT_LABEL = "com.bropines.chrome-lens-py"
+SHORTCUT_NAME = "Chrome Lens OCR daemon.lnk"
+
+
+def login_item_kind() -> str:
+    """What this platform uses to start the daemon at login, in words."""
+    if _IS_WINDOWS:
+        return "Startup shortcut"
+    if sys.platform == "darwin":
+        return "LaunchAgent"
+    return "systemd --user unit"
+
+
+def login_item_path() -> str:
+    """The file that makes the daemon start at login (whether or not it exists)."""
+    if _IS_WINDOWS:
+        appdata = os.environ.get("APPDATA") or os.path.join(
+            _home(), "AppData", "Roaming"
+        )
+        return os.path.join(
+            appdata,
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            "Startup",
+            SHORTCUT_NAME,
+        )
+    if sys.platform == "darwin":
+        return os.path.join(
+            _home(), "Library", "LaunchAgents", f"{LAUNCH_AGENT_LABEL}.plist"
+        )
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(_home(), ".config")
+    return os.path.join(base, "systemd", "user", f"{SERVICE_NAME}.service")
+
+
 def ensure_private_dir(path: str) -> None:
     """Create `path` (and parents) readable by this user only, where that exists.
 
@@ -180,6 +232,18 @@ def read_daemon():
     ):
         return None
     return data
+
+
+def read_service():
+    """service.json (the persistent daemon's port and token), or None.
+
+    ``daemon.read_service_config`` is the same thing for code that has already
+    paid for the heavy imports; this one is for the client and ``status``.
+    """
+    data = read_json(service_file())
+    if not data or not isinstance(data.get("port"), int):
+        return None
+    return data if isinstance(data.get("token"), str) else None
 
 
 def remove_daemon_file(token=None) -> None:

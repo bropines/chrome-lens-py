@@ -249,8 +249,8 @@ async def run_managed_daemon(
         if config is None:
             runtime.release_spawn_lock()
             raise LensConfigError(
-                "No service configuration. Run `lens_scan --setup-sharex --mode "
-                "uploader` or `lens_scan --install-service` first."
+                "No service configuration. Run `lens_scan service install` "
+                "(or `lens_scan sharex --mode uploader`) first."
             )
         token, port = config["token"], port_override or config["port"]
     else:
