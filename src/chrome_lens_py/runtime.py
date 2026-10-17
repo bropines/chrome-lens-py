@@ -302,6 +302,35 @@ def _isolated() -> bool:
     return bool(sys.flags.isolated)
 
 
+VENV_LAUNCHER_ENV = "__PYVENV_LAUNCHER__"
+DIRECT_ENV = "LENS_SPAWNED_DIRECT"
+
+
+def venv_redirect():
+    """(base interpreter, venv launcher) when running under a Windows venv launcher.
+
+    On Windows, a virtual environment's Scripts/python.exe (venv, uv, pipx)
+    is a small launcher that starts the real interpreter as a child and then
+    waits for it - so every daemon showed up twice in Task Manager. The real
+    interpreter can be started directly instead: the launcher's only job is to
+    tell it which environment it belongs to, through __PYVENV_LAUNCHER__, and
+    we can set that ourselves. None when there is nothing to skip.
+    """
+    if not _IS_WINDOWS or is_compiled() or sys.prefix == sys.base_prefix:
+        return None
+    launcher = sys.executable
+    base = getattr(sys, "_base_executable", "") or ""
+    if not base:
+        return None
+    # Keep python.exe vs pythonw.exe as the launcher had it.
+    base = os.path.join(os.path.dirname(base), os.path.basename(launcher))
+    if os.path.normcase(os.path.abspath(base)) == os.path.normcase(
+        os.path.abspath(launcher)
+    ) or not os.path.isfile(base):
+        return None
+    return base, launcher
+
+
 def daemon_command(extra_args) -> list:
     """The command line that starts ``lens_scan <extra_args>`` in a new process.
 
@@ -322,7 +351,8 @@ def daemon_command(extra_args) -> list:
             candidate += ".exe"
         exe = candidate if candidate and os.path.isfile(candidate) else sys.executable
         return [exe, *args]
-    cmd = [sys.executable]
+    redirect = venv_redirect()
+    cmd = [redirect[0] if redirect else sys.executable]
     if _isolated():
         cmd.append("-I")
     return cmd + ["-m", "chrome_lens_py", *args]
@@ -348,7 +378,23 @@ def daemon_env() -> dict:
     if package_root not in entries:
         entries.insert(0, package_root)
     env["PYTHONPATH"] = os.pathsep.join(entries)
+    redirect = venv_redirect()
+    if redirect:
+        # What the venv launcher would have told the base interpreter.
+        env[VENV_LAUNCHER_ENV] = redirect[1]
+    env[DIRECT_ENV] = "1"
     return env
+
+
+def should_respawn_direct() -> bool:
+    """True for a supervisor started through a venv launcher (the login item).
+
+    A Startup shortcut cannot set environment variables, so it has to go
+    through the launcher. The supervisor then starts itself again directly
+    and exits, which lets the launcher exit too: one process instead of two.
+    Processes we spawn carry DIRECT_ENV and never do this, so it happens once.
+    """
+    return venv_redirect() is not None and os.environ.get(DIRECT_ENV) != "1"
 
 
 def _open_log():

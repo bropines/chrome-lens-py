@@ -629,3 +629,69 @@ def test_daemon_env_makes_the_package_importable_from_any_cwd(monkeypatch):
     assert entries[0] == package_root
     assert all(os.path.isabs(e) for e in entries)
     assert os.path.abspath("other/rel") in entries
+
+
+# ------------------------------------------ Windows venv launcher, skipped
+
+
+def _fake_venv(monkeypatch, tmp_path, launcher_name="python.exe"):
+    base_dir = tmp_path / "base"
+    venv_dir = tmp_path / "venv" / "Scripts"
+    base_dir.mkdir(parents=True)
+    venv_dir.mkdir(parents=True)
+    for name in ("python.exe", "pythonw.exe"):
+        (base_dir / name).write_bytes(b"")
+        (venv_dir / name).write_bytes(b"")
+    monkeypatch.setattr(runtime, "_IS_WINDOWS", True)
+    monkeypatch.setattr(runtime, "is_compiled", lambda: False)
+    monkeypatch.setattr(runtime, "_isolated", lambda: False)
+    monkeypatch.setattr(runtime.sys, "executable", str(venv_dir / launcher_name))
+    monkeypatch.setattr(
+        runtime.sys, "_base_executable", str(base_dir / "python.exe"), raising=False
+    )
+    monkeypatch.setattr(runtime.sys, "prefix", str(tmp_path / "venv"))
+    monkeypatch.setattr(runtime.sys, "base_prefix", str(base_dir))
+    return base_dir, venv_dir
+
+
+def test_spawns_skip_the_venv_launcher(monkeypatch, tmp_path):
+    # Each daemon used to appear twice in Task Manager: the venv's launcher
+    # waiting on the real interpreter it had started.
+    base_dir, venv_dir = _fake_venv(monkeypatch, tmp_path)
+    cmd = runtime.daemon_command(["--serve"])
+    assert cmd[0] == str(base_dir / "python.exe")
+    env = runtime.daemon_env()
+    assert env[runtime.VENV_LAUNCHER_ENV] == str(venv_dir / "python.exe")
+    assert env[runtime.DIRECT_ENV] == "1"
+
+
+def test_pythonw_stays_pythonw(monkeypatch, tmp_path):
+    base_dir, _ = _fake_venv(monkeypatch, tmp_path, "pythonw.exe")
+    assert runtime.daemon_command(["--serve"])[0] == str(base_dir / "pythonw.exe")
+
+
+def test_no_redirect_outside_a_venv_or_off_windows(monkeypatch, tmp_path):
+    _fake_venv(monkeypatch, tmp_path)
+    monkeypatch.setattr(runtime.sys, "base_prefix", runtime.sys.prefix)
+    assert runtime.venv_redirect() is None
+    _fake_venv(monkeypatch, tmp_path / "again")
+    monkeypatch.setattr(runtime, "_IS_WINDOWS", False)
+    assert runtime.venv_redirect() is None
+
+
+def test_a_launcher_started_supervisor_respawns_itself_once(monkeypatch, tmp_path):
+    _fake_venv(monkeypatch, tmp_path)
+    monkeypatch.delenv(runtime.DIRECT_ENV, raising=False)
+    assert runtime.should_respawn_direct()
+    spawned = []
+    monkeypatch.setattr(runtime, "spawn_detached", lambda a: spawned.append(a) or True)
+    monkeypatch.setattr(
+        runtime, "supervise", lambda: pytest.fail("ran under the launcher")
+    )
+    with pytest.raises(SystemExit) as done:
+        client.entry([runtime.SUPERVISE_FLAG])
+    assert done.value.code == 0 and spawned == [[runtime.SUPERVISE_FLAG]]
+
+    # The direct child carries the marker and supervises instead.
+    monkeypatch.setenv(runtime.DIRECT_ENV, "1")
+    assert not runtime.should_respawn_direct()

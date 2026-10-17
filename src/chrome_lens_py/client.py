@@ -570,6 +570,8 @@ def entry(argv=None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv == [runtime.SUPERVISE_FLAG]:
         # The always-on service on Windows: stdlib only, no CLI at all.
+        if runtime.should_respawn_direct():
+            sys.exit(0 if runtime.spawn_detached([runtime.SUPERVISE_FLAG]) else 1)
         sys.exit(runtime.supervise())
     try:
         managed = manage(argv)

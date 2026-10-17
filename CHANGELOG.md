@@ -7,6 +7,16 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-10-17
+
+### Bug Fixes
+
+- On Windows, a daemon installed with uv, pipx or any virtual environment
+  showed up as two processes: the environment's `python.exe` is a launcher that
+  starts the real interpreter and waits on it. The supervisor and the daemon
+  now start the real interpreter directly, so the always-on service is exactly
+  two processes - the supervisor and the daemon - instead of four.
+
 ## [3.7.0] - 2026-10-17
 
 ### Features
@@ -187,7 +197,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...HEAD
+[3.7.1]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/bropines/chrome-lens-py/compare/v3.5.3...v3.6.0
 [3.5.3]: https://github.com/bropines/chrome-lens-py/compare/v3.5.2...v3.5.3
