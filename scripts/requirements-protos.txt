@@ -4,5 +4,5 @@
 # Raising grpcio-tools means raising that floor too; tests/test_protos.py fails
 # until the two agree.
 grpcio-tools==1.81.1
-black==26.5.1
+black==26.10.1
 isort==9.0.1
