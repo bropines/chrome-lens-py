@@ -267,13 +267,13 @@ pip install git+https://github.com/bropines/chrome-lens-py.git
 | `--daemon <mode>` | | Warm-process fast mode: `auto` (default), `on` or `off`. See [Daemon / fast mode](#-daemon--fast-mode). |
 | `--daemon-idle-timeout <sec>` | | An automatically started daemon exits after this long without requests (default 600, `0` = never). |
 | `--daemon-status` / `--daemon-start` / `--daemon-stop` | | Inspect, start or stop the background daemon. |
-| `--install-service` / `--uninstall-service` | | Start the daemon at every login on a fixed port (ShareX uploader mode). |
+| `--install-service` / `--uninstall-service` | | Keep the daemon running from login on a fixed port, restarted if it crashes (ShareX uploader mode). |
 | `--serve` | | Run as a local HTTP server in the foreground instead of processing one image. |
 | `--host <addr>` | | Address for the server (default `127.0.0.1`). |
 | `--port <N>` | | Port for the server and for the service daemon (default `8765`). |
 | `--token <token>` | | Require a bearer token. Mandatory when `--host` is not loopback. |
 | `--allow-origin <origin>`| | Let one browser origin call the daemon (repeatable). None by default. |
-| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically (Windows). Add `-t <lang>` to make the hotkey translate; add `--mode uploader` for the no-process-per-capture variant. See [docs/sharex.md](docs/sharex.md). |
+| `--setup-sharex` | | Wire `lens_scan` into ShareX automatically (Windows). Add `-t <lang>` to make the hotkey translate; `--mode both` adds a second, faster hotkey that posts straight to the daemon. See [docs/sharex.md](docs/sharex.md). |
 | `--logging-level <lvl>`| `-l` | Set logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `--version` | `-V` | Show the version and which copy of it is running. |
 | `--help` | `-h` | Show this help message and exit. The text is generated from the parser, so it always lists every option. |
@@ -745,26 +745,30 @@ browser can reach it: the client sends no `Origin`, and a request with one is
 refused (see [What can reach it](#what-can-reach-it)). Override the directory with
 `LENS_STATE_DIR` (the tests do).
 
-### ShareX without starting a process: uploader mode
-
-Program mode (`lens_scan --setup-sharex`, the default) runs `lens_scan` once per
-capture; with the daemon each run is fast, but it is still a process. Uploader mode
-removes it: ShareX posts the capture straight to the daemon and copies the reply.
+### ShareX: two hotkeys
 
 ```bash
-lens_scan --setup-sharex --mode uploader -t ru      # -t is optional
-lens_scan --install-service                         # start the daemon at every login
+lens_scan --setup-sharex --mode both -t ru      # -t is optional
 ```
 
-The first command writes a ShareX custom uploader (`.sxcu`) pointing at
-`http://127.0.0.1:8765/v1/ocr/raw` with your token and starts the daemon; double-click
-the file and say yes. Details and the ShareX settings to check:
-[docs/sharex.md](docs/sharex.md). The `.sxcu` contains the token - do not share it.
+- **Ctrl + Shift + O** posts the capture straight to the daemon - no process per
+  capture, the fastest path.
+- **Ctrl + O** runs `lens_scan` on it - works even when the daemon is down, and
+  brings the daemon back.
 
-`--install-service` makes the daemon start at login on the fixed port
-(`--port`, setting `daemon_port`, default `8765`): a Startup-folder shortcut on
-Windows, a `KeepAlive` LaunchAgent on macOS, a `systemd --user` unit on Linux.
-`--uninstall-service` removes it (and forgets the token).
+`--mode uploader` installs only the first, `--mode program` (the default) only the
+second. The uploader is registered in ShareX and selected by the hotkey itself, so
+your normal image destination is left as it was.
+
+Uploader and both modes install the daemon as a login service on a fixed port
+(`--port`, setting `daemon_port`, default `8765`): on Windows a Startup-folder item
+running a supervisor that **restarts the daemon if it crashes**, with no console
+window; a `KeepAlive` LaunchAgent on macOS; a `systemd --user` unit with
+`Restart=on-failure` on Linux. `--install-service` / `--uninstall-service` manage it
+on their own. Details: [docs/sharex.md](docs/sharex.md).
+
+To keep the *auto* daemon alive too, set `daemon_idle_timeout: 0` (or
+`LENS_DAEMON_IDLE_TIMEOUT=0`).
 
 ## 🖥️ Daemon mode
 

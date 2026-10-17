@@ -2,25 +2,28 @@
 
 It's possible to use the `chrome-lens-py` package with ShareX to OCR images using the Google Lens API, providing a significant upgrade over the default OCR in ShareX.
 
-## Two ways to wire it up
+## Two hotkeys, and why you want both
 
-| | **Program mode** (default) | **Uploader mode** |
+```bash
+lens_scan --setup-sharex --mode both          # add -t ru to translate
+```
+
+| | **Ctrl + O** - program mode | **Ctrl + Shift + O** - uploader mode |
 |---|---|---|
 | what ShareX does per capture | runs `lens_scan` | posts the image to the daemon |
 | processes started per capture | one (a thin client) | none |
-| set up with | `lens_scan --setup-sharex` | `lens_scan --setup-sharex --mode uploader` and `lens_scan --install-service` |
-| needs a daemon running | no - one starts by itself | yes, on a fixed port |
-| result lands on the clipboard via | `lens_scan --sharex` | ShareX's "Copy URL to clipboard" |
+| if the daemon is down | still works: runs the request itself, then restarts the daemon | fails until the daemon is back |
+| set up with | `--mode program` (the default) | `--mode uploader` |
 
-**Program mode is already fast.** `lens_scan` hands each capture to a warm
-background daemon (starting one after the first call), so a capture costs a few
-hundred milliseconds instead of three seconds, with no extra setup. See
-[Daemon / fast mode](../README.md#-daemon--fast-mode) in the README for how it works, how to
-turn it off (`--daemon off`) and what it measures.
+`--mode both` installs both, which is the point: **Ctrl + Shift + O** is the fastest
+path, **Ctrl + O** is the one that always works. Uploader and both modes also install
+the daemon as a login service, supervised so that a crash is restarted (below).
 
-**Uploader mode** removes even that process: ShareX's *custom uploader* feature POSTs
-the picture to the daemon and copies the text it answers with. Skip to
-[Uploader mode](#uploader-mode-no-process-per-capture) below.
+**Program mode is already fast.** `lens_scan` hands each capture to a warm background
+daemon (starting one after the first call), so a capture costs a few hundred
+milliseconds instead of three seconds, with no extra setup. See
+[Daemon / fast mode](../README.md#-daemon--fast-mode) in the README for how it works,
+how to turn it off (`--daemon off`) and what it measures.
 
 ---
 
@@ -63,65 +66,57 @@ The action's arguments can include `--daemon off` if you would rather ShareX alw
 ### Uploader mode (no process per capture)
 
 ```bash
-lens_scan --setup-sharex --mode uploader          # add -t ru to translate
-lens_scan --install-service                       # daemon at every login
+lens_scan --setup-sharex --mode uploader          # or --mode both; add -t ru to translate
 ```
 
-1.  `--setup-sharex --mode uploader` writes `Google Lens OCR (chrome-lens-py).sxcu` into
-    `Documents\ShareX\` (your ShareX folder, if it exists) and starts the persistent
-    daemon. The file is a ShareX *custom uploader*:
+What it does, in order:
 
-    ```json
-    {
-      "Version": "15.0.0",
-      "Name": "Google Lens OCR (chrome-lens-py)",
-      "DestinationType": "ImageUploader",
-      "RequestMethod": "POST",
-      "RequestURL": "http://127.0.0.1:8765/v1/ocr/raw",
-      "Parameters": { "translate_to": "ru" },
-      "Headers": { "Authorization": "Bearer <your token>" },
-      "Body": "Binary",
-      "URL": "{response}",
-      "ErrorMessage": "{json:error}"
-    }
-    ```
+1.  **Installs the daemon as a login service** on a fixed port (`daemon_port`, default
+    `8765`; `--port` to change it) with a token that survives restarts
+    (`service.json` in the user data directory).
+    *   **Windows**: a Startup-folder shortcut runs a small **supervisor** that keeps
+        the daemon alive: if the daemon crashes, it is restarted after 1 s, then 2,
+        4, ... up to 60 s while it keeps crashing, back to 1 s once it has run for a
+        minute. A deliberate stop (`--daemon-stop`, `--uninstall-service`) exits with
+        code 0 and ends the supervisor too. No console window: `pythonw.exe` for a
+        Python install, `conhost.exe --headless` for the compiled `lens_scan.exe`.
+    *   **macOS**: a LaunchAgent with `KeepAlive`. **Linux**: a `systemd --user` unit
+        with `Restart=on-failure`.
+2.  **Registers a custom uploader** directly in ShareX's `UploadersConfig.json`,
+    named *Google Lens OCR (chrome-lens-py)*. It POSTs the capture's bytes to
+    `http://127.0.0.1:<port>/v1/ocr/raw` with the token, and takes the daemon's
+    `text/plain` reply as the result.
+3.  **Adds Ctrl + Shift + O**: capture a region, upload it with *that* uploader, copy
+    the result. The hotkey selects the uploader itself (ShareX's per-task
+    *Override custom uploader*), so **your normal image destination is not touched**:
+    screenshots you upload elsewhere still go wherever they went before.
 
-    ShareX sends the capture's bytes with its own `Content-Type` (`image/png`, ...);
-    the daemon answers with the recognised text as `text/plain`, and `{response}` makes
-    ShareX take that whole reply as the result. `Parameters` is present only with `-t`.
-2.  **Double-click the `.sxcu` file.** ShareX asks whether to add the uploader and to
-    use it for images - say yes.
-3.  In ShareX, make sure *After capture tasks* has **Upload image to host** (that is
-    what sends the picture) and *After upload tasks* has **Copy URL to clipboard** (that
-    is what puts the text on the clipboard). Your OCR hotkey (for example *Capture
-    region*) then needs nothing else.
-4.  `--install-service` keeps the daemon running across logins: a shortcut in your
-    Startup folder on Windows (macOS: a LaunchAgent, Linux: a `systemd --user` unit).
-    Without it the uploader works while a daemon is up on that port: right after step 1,
-    and again after any plain `lens_scan` run, which restarts the daemon in its persistent
-    form for as long as the token file exists - but not after a reboot with no `lens_scan`
-    call.
+Both ShareX files are backed up (`*.bak-<timestamp>`) and written atomically, with ShareX
+closed. Running the setup again refreshes the port, token and language in place.
+If Ctrl + Shift + O is already bound to something else, the setup says so.
 
-The port is `daemon_port` (default `8765`, `--port` to change it before running the
-setup). The token is generated once and kept in `service.json` in the user data
-directory, so restarts do not invalidate the uploader; **the `.sxcu` contains it, so do not
-share the file.** If you ever need a new one, `--uninstall-service` forgets the token and
-the next `--setup-sharex --mode uploader` makes a new `.sxcu`.
+**Always on.** The service starts at login and is never stopped for being idle. For
+the auto daemon that program mode starts, idle exit is 10 minutes by default:
+`daemon_idle_timeout: 0` in `config.json` (or `LENS_DAEMON_IDLE_TIMEOUT=0`) keeps it
+until reboot.
 
 Why a web page cannot use this endpoint and why it needs the token: see
 [What can reach it](../README.md#what-can-reach-it).
 
-**Troubleshooting uploader mode.** The daemon's log is `daemon.log` in
-`%LOCALAPPDATA%\chrome-lens-py\`. An error reply is JSON (`{"error": ...}`) and ShareX shows
-its `error` text. `401` means the token in ShareX no longer matches the daemon's
-(re-import the `.sxcu`); `415` means ShareX did not send an image `Content-Type`
-(only `image/png`, `image/jpeg`, `image/webp` and `image/bmp` are accepted); a connection
-error means no daemon is listening - run `lens_scan --daemon-status`.
-You can test the same request without ShareX:
+**Troubleshooting uploader mode.** The daemon logs to `daemon.log`, the Windows
+supervisor (crashes and restarts) to `supervisor.log`, both in
+`%LOCALAPPDATA%\chrome-lens-py\`. An error reply is JSON
+(`{"error": ...}`) and ShareX shows its `error` text. `401` means the token no longer
+matches (run the setup again); `415` means ShareX did not send an image `Content-Type`; a
+connection error means no daemon is listening - `lens_scan --daemon-status`, and meanwhile
+**Ctrl + O** still works. You can test the same request without ShareX:
 
 ```bash
-curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: image/png"      --data-binary @shot.png "http://127.0.0.1:8765/v1/ocr/raw?translate_to=ru"
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: image/png" --data-binary @shot.png "http://127.0.0.1:8765/v1/ocr/raw?translate_to=ru"
 ```
+
+`--uninstall-service` removes the login item and forgets the token; the ShareX uploader
+then needs the setup run again.
 
 ---
 
@@ -148,7 +143,7 @@ If the automated setup fails or you want custom settings, follow these steps:
 ---
 
 ## Troubleshooting
-If something went wrong with the automated setup, restore the previous configuration by closing ShareX and copying `Documents\ShareX\HotkeysConfig.json.bak-<timestamp>` over `HotkeysConfig.json`.
+If something went wrong with the automated setup, restore the previous configuration by closing ShareX and copying `Documents\ShareX\HotkeysConfig.json.bak-<timestamp>` (and `UploadersConfig.json.bak-<timestamp>`, for uploader mode) over the originals.
 
 If the hotkey runs but nothing lands on the clipboard, `lens_scan` now exits non-zero and prints the reason to stderr; remove **"Hidden window"** to see it. The usual cause is a missing clipboard extra: `pip install "chrome-lens-py[clipboard]"`.
 
