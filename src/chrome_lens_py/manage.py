@@ -52,6 +52,10 @@ class Usage(Exception):
 
 def _out(text: str = "") -> None:
     sys.stdout.write(text + "\n")
+    # Flushed, not left to the buffer: `update` hands the terminal to uv or
+    # brew next, and a redirected stdout would otherwise print our lines after
+    # the output of the command they introduce.
+    sys.stdout.flush()
 
 
 def _row(label: str, value: str, width: int = 10) -> None:

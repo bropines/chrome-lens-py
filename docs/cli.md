@@ -158,7 +158,7 @@ Half a dozen things can own the name `lens_scan`, and each has its own idea of a
 
 | Installed with | What runs |
 | :--- | :--- |
-| uv tool | `uv tool upgrade --refresh chrome-lens-py`. uv caches the package index for ten minutes, which is long enough to miss a release that has just gone out. |
+| uv tool | `uv tool upgrade --reinstall chrome-lens-py`. `--reinstall` keeps the tool's environment and replaces the packages in it, which is the only variant that works from inside the tool itself on Windows - the interpreter running `update` lives in that environment. A tool pinned to a version (`uv tool install "chrome-lens-py==3.8.0"`) is instead reinstalled without the pin, since `uv tool upgrade` would honour it and move nothing; on Windows that recreates the environment, so it runs in a console window of its own. |
 | pipx | `pipx upgrade chrome-lens-py` |
 | Homebrew | `brew upgrade bropines/tap/lens-scan` |
 | Scoop | `scoop update <app>`, with the app name taken from the install path, so `lens-scan-portable` stays portable. |

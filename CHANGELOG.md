@@ -7,6 +7,26 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.8.2] - 2026-10-17
+
+### Bug Fixes
+
+- `lens_scan update` works on a uv tool install, which is how the Windows and
+  the uv installers put it there. `uv tool upgrade` has no `--refresh` (that
+  belongs to `uv tool install`), so the command 3.8.1 built was rejected
+  outright; and `uv tool install --force` cannot run from inside the tool it
+  is replacing, because on Windows that environment holds the very
+  `python.exe` executing the update. It now runs `uv tool upgrade --reinstall`,
+  which keeps the environment and replaces the packages in it. A tool that was
+  installed pinned to a version is reinstalled without the pin instead - `uv
+  tool upgrade` honours a pin and would have reported success while moving
+  nothing - and on Windows that variant is handed to a console window of its
+  own. The extras the tool was installed with (`[clipboard]`) survive either
+  way; they are read from uv's own receipt.
+- A command's output is flushed as it is written. With stdout redirected, the
+  lines `update` prints before handing the terminal to uv or brew appeared
+  after that command's own output.
+
 ## [3.8.1] - 2026-10-17
 
 ### Bug Fixes
@@ -273,7 +293,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...HEAD
+[3.8.2]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...v3.8.2
 [3.8.1]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...v3.8.0
 [3.7.1]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...v3.7.1

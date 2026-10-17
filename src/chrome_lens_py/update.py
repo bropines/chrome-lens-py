@@ -148,12 +148,30 @@ def detect() -> Install:
         )
 
     if "uv" in everywhere and "tools" in everywhere:
-        # --refresh: uv caches the package index for ten minutes, which is
-        # exactly long enough to miss a release that has just gone out.
+        requirement, pinned = _uv_requirement()
+        if pinned:
+            # `uv tool upgrade` honours the version the tool was installed
+            # with, so a copy installed as `==3.8.0` can never move. Installing
+            # the requirement again without the pin is the only way up, and
+            # that recreates the environment - which on Windows cannot be done
+            # from inside it, because this process is its python.exe.
+            return Install(
+                kind="uv",
+                label="uv tool (pinned to this version)",
+                command=_run_in(
+                    "uv", "tool", "install", "--force", "--refresh", requirement
+                ),
+                fresh_shell=sys.platform == "win32",
+            )
         return Install(
             kind="uv",
             label="uv tool",
-            command=_run_in("uv", "tool", "upgrade", "--refresh", PACKAGE),
+            # --reinstall rather than a plain upgrade: uv then keeps the
+            # environment (and so the interpreter this process is running) and
+            # replaces the packages inside it, which is the only variant that
+            # works from inside the tool itself on Windows. It also makes
+            # `update` repair an install that is merely damaged.
+            command=_run_in("uv", "tool", "upgrade", "--reinstall", PACKAGE),
         )
 
     if "pipx" in everywhere:
@@ -187,6 +205,34 @@ def detect() -> Install:
         label="pip" + (" (in a virtualenv)" if sys.prefix != sys.base_prefix else ""),
         command=[sys.executable, "-m", "pip", "install", "--upgrade", requirement],
     )
+
+
+def _uv_requirement() -> Tuple[str, bool]:
+    """``("chrome-lens-py[clipboard]", pinned)`` from uv's receipt for this tool.
+
+    uv writes ``uv-receipt.toml`` beside the tool's environment, recording what
+    the tool was asked for: its extras, and any version it was pinned to. Both
+    matter here - the extras must survive an update, and a pin means `uv tool
+    upgrade` will cheerfully do nothing at all.
+    """
+    try:
+        with open(os.path.join(sys.prefix, "uv-receipt.toml"), encoding="utf-8") as f:
+            receipt = f.read()
+    except OSError:
+        return PACKAGE + ("[clipboard]" if _has_clipboard() else ""), False
+
+    entry = ""
+    for candidate in re.findall(r"\{[^}]*\}", receipt):
+        if PACKAGE in candidate.replace("_", "-"):
+            entry = candidate
+            break
+    extras = re.search(r"extras\s*=\s*\[([^\]]*)\]", entry)
+    names = re.findall(r'"([^"]+)"', extras.group(1)) if extras else []
+    if not names and _has_clipboard():
+        names = ["clipboard"]
+    requirement = PACKAGE + (f"[{','.join(names)}]" if names else "")
+    pinned = bool(re.search(r'specifier\s*=\s*"\s*[=~<>!]', entry))
+    return requirement, pinned
 
 
 def _is_portable(exe: str, package: str) -> bool:

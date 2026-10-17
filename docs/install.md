@@ -65,7 +65,7 @@ With uv already installed you can skip the script:
 
 ```bash
 uv tool install "chrome-lens-py[clipboard]"      # pipx install works too
-lens_scan update                                  # runs: uv tool upgrade --refresh chrome-lens-py
+lens_scan update                                  # runs: uv tool upgrade --reinstall chrome-lens-py
 uv tool uninstall chrome-lens-py
 ```
 
@@ -172,7 +172,7 @@ Every install method has its own idea of what an update is, and running the wron
 
 | Installed with | `lens_scan update` runs |
 |---|---|
-| uv tool | `uv tool upgrade --refresh chrome-lens-py` (`--refresh` because uv caches the package index for ten minutes, long enough to miss a release that has just gone out) |
+| uv tool | `uv tool upgrade --reinstall chrome-lens-py`. `--reinstall` keeps the environment and replaces the packages inside it: the interpreter running `update` lives in that environment, and Windows will not let it be removed from inside. A tool installed pinned to a version is reinstalled without the pin instead, because `uv tool upgrade` honours a pin and would move nothing; on Windows that one runs in a console window of its own. |
 | pipx | `pipx upgrade chrome-lens-py` |
 | Homebrew | `brew upgrade bropines/tap/lens-scan` |
 | Scoop | `scoop update <app>`, where `<app>` is `lens-scan` or `lens-scan-portable`, whichever you have |

@@ -42,6 +42,14 @@ SERVICE = {
 }
 
 
+def write_receipt(tool_dir, fields):
+    """uv's own record of how a tool was installed, as it writes it."""
+    (tool_dir / "uv-receipt.toml").write_text(
+        '[tool]\nrequirements = [{ name = "chrome-lens-py", ' + fields + " }]\n",
+        encoding="utf-8",
+    )
+
+
 def stopped():
     return {"state": "stopped"}
 
@@ -344,7 +352,7 @@ def test_serve_keeps_its_options():
         (
             "/home/u/.local/share/uv/tools/chrome-lens-py/bin/python",
             "uv",
-            ["tool", "upgrade", "--refresh", "chrome-lens-py"],
+            ["tool", "upgrade", "--reinstall", "chrome-lens-py"],
         ),
         (
             "/home/u/.local/pipx/venvs/chrome-lens-py/bin/python",
@@ -371,6 +379,41 @@ def test_each_install_updates_itself_its_own_way(
     found = update.detect()
     assert found.kind == kind
     assert found.command[1:] == expected
+
+
+def test_a_uv_tool_pinned_to_a_version_is_reinstalled_without_the_pin(
+    monkeypatch, tmp_path
+):
+    """`uv tool upgrade` honours the pin, so it would report success and move nothing."""
+    monkeypatch.setattr(
+        update.sys,
+        "executable",
+        "/home/u/.local/share/uv/tools/chrome-lens-py/bin/python",
+    )
+    monkeypatch.setattr(update, "_git_checkout", lambda package: False)
+    monkeypatch.setattr(update.sys, "prefix", str(tmp_path))
+    write_receipt(tmp_path, 'extras = ["clipboard"], specifier = "==3.8.0"')
+    found = update.detect()
+    assert found.kind == "uv" and "pinned" in found.label
+    assert found.command[1:] == [
+        "tool",
+        "install",
+        "--force",
+        "--refresh",
+        "chrome-lens-py[clipboard]",
+    ]
+    # The environment is recreated, which Windows will not allow from inside it.
+    assert found.fresh_shell is (sys.platform == "win32")
+
+
+def test_the_extras_a_uv_tool_was_installed_with_survive(monkeypatch, tmp_path):
+    monkeypatch.setattr(update.sys, "prefix", str(tmp_path))
+    write_receipt(tmp_path, 'extras = ["clipboard", "rtl"]')
+    assert update._uv_requirement() == ("chrome-lens-py[clipboard,rtl]", False)
+
+    (tmp_path / "uv-receipt.toml").unlink()
+    requirement, pinned = update._uv_requirement()  # no receipt: still answers
+    assert requirement.startswith("chrome-lens-py") and pinned is False
 
 
 def test_a_plain_python_install_is_updated_with_pip(monkeypatch):
