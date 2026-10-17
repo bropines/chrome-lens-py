@@ -7,6 +7,32 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-10-17
+
+### Features
+
+- **`--setup-sharex --mode both`**: two hotkeys. **Ctrl+Shift+O** posts the
+  capture straight to the daemon - no process per capture, the fastest path.
+  **Ctrl+O** runs `lens_scan` and keeps working when the daemon is down, then
+  brings it back. `--mode uploader` installs only the first.
+- **The Windows service restarts a crashed daemon.** The login item runs a small
+  supervisor (`--daemon-supervise`) that keeps the daemon as a child and
+  restarts it on any abnormal exit, backing off from 1 s to 60 s while it keeps
+  crashing. `--daemon-stop` and `--uninstall-service` still stop it for good.
+  macOS (launchd `KeepAlive`) and Linux (systemd `Restart=on-failure`) already
+  did this.
+
+### Bug Fixes
+
+- Uploader mode no longer asks to be made ShareX's global image destination,
+  which would have sent every screenshot the user uploaded anywhere to the OCR
+  daemon. The uploader is registered in `UploadersConfig.json` and selected by
+  its own hotkey only.
+- The compiled `lens_scan.exe` started at login no longer leaves a minimised
+  console on the taskbar: it runs under `conhost.exe --headless`.
+- Building the HTTP client no longer blocks the event loop while the CA bundle
+  loads, which made the daemon miss a status probe right after starting.
+
 ## [3.6.0] - 2026-10-17
 
 ### Highlights
@@ -161,7 +187,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...HEAD
+[3.7.0]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/bropines/chrome-lens-py/compare/v3.5.3...v3.6.0
 [3.5.3]: https://github.com/bropines/chrome-lens-py/compare/v3.5.2...v3.5.3
 [3.5.2]: https://github.com/bropines/chrome-lens-py/compare/v3.5.1...v3.5.2
