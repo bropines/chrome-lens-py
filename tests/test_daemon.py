@@ -423,45 +423,216 @@ def test_the_uploader_file_matches_what_sharex_expects():
         sharex_setup.build_uploader_config(1, "t", 'ru" & calc')
 
 
-def test_setup_uploader_writes_the_file_and_starts_the_service_daemon(
-    tmp_path, monkeypatch, capsys
+def _sharex_dir(tmp_path, monkeypatch, sharex_setup):
+    sharex_dir = tmp_path / "ShareX"
+    sharex_dir.mkdir()
+    (sharex_dir / "HotkeysConfig.json").write_text(
+        "\ufeff"
+        + json.dumps(
+            {
+                "Hotkeys": [
+                    {
+                        "HotkeyInfo": {"Hotkey": "PrintScreen", "Win": False},
+                        "TaskSettings": {"Description": "", "Job": "PrintScreen"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (sharex_dir / "UploadersConfig.json").write_text(
+        json.dumps(
+            {
+                "CustomUploadersList": [{"Name": "Mine", "RequestURL": "https://x"}],
+                "CustomImageUploaderSelected": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sharex_setup.sys, "platform", "win32")
+    monkeypatch.setattr(sharex_setup, "get_documents_path", lambda: tmp_path)
+    monkeypatch.setattr(sharex_setup, "terminate_sharex", lambda: False)
+    monkeypatch.setattr(sharex_setup, "_find_lens_scan", lambda: "C:/x/lens_scan.exe")
+    monkeypatch.setattr(sharex_setup, "_restart_sharex", lambda interactive: None)
+    from chrome_lens_py.utils import service
+
+    installed = []
+    monkeypatch.setattr(
+        service, "install_service", lambda port=None: installed.append(port) or True
+    )
+    return sharex_dir, installed
+
+
+def test_setup_both_adds_two_hotkeys_and_leaves_the_users_uploads_alone(
+    tmp_path, monkeypatch
 ):
     from chrome_lens_py.utils import sharex_setup
 
-    monkeypatch.setattr(sharex_setup, "get_documents_path", lambda: tmp_path)
-    (tmp_path / "ShareX").mkdir()
-    started = []
-    monkeypatch.setattr(client, "start_daemon", lambda *a: started.append(1) or True)
-    monkeypatch.setattr(client, "wait_for_daemon", lambda *a, **k: {"pid": 1})
-    assert sharex_setup.setup_sharex_uploader("ru", 8800) is True
-    written = json.loads(
-        (tmp_path / "ShareX" / sharex_setup.UPLOADER_FILENAME).read_text()
+    sharex_dir, installed = _sharex_dir(tmp_path, monkeypatch, sharex_setup)
+    assert sharex_setup.setup_sharex("both", "ru", 8800) is True
+    assert installed == [8800]  # the uploader's daemon becomes a login service
+
+    hotkeys = json.loads((sharex_dir / "HotkeysConfig.json").read_text())["Hotkeys"]
+    uploaders = json.loads((sharex_dir / "UploadersConfig.json").read_text())
+
+    by_key = {h["HotkeyInfo"]["Hotkey"]: h["TaskSettings"] for h in hotkeys}
+    assert by_key["PrintScreen"]["Job"] == "PrintScreen"  # untouched
+    program = by_key[sharex_setup.PROGRAM_HOTKEY]["ExternalPrograms"][0]
+    assert program["Args"] == '-t ru --sharex "$input"'
+
+    fast = by_key[sharex_setup.UPLOADER_HOTKEY]
+    assert fast["ImageDestination"] == "CustomImageUploader"
+    assert fast["OverrideCustomUploader"] is True
+    ours = uploaders["CustomUploadersList"][fast["CustomUploaderIndex"]]
+    assert ours["Name"] == sharex_setup.UPLOADER_NAME
+    assert ours["RequestURL"].endswith(":8800/v1/ocr/raw")
+    assert ours["Parameters"] == {"translate_to": "ru"}
+    token = daemon.read_service_config()["token"]
+    assert ours["Headers"]["Authorization"] == f"Bearer {token}"
+
+    # The user's own uploader and their global choice are exactly as they were.
+    assert uploaders["CustomUploadersList"][0] == {
+        "Name": "Mine",
+        "RequestURL": "https://x",
+    }
+    assert uploaders["CustomImageUploaderSelected"] == 0
+
+    backups = sorted(
+        p.name.split(".bak-")[0] for p in sharex_dir.iterdir() if ".bak-" in p.name
     )
-    service = daemon.read_service_config()
-    assert written["RequestURL"].endswith(":8800/v1/ocr/raw")
-    assert written["Headers"]["Authorization"] == f"Bearer {service['token']}"
-    assert started == [1]
-    assert "Double-click" in capsys.readouterr().out
+    assert backups == ["HotkeysConfig.json", "UploadersConfig.json"]
 
 
-def test_cli_setup_sharex_mode_selects_uploader_or_program(monkeypatch):
+def test_setup_twice_refreshes_instead_of_duplicating(tmp_path, monkeypatch):
+    from chrome_lens_py.utils import sharex_setup
+
+    sharex_dir, _ = _sharex_dir(tmp_path, monkeypatch, sharex_setup)
+    assert sharex_setup.setup_sharex("both")
+    assert sharex_setup.setup_sharex("both", "de")
+    hotkeys = json.loads((sharex_dir / "HotkeysConfig.json").read_text())["Hotkeys"]
+    uploaders = json.loads((sharex_dir / "UploadersConfig.json").read_text())
+    assert len(hotkeys) == 3
+    assert len(uploaders["CustomUploadersList"]) == 2
+    assert uploaders["CustomUploadersList"][1]["Parameters"] == {"translate_to": "de"}
+
+
+def test_uploader_mode_warns_about_a_hotkey_clash(tmp_path, monkeypatch, capsys):
+    from chrome_lens_py.utils import sharex_setup
+
+    sharex_dir, _ = _sharex_dir(tmp_path, monkeypatch, sharex_setup)
+    path = sharex_dir / "HotkeysConfig.json"
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    data["Hotkeys"].append(
+        {
+            "HotkeyInfo": {"Hotkey": sharex_setup.UPLOADER_HOTKEY, "Win": False},
+            "TaskSettings": {"Description": "Screen recorder", "Job": "ScreenRecorder"},
+        }
+    )
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert sharex_setup.setup_sharex("uploader")
+    assert "Screen recorder" in capsys.readouterr().out
+
+
+def test_cli_setup_sharex_mode_selects_the_right_setup(monkeypatch):
     seen = []
     monkeypatch.setattr(
         cli,
-        "setup_sharex_uploader",
-        lambda lang, port: seen.append(("up", lang, port)) or True,
+        "setup_sharex",
+        lambda mode, lang, port: seen.append((mode, lang, port)) or True,
     )
     monkeypatch.setattr(
         cli,
         "setup_sharex_config",
-        lambda lang=None: seen.append(("prog", lang)) or True,
+        lambda lang=None: seen.append(("program", lang)) or True,
     )
     assert (
-        cli.main(["--setup-sharex", "--mode", "uploader", "-t", "de", "--port", "9000"])
+        cli.main(["--setup-sharex", "--mode", "both", "-t", "de", "--port", "9000"])
         == 0
     )
+    assert cli.main(["--setup-sharex", "--mode", "uploader"]) == 0
     assert cli.main(["--setup-sharex", "-t", "de"]) == 0
-    assert seen == [("up", "de", 9000), ("prog", "de")]
+    assert seen == [("both", "de", 9000), ("uploader", None, None), ("program", "de")]
+
+
+class _Proc:
+    def __init__(self, code, pid=1):
+        self.code, self.pid = code, pid
+
+    def wait(self):
+        return self.code
+
+
+def test_supervisor_restarts_a_crashed_daemon_and_stops_on_a_clean_exit():
+    codes = iter([1, 3221225477, 0])  # crash, access violation, then a stop
+    spawned, slept = [], []
+    clock = iter(range(0, 1000, 5))  # each child "lives" 5 s
+
+    def spawn(cmd):
+        spawned.append(cmd)
+        return _Proc(next(codes))
+
+    code = runtime.supervise(spawn=spawn, sleep=slept.append, clock=lambda: next(clock))
+    assert code == 0
+    assert len(spawned) == 3
+    assert all(runtime.SERVICE_DAEMON_ARGS[0] in cmd for cmd in spawned)
+    assert slept == [1.0, 2.0]  # backs off between crashes
+
+
+def test_supervisor_resets_the_backoff_after_a_healthy_run():
+    codes = iter([1, 1, 1, 0])
+    lifetimes = iter([0, 5, 5, 10, 10, 200, 200, 205])  # third child ran 190 s
+    slept = []
+    runtime.supervise(
+        spawn=lambda cmd: _Proc(next(codes)),
+        sleep=slept.append,
+        clock=lambda: next(lifetimes),
+        healthy_after=60,
+    )
+    assert slept == [1.0, 2.0, 1.0]
+
+
+def test_supervisor_survives_a_failure_to_start():
+    attempts = []
+
+    def spawn(cmd):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise OSError("exe locked by antivirus")
+        return _Proc(0)
+
+    assert runtime.supervise(spawn=spawn, sleep=lambda s: None) == 0
+    assert len(attempts) == 2
+
+
+def test_windows_service_runs_the_supervisor_without_a_window(monkeypatch, tmp_path):
+    from chrome_lens_py.utils import service
+
+    monkeypatch.setattr(service.sys, "platform", "win32")
+    assert runtime.SUPERVISE_FLAG in service.service_command()
+
+    system32 = tmp_path / "System32"
+    system32.mkdir()
+    (system32 / "conhost.exe").write_bytes(b"")
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+    compiled = service.windowless(["C:/apps/lens_scan.exe", runtime.SUPERVISE_FLAG])
+    assert compiled[:2] == [str(system32 / "conhost.exe"), "--headless"]
+    assert compiled[2:] == ["C:/apps/lens_scan.exe", runtime.SUPERVISE_FLAG]
+
+    pythondir = tmp_path / "py"
+    pythondir.mkdir()
+    (pythondir / "pythonw.exe").write_bytes(b"")
+    swapped = service.windowless(
+        [str(pythondir / "python.exe"), "-m", "chrome_lens_py"]
+    )
+    assert swapped[0] == str(pythondir / "pythonw.exe")
+
+
+def test_supervise_flag_never_reaches_the_cli(monkeypatch):
+    calls = []
+    monkeypatch.setattr(runtime, "supervise", lambda: calls.append(1) or 0)
+    with pytest.raises(SystemExit) as exit_info:
+        client.entry([runtime.SUPERVISE_FLAG])
+    assert exit_info.value.code == 0 and calls == [1]
 
 
 def test_service_files_for_each_platform():
@@ -480,8 +651,12 @@ def test_service_files_for_each_platform():
     assert plist["KeepAlive"] is True and plist["RunAtLoad"] is True
     assert plist["Label"] == service.LAUNCH_AGENT_LABEL
 
-    assert service.windowless(["C:/Py/python.exe", "-m", "x"])[1:] == ["-m", "x"]
-    assert service.windowless(["C:/x/lens_scan.exe", "--serve"]) == [
+    # No pythonw.exe beside it: hidden through conhost instead of left with
+    # a console window (when conhost exists, as on any Windows 10+).
+    hidden = service.windowless(["C:/Py/python.exe", "-m", "x"])
+    assert hidden[-3:] == ["C:/Py/python.exe", "-m", "x"]
+    # The compiled console exe has no windowless twin: conhost hosts it.
+    assert service.windowless(["C:/x/lens_scan.exe", "--serve"])[-2:] == [
         "C:/x/lens_scan.exe",
         "--serve",
     ]

@@ -229,7 +229,14 @@ def test_start_daemon_uses_the_service_profile_once_uploader_mode_is_set_up(stat
         {"port": 8765, "token": "t"},
     )
     assert client.start_daemon() is True
-    assert state.spawned == [["--serve", "--service"]]
+    # On Windows the service daemon runs under the supervisor, as the login
+    # item starts it; elsewhere launchd/systemd do the restarting.
+    expected = (
+        [runtime.SUPERVISE_FLAG]
+        if sys.platform == "win32"
+        else list(runtime.SERVICE_DAEMON_ARGS)
+    )
+    assert state.spawned == [expected]
 
 
 # ----------------------------------------------------------- spawn command line
