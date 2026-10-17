@@ -552,8 +552,9 @@ def cmd_update(rest) -> int:
         client.daemon_stop()
 
     if install.fresh_shell:
-        _out("The installer runs in a window of its own: Windows cannot replace")
-        _out("a running program from inside itself.")
+        _out("It runs in a window of its own, because Windows will not let a")
+        _out("program replace the files it is running from. Watch that window:")
+        _out("it stays open when it is done.")
         return EXIT_OK if update.run_detached(install.command) else EXIT_FAIL
 
     code = update.run(install.command)

@@ -108,6 +108,20 @@ def _installer_command() -> Install:
     )
 
 
+def _own_window(command: List[str]) -> List[str]:
+    """Keep the console window open after the command in it has finished.
+
+    A command that replaces the files it runs from has to be handed to a window
+    of its own (see ``run_detached``), and a window that closes the instant it
+    is done takes the answer with it.
+    """
+    if sys.platform != "win32":
+        return list(command)
+    import subprocess
+
+    return ["cmd", "/c", subprocess.list2cmdline(list(command)) + " & pause"]
+
+
 def _scoop_app(parts: Sequence[str]) -> str:
     """The Scoop app name, so `lens-scan-portable` is not updated as `lens-scan`."""
     try:
@@ -158,8 +172,10 @@ def detect() -> Install:
             return Install(
                 kind="uv",
                 label="uv tool (pinned to this version)",
-                command=_run_in(
-                    "uv", "tool", "install", "--force", "--refresh", requirement
+                command=_own_window(
+                    _run_in(
+                        "uv", "tool", "install", "--force", "--refresh", requirement
+                    )
                 ),
                 fresh_shell=sys.platform == "win32",
             )

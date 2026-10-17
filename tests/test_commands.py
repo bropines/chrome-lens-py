@@ -395,15 +395,15 @@ def test_a_uv_tool_pinned_to_a_version_is_reinstalled_without_the_pin(
     write_receipt(tmp_path, 'extras = ["clipboard"], specifier = "==3.8.0"')
     found = update.detect()
     assert found.kind == "uv" and "pinned" in found.label
-    assert found.command[1:] == [
-        "tool",
-        "install",
-        "--force",
-        "--refresh",
-        "chrome-lens-py[clipboard]",
-    ]
-    # The environment is recreated, which Windows will not allow from inside it.
+    spelled = update.quote(found.command)
+    assert "tool install --force --refresh" in spelled
+    assert "chrome-lens-py[clipboard]" in spelled
+    # The environment is recreated, which Windows will not allow from inside
+    # it, so the command goes to a window of its own - one that waits before
+    # closing, or its answer would be gone before it could be read.
     assert found.fresh_shell is (sys.platform == "win32")
+    if sys.platform == "win32":
+        assert found.command[0] == "cmd" and "& pause" in spelled
 
 
 def test_the_extras_a_uv_tool_was_installed_with_survive(monkeypatch, tmp_path):
