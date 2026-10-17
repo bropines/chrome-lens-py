@@ -396,6 +396,24 @@ def test_update_config_without_an_image_saves_and_exits(tmp_path, capsys):
     assert saved == {"timeout": 77, "overlay_mode": "legacy"}
 
 
+def test_show_config_answers_on_stdout_and_names_the_layer(tmp_path, capsys):
+    """`config show` exists to be read and piped, so it is stdout, not stderr."""
+    assert run(["--update-config", "--timeout", "77"]) == 0
+    capsys.readouterr()
+
+    assert run(["--show-config"]) == 0
+    out = capsys.readouterr().out
+    assert "timeout" in out and "77" in out and "config file" in out
+    assert "<hidden>" in out  # the API key is never printed
+
+    assert run(["--show-config", "--json"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    timeout = shown["settings"]["timeout"]
+    assert timeout["value"] == 77 and timeout["source"].startswith("config file")
+    assert shown["settings"]["api_key"]["value"] == "<hidden>"
+    assert shown["config_file_exists"] is True
+
+
 def test_serve_uses_the_merged_settings(tmp_path, monkeypatch):
     config = tmp_path / "c.json"
     config.write_text(

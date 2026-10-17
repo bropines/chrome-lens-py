@@ -795,7 +795,9 @@ def print_resolved_config(settings: Settings, path: str, as_json: bool) -> int:
     table.add_column("from", style="dim")
     for name, value, source in rows:
         table.add_row(name, escape(str(value)), source)
-    _stderr_console().print(table)
+    # The table is the answer to the question asked, not decoration, so it goes
+    # to stdout - as `--json` does - and only the hint below it to stderr.
+    console.print(table)
     note(
         "\n[dim]Precedence: command line > config file > LENS_* environment > "
         "default. Write the current command line into the file with "
