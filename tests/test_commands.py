@@ -33,6 +33,15 @@ def isolated(monkeypatch, tmp_path):
     return tmp_path
 
 
+SERVICE = {
+    "installed": False,
+    "mechanism": "login item",
+    "path": "p",
+    "port": None,
+    "token_file": None,
+}
+
+
 def stopped():
     return {"state": "stopped"}
 
@@ -152,7 +161,7 @@ def test_status_is_a_health_check_not_just_a_report(monkeypatch, capsys):
 
     # Nor is a login service with nothing behind it.
     monkeypatch.setattr(client, "daemon_report", stopped)
-    monkeypatch.setattr(manage, "service_info", lambda: dict(service, installed=True))
+    monkeypatch.setattr(manage, "service_info", lambda: dict(SERVICE, installed=True))
     assert manage.route(["status"]) == ("exit", manage.EXIT_FAIL)
 
     monkeypatch.setattr(client, "daemon_report", running)
@@ -188,6 +197,19 @@ def test_daemon_status_exits_zero_only_while_one_is_running(monkeypatch, capsys)
 
     assert manage.route(["daemon", "status", "--json"]) == ("exit", manage.EXIT_OK)
     assert json.loads(capsys.readouterr().out)["requests"] == 7
+
+
+def test_a_daemon_of_an_older_version_is_reported_as_such(monkeypatch, capsys):
+    """It answers with the old behaviour until the next scan retires it."""
+    monkeypatch.setattr(
+        client, "daemon_report", lambda: running(version="3.0.0", stale=True)
+    )
+    assert manage.route(["daemon", "status"]) == ("exit", manage.EXIT_OK)
+    assert "3.0.0" in capsys.readouterr().out
+
+    monkeypatch.setattr(manage, "service_info", lambda: dict(SERVICE, installed=True))
+    assert manage.route(["status"]) == ("exit", manage.EXIT_OK)  # not a fault
+    assert "replaced on the next scan" in capsys.readouterr().out
 
 
 def test_daemon_start_stop_restart_reach_the_client(monkeypatch):

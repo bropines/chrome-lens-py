@@ -220,9 +220,14 @@ def _daemon_line(daemon: dict) -> str:
     if state == "unresponsive":
         return f"recorded as pid {daemon.get('pid')} but not answering: {daemon.get('error')}"
     managed = "login service" if daemon.get("managed") == "service" else "on demand"
+    stale = (
+        f"  <- version {daemon.get('version')}, replaced on the next scan"
+        if daemon.get("stale")
+        else ""
+    )
     return (
         f"running   pid {daemon.get('pid')}  up {duration(daemon.get('uptime'))}  "
-        f"{daemon.get('requests', 0)} requests  ({managed})"
+        f"{daemon.get('requests', 0)} requests  ({managed}){stale}"
     )
 
 
@@ -379,7 +384,15 @@ def print_daemon(report: dict) -> None:
         return
     _out("lens_scan daemon: running")
     _row("pid", str(report.get("pid")))
-    _row("version", str(report.get("version")))
+    _row(
+        "version",
+        str(report.get("version"))
+        + (
+            f"  (this lens_scan is {__version__}; the next scan replaces the daemon)"
+            if report.get("stale")
+            else ""
+        ),
+    )
     _row("transport", f"{report.get('transport')} {report.get('address')}")
     _row("uptime", duration(report.get("uptime")))
     _row("requests", str(report.get("requests", 0)))

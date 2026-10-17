@@ -290,11 +290,14 @@ def test_format_tsv(images, capsys):
     assert rows[0][0] == "level" and rows[-1][-1] == "hello"
 
 
-def test_a_wrong_command_line_exits_64_and_says_where_to_look(capsys):
-    """One code for "you typed it wrong", whoever noticed: argparse or us."""
-    with pytest.raises(SystemExit) as stop:
-        cli.build_parser().parse_args(["--fromat", "json"])
-    assert stop.value.code == 64
+def test_a_wrong_command_line_exits_64_and_says_where_to_look(images, capsys):
+    """One code for "you typed it wrong", whoever noticed: argparse or us.
+
+    Through the real entry point, not the parser: the parser that `cli_main`
+    builds is the one that has to answer 64, and it is chosen separately for a
+    local run and for a forwarded one.
+    """
+    assert run([images[0], "--fromat", "json"]) == 64
     assert "lens_scan -h" in capsys.readouterr().err
 
 

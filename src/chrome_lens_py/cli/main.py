@@ -1324,7 +1324,7 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
     Anything that must run in the user's own process raises RunLocally.
     """
     ctx = current_context()
-    parser = build_parser(_NoExitParser if ctx is not None else argparse.ArgumentParser)
+    parser = build_parser(_NoExitParser if ctx is not None else _Parser)
     args = parser.parse_args(argv)
 
     if ctx is not None:
@@ -1584,6 +1584,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except KeyboardInterrupt:
         err_console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         return 130
+    except SystemExit as e:
+        # argparse reports a usage error by raising this from parser.exit().
+        # Returning the code keeps the promise above - and keeps the daemon's
+        # exit code and a local one the same number.
+        return e.code if isinstance(e.code, int) else EXIT_USAGE
 
 
 def run():

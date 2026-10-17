@@ -7,6 +7,19 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-10-17
+
+### Bug Fixes
+
+- A wrong command line exits 64 everywhere. 3.8.0 gave argparse's usage errors
+  a parser that exits 64, but the CLI built its parser with a plain
+  `ArgumentParser` for a local run, so `lens_scan img.png --fromat json` still
+  exited 2 - the code that means "some images of several failed".
+- `lens_scan status` and `lens_scan daemon status` say when the daemon that is
+  running is of an older version. It answers with the old behaviour until the
+  next scan retires it, which is worth seeing rather than a bare "running".
+  `--json` carries it as `daemon.stale`.
+
 ## [3.8.0] - 2026-10-17
 
 ### Highlights
@@ -260,7 +273,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...HEAD
+[3.8.1]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...v3.8.0
 [3.7.1]: https://github.com/bropines/chrome-lens-py/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/bropines/chrome-lens-py/compare/v3.6.0...v3.7.0

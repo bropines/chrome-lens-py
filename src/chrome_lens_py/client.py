@@ -496,6 +496,10 @@ def daemon_report() -> dict:
         "transport": info["transport"],
         "address": info["address"],
         "managed": info.get("managed"),
+        # An older daemon is not a fault - the next scan retires it and starts
+        # one of this version - but it does answer with the old behaviour until
+        # then, which is worth saying out loud rather than reporting "running".
+        "stale": info["version"] != __version__,
     }
     try:
         status, reply = call(info, "GET", "/v1/status", timeout=CONTROL_TIMEOUT)
