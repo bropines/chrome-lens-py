@@ -369,14 +369,21 @@ class LensRequestHandler:
         if self._client is None or self._client.is_closed:
             async with self._client_lock.get():
                 if self._client is None or self._client.is_closed:
-                    self._client = self._build_client(**self.proxy_settings)
+                    # Built off the event loop: creating the SSL context loads
+                    # the whole CA bundle, which blocked the daemon for long
+                    # enough that a status probe right after start timed out.
+                    self._client = await asyncio.to_thread(
+                        lambda: self._build_client(**self.proxy_settings)
+                    )
         return self._client
 
     async def _get_direct_client(self) -> httpx.AsyncClient:
         if self._direct_client is None or self._direct_client.is_closed:
             async with self._client_lock.get():
                 if self._direct_client is None or self._direct_client.is_closed:
-                    self._direct_client = self._build_client(trust_env=False)
+                    self._direct_client = await asyncio.to_thread(
+                        lambda: self._build_client(trust_env=False)
+                    )
         return self._direct_client
 
     async def aclose(self) -> None:
