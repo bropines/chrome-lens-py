@@ -305,8 +305,12 @@ def start_daemon(idle_timeout: int = DEFAULT_IDLE_TIMEOUT) -> bool:
     if not runtime.acquire_spawn_lock():
         return False
     if os.path.isfile(os.path.join(runtime.data_dir(), runtime.SERVICE_FILE)):
-        # The user installed uploader mode: keep the daemon on its fixed port.
-        args = ["--serve", "--service"]
+        # The user installed uploader mode: keep the daemon on its fixed port,
+        # and on Windows under the supervisor, as the login item would.
+        if sys.platform == "win32":
+            args = [runtime.SUPERVISE_FLAG]
+        else:
+            args = list(runtime.SERVICE_DAEMON_ARGS)
     else:
         args = ["--serve", "--auto", "--daemon-idle-timeout", str(idle_timeout)]
     if runtime.spawn_detached(args):
@@ -564,6 +568,9 @@ def manage(argv):
 def entry(argv=None) -> None:
     """The console script. Try the daemon, otherwise run the CLI as ever."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == [runtime.SUPERVISE_FLAG]:
+        # The always-on service on Windows: stdlib only, no CLI at all.
+        sys.exit(runtime.supervise())
     try:
         managed = manage(argv)
         if managed is not None:

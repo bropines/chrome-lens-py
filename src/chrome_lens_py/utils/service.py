@@ -37,7 +37,15 @@ SHORTCUT_NAME = "Chrome Lens OCR daemon.lnk"
 
 
 def service_command() -> List[str]:
-    return runtime.daemon_command(["--serve", "--service"])
+    """What the login item runs.
+
+    Windows gets the supervisor, which restarts a crashed daemon: a Startup
+    shortcut, unlike launchd's KeepAlive or systemd's Restart=, does nothing
+    after logon. Elsewhere the platform's own manager does that job.
+    """
+    if sys.platform == "win32":
+        return runtime.daemon_command([runtime.SUPERVISE_FLAG])
+    return runtime.daemon_command(runtime.SERVICE_DAEMON_ARGS)
 
 
 # ------------------------------------------------------------------- Linux
@@ -112,13 +120,30 @@ def shortcut_path() -> str:
     return os.path.join(startup_folder(), SHORTCUT_NAME)
 
 
+def _conhost() -> str:
+    return os.path.join(
+        os.environ.get("SystemRoot", r"C:\Windows"), "System32", "conhost.exe"
+    )
+
+
 def windowless(command: List[str]) -> List[str]:
-    """Swap python.exe for pythonw.exe so logon does not flash a console."""
+    """Run at logon without a console window.
+
+    python.exe has a windowless twin, pythonw.exe. The compiled lens_scan.exe
+    does not: it is a console program, and a minimised console still sits on
+    the taskbar for as long as the daemon lives. `conhost.exe --headless`
+    (Windows 10 1809 and later) hosts it with no window at all.
+    """
     exe = command[0]
-    if os.path.basename(exe).lower() == "python.exe":
+    name = os.path.basename(exe).lower()
+    if name == "python.exe":
         candidate = os.path.join(os.path.dirname(exe), "pythonw.exe")
         if os.path.isfile(candidate):
             return [candidate, *command[1:]]
+    if name.endswith(".exe") and name != "pythonw.exe":
+        conhost = _conhost()
+        if os.path.isfile(conhost):
+            return [conhost, "--headless", *command]
     return command
 
 
@@ -164,16 +189,20 @@ def _run(cmd: List[str]) -> bool:
     return True
 
 
-def _restart_service_daemon() -> None:
-    """Replace whatever daemon is running with the service one, now."""
+def _start_supervised_now() -> None:
+    """Replace whatever daemon runs with the supervised service one, now."""
     info = client.live_daemon()
     if info is not None:
         client.shutdown(info)
-    client.start_daemon()
-    started = client.wait_for_daemon()
-    if started is None:
+    if not runtime.spawn_detached([runtime.SUPERVISE_FLAG]):
         console.print(
-            "[yellow]The daemon did not answer yet; it will start at next login.[/yellow]"
+            "[yellow]Could not start it now; it starts at next login.[/yellow]"
+        )
+        return
+    if client.wait_for_daemon() is None:
+        console.print(
+            "[yellow]The daemon did not answer yet; see "
+            f"{escape(os.path.join(runtime.data_dir(), runtime.LOG_FILE))}.[/yellow]"
         )
 
 
@@ -197,7 +226,7 @@ def install_service(port: Optional[int] = None) -> bool:
             console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
             return False
         console.print(f"Startup shortcut created: [cyan]{escape(path)}[/cyan]")
-        _restart_service_daemon()
+        _start_supervised_now()
     elif sys.platform == "darwin":
         path = launch_agent_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -223,7 +252,10 @@ def install_service(port: Optional[int] = None) -> bool:
         ):
             return False
 
-    console.print("[bold green]Done.[/bold green] The daemon starts at every login.")
+    console.print(
+        "[bold green]Done.[/bold green] The daemon starts at every login"
+        + (" and is restarted if it crashes." if sys.platform == "win32" else ".")
+    )
     return True
 
 

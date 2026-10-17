@@ -411,3 +411,102 @@ def spawn_detached(extra_args) -> bool:
     finally:
         if log is not None:
             log.close()
+
+
+# --------------------------------------------------------------- supervisor
+
+SUPERVISE_FLAG = "--daemon-supervise"
+SERVICE_DAEMON_ARGS = ["--serve", "--service"]
+
+
+SUPERVISOR_LOG_FILE = "supervisor.log"
+
+
+def _log_line(message: str) -> None:
+    """Append to supervisor.log; the supervisor may run with no console at all.
+
+    A file of its own, not daemon.log: on Windows the daemon writes through an
+    inherited handle that does not keep append semantics, so it writes from
+    its own offset and would overwrite whatever the supervisor added there.
+    """
+    try:
+        path = os.path.join(data_dir(create=True), SUPERVISOR_LOG_FILE)
+        try:
+            if os.path.getsize(path) > MAX_LOG_BYTES:
+                os.replace(path, path + ".1")
+        except OSError:
+            pass
+        with open(path, "ab") as log:
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            log.write(f"{stamp} supervisor: {message}\n".encode("utf-8", "replace"))
+    except OSError:
+        pass
+
+
+def _spawn_child(cmd):
+    import subprocess
+
+    log = _open_log()
+    try:
+        kwargs = dict(
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            close_fds=True,
+            cwd=_home(),
+            env=daemon_env(),
+        )
+        if _IS_WINDOWS:
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        return subprocess.Popen(cmd, **kwargs)
+    finally:
+        log.close()
+
+
+def supervise(
+    child_args=None,
+    *,
+    max_backoff: float = 60.0,
+    healthy_after: float = 60.0,
+    spawn=None,
+    sleep=time.sleep,
+    clock=time.monotonic,
+) -> int:
+    """Keep the service daemon alive: run it as a child, restart it if it dies.
+
+    This is the Windows half of "always on". macOS (launchd KeepAlive) and
+    Linux (systemd Restart=on-failure) restart a crashed daemon themselves; a
+    Startup-folder shortcut only starts it at logon, so a crash used to leave
+    ShareX's uploader talking to nothing until the next login.
+
+    The rule is the exit code. 0 is a deliberate stop - `--daemon-stop`,
+    `--uninstall-service`, a shutdown request - and ends the supervisor too.
+    Anything else is a crash and is restarted, after 1 s, doubling to
+    `max_backoff`; a child that stayed up `healthy_after` seconds resets the
+    delay, so a crash loop backs off while a rare crash recovers at once.
+    """
+    child_args = list(SERVICE_DAEMON_ARGS if child_args is None else child_args)
+    spawn = spawn or _spawn_child
+    delay = 1.0
+    while True:
+        started = clock()
+        try:
+            proc = spawn(daemon_command(child_args))
+        except OSError as e:
+            _log_line(f"could not start the daemon ({e}); retrying in {delay:g}s")
+            sleep(delay)
+            delay = min(delay * 2, max_backoff)
+            continue
+        _log_line(f"daemon started (pid {proc.pid})")
+        try:
+            code = proc.wait()
+        except KeyboardInterrupt:
+            return 130
+        if code == 0:
+            _log_line("daemon stopped on request; supervisor exiting")
+            return 0
+        if clock() - started >= healthy_after:
+            delay = 1.0
+        _log_line(f"daemon exited with code {code}; restarting in {delay:g}s")
+        sleep(delay)
+        delay = min(delay * 2, max_backoff)
