@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.markup import escape
@@ -152,7 +152,7 @@ def apply_lens_hotkey(
 
     hotkeys.append(
         {
-            "HotkeyInfo": {"Hotkey": "O, Control", "Win": False},
+            "HotkeyInfo": {"Hotkey": PROGRAM_HOTKEY, "Win": False},
             "TaskSettings": {
                 "Description": "Google Lens OCR (chrome-lens-py)",
                 "Job": "RectangleLight",
@@ -222,101 +222,8 @@ def _restart_sharex(interactive: bool) -> None:
         )
 
 
-def setup_sharex_config(target_lang: Optional[str] = None) -> bool:
-    """
-    Automatically configures ShareX to use chrome-lens-py for OCR/Translation.
-    Injects a custom hotkey into HotkeysConfig.json, translating into
-    `target_lang` when one is given. Returns True on success.
-
-    The existing file is copied to HotkeysConfig.json.bak-<timestamp> before it
-    is touched, and the new content is written atomically.
-    """
-    if sys.platform != "win32":
-        console.print(
-            "[bold red]Error:[/bold red] ShareX setup is only supported on Windows."
-        )
-        return False
-
-    try:
-        action_args = build_action_args(target_lang)
-    except ValueError as e:
-        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
-        return False
-
-    # 1. Locate HotkeysConfig.json
-    config_path = get_documents_path() / "ShareX" / "HotkeysConfig.json"
-    if not config_path.exists():
-        console.print(
-            "[bold red]Error:[/bold red] ShareX configuration file not found at: "
-            f"[cyan]{escape(str(config_path))}[/cyan]"
-        )
-        console.print("Make sure ShareX is installed and has been run at least once.")
-        return False
-
-    # 2. Determine the path to the lens_scan executable/script.
-    executable_path = _find_lens_scan()
-    if not executable_path:
-        console.print(
-            "[bold red]Error:[/bold red] Could not locate the [cyan]lens_scan[/cyan] "
-            "executable.\nMake sure the package is installed "
-            "(e.g. [bold]pip install chrome-lens-py[/bold]) "
-            "and that the Scripts directory is in your PATH."
-        )
-        return False
-    console.print(f"Detected executable path: [cyan]{escape(executable_path)}[/cyan]")
-    if target_lang:
-        console.print(
-            f"The hotkey will translate into: [cyan]{escape(target_lang)}[/cyan]"
-        )
-
-    # 3. Close ShareX first, so that what we read is what it saved on exit
-    #    and nothing overwrites our edit afterwards.
-    was_running = terminate_sharex()
-
-    saved = False
-    try:
-        # ShareX uses UTF-8 with BOM sometimes
-        with open(config_path, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
-        if not isinstance(config, dict):
-            raise ValueError("HotkeysConfig.json does not contain a JSON object.")
-
-        if apply_lens_hotkey(config, executable_path, action_args):
-            console.print(
-                "Found existing 'lens' task in ShareX. [yellow]Updating it...[/yellow]"
-            )
-        else:
-            console.print(
-                "Adding new [bold green]Ctrl + O[/bold green] hotkey for Google Lens OCR."
-            )
-
-        backup_path = backup_hotkeys_config(config_path)
-        console.print(
-            f"Backup of the previous config: [cyan]{escape(str(backup_path))}[/cyan]"
-        )
-        atomic_write_text(str(config_path), json.dumps(config, indent=2))
-        saved = True
-        console.print(
-            "\n[bold green]Success![/bold green] ShareX configuration updated."
-        )
-        console.print(
-            "\nDefault hotkey: [bold cyan]Ctrl + O[/bold cyan] "
-            "(Region capture -> Lens OCR)"
-        )
-    except Exception as e:
-        console.print(
-            f"[bold red]Error updating ShareX config:[/bold red] {escape(str(e))}"
-        )
-
-    # 4. Bring ShareX back (also after a failure, if we were the ones to close it).
-    if saved or was_running:
-        _restart_sharex(interactive=saved)
-    return saved
-
-
 # ------------------------------------------------------------ uploader mode
 
-UPLOADER_FILENAME = "Google Lens OCR (chrome-lens-py).sxcu"
 UPLOADER_VERSION = "15.0.0"
 
 
@@ -336,7 +243,7 @@ def build_uploader_config(
         raise ValueError(f"Invalid language code: {target_lang!r}")
     config: Dict[str, Any] = {
         "Version": UPLOADER_VERSION,
-        "Name": "Google Lens OCR (chrome-lens-py)",
+        "Name": UPLOADER_NAME,
         "DestinationType": "ImageUploader",
         "RequestMethod": "POST",
         "RequestURL": f"http://127.0.0.1:{port}/v1/ocr/raw",
@@ -350,71 +257,246 @@ def build_uploader_config(
     return config
 
 
-def uploader_output_path() -> Path:
-    sharex_dir = get_documents_path() / "ShareX"
-    if sharex_dir.is_dir():
-        return sharex_dir / UPLOADER_FILENAME
-    from .. import runtime
+PROGRAM_HOTKEY = "O, Control"
+UPLOADER_HOTKEY = "O, Shift, Control"
+UPLOADER_NAME = "Google Lens OCR (chrome-lens-py)"
+UPLOADER_HOTKEY_DESCRIPTION = "Google Lens OCR via the daemon (chrome-lens-py)"
+MODES = ("program", "uploader", "both")
 
-    return Path(runtime.data_dir(create=True)) / UPLOADER_FILENAME
+
+def register_uploader(uploaders: Dict[str, Any], item: Dict[str, Any]) -> int:
+    """Put our custom uploader into an UploadersConfig dict; return its index.
+
+    Matched by name, so re-running setup refreshes the port and token in place
+    instead of piling up copies. ShareX's selected custom image uploader is
+    left alone: our hotkey points at this entry by index, so nothing else the
+    user uploads is redirected to the OCR daemon.
+    """
+    items = uploaders.get("CustomUploadersList")
+    if not isinstance(items, list):
+        items = []
+    for index, existing in enumerate(items):
+        if isinstance(existing, dict) and existing.get("Name") == item["Name"]:
+            items[index] = item
+            uploaders["CustomUploadersList"] = items
+            return index
+    items.append(item)
+    uploaders["CustomUploadersList"] = items
+    return len(items) - 1
+
+
+def uploader_hotkey(index: int) -> Dict[str, Any]:
+    """A hotkey that captures a region and sends it to our uploader only."""
+    return {
+        "HotkeyInfo": {"Hotkey": UPLOADER_HOTKEY, "Win": False},
+        "TaskSettings": {
+            "Description": UPLOADER_HOTKEY_DESCRIPTION,
+            "Job": "RectangleLight",
+            "UseDefaultAfterCaptureJob": False,
+            "AfterCaptureJob": "UploadImageToHost",
+            "UseDefaultAfterUploadJob": False,
+            # The daemon's reply (the text) is what ShareX calls the URL.
+            "AfterUploadJob": "CopyURLToClipboard",
+            "UseDefaultDestinations": False,
+            "ImageDestination": "CustomImageUploader",
+            # Per-hotkey choice of custom uploader: the global "image
+            # destination" stays whatever the user had.
+            "OverrideCustomUploader": True,
+            "CustomUploaderIndex": index,
+        },
+    }
+
+
+def apply_uploader_hotkey(config: Dict[str, Any], index: int) -> bool:
+    """Add or refresh our uploader hotkey. True if one was updated."""
+    hotkeys = config.get("Hotkeys")
+    if not isinstance(hotkeys, list):
+        hotkeys = []
+    fresh = uploader_hotkey(index)
+    for i, hk in enumerate(hotkeys):
+        task = hk.get("TaskSettings", {}) if isinstance(hk, dict) else {}
+        if task.get("Description") == UPLOADER_HOTKEY_DESCRIPTION:
+            hotkeys[i] = fresh
+            config["Hotkeys"] = hotkeys
+            return True
+    hotkeys.append(fresh)
+    config["Hotkeys"] = hotkeys
+    return False
+
+
+def hotkey_conflicts(config: Dict[str, Any], hotkey: str, own: str) -> List[str]:
+    """Descriptions of other hotkeys already bound to `hotkey`."""
+    taken = []
+    for hk in config.get("Hotkeys") or []:
+        if not isinstance(hk, dict):
+            continue
+        info = hk.get("HotkeyInfo") or {}
+        task = hk.get("TaskSettings") or {}
+        if info.get("Hotkey") != hotkey or task.get("Description") == own:
+            continue
+        if any(
+            isinstance(p, dict) and p.get("Name") == "lens"
+            for p in task.get("ExternalPrograms") or []
+        ):
+            continue  # our own program-mode hotkey
+        taken.append(task.get("Description") or task.get("Job") or "unnamed")
+    return taken
+
+
+def _load_json(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8-sig") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path.name} does not contain a JSON object.")
+    return data
+
+
+def setup_sharex(
+    mode: str = "program",
+    target_lang: Optional[str] = None,
+    port: Optional[int] = None,
+) -> bool:
+    """Configure ShareX. Returns True on success.
+
+    program   Ctrl+O runs lens_scan on the capture. Needs nothing running, and
+              uses the warm daemon whenever there is one.
+    uploader  Ctrl+Shift+O posts the capture straight to the always-on daemon:
+              no process per capture, the fastest path. Installs that daemon as
+              a login service (on Windows under a supervisor that restarts it).
+    both      Both hotkeys - the fast one, and the one that always works.
+
+    Every file is backed up before it is touched and written atomically, with
+    ShareX closed so it cannot overwrite the edit on its way out.
+    """
+    if sys.platform != "win32":
+        console.print(
+            "[bold red]Error:[/bold red] ShareX setup is only supported on Windows."
+        )
+        return False
+    if mode not in MODES:
+        console.print(f"[bold red]Error:[/bold red] unknown mode {escape(mode)!r}.")
+        return False
+    want_program = mode in ("program", "both")
+    want_uploader = mode in ("uploader", "both")
+
+    try:
+        action_args = build_action_args(target_lang)
+    except ValueError as e:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+        return False
+
+    sharex_dir = get_documents_path() / "ShareX"
+    hotkeys_path = sharex_dir / "HotkeysConfig.json"
+    uploaders_path = sharex_dir / "UploadersConfig.json"
+    needed = [hotkeys_path] + ([uploaders_path] if want_uploader else [])
+    missing = [p for p in needed if not p.exists()]
+    if missing:
+        console.print(
+            "[bold red]Error:[/bold red] ShareX configuration not found at: "
+            f"[cyan]{escape(str(missing[0]))}[/cyan]\n"
+            "Make sure ShareX is installed and has been run at least once."
+        )
+        return False
+
+    executable_path = None
+    if want_program:
+        executable_path = _find_lens_scan()
+        if not executable_path:
+            console.print(
+                "[bold red]Error:[/bold red] Could not locate the "
+                "[cyan]lens_scan[/cyan] executable.\nMake sure the package is "
+                "installed and that its Scripts directory is on PATH."
+            )
+            return False
+        console.print(f"lens_scan: [cyan]{escape(executable_path)}[/cyan]")
+
+    uploader_item = None
+    if want_uploader:
+        from ..daemon import ensure_service_config
+        from .service import install_service
+
+        try:
+            service = ensure_service_config(port)
+            uploader_item = build_uploader_config(
+                service["port"], service["token"], target_lang
+            )
+        except (ValueError, OSError) as e:
+            console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            return False
+        # The uploader is only as good as the daemon behind it: make it a
+        # login service, supervised so a crash is restarted.
+        if not install_service(port):
+            console.print(
+                "[bold red]Error:[/bold red] could not install the daemon service."
+            )
+            return False
+
+    if target_lang:
+        console.print(
+            f"Hotkeys will translate into: [cyan]{escape(target_lang)}[/cyan]"
+        )
+
+    was_running = terminate_sharex()
+    saved = False
+    try:
+        hotkeys = _load_json(hotkeys_path)
+        uploaders = _load_json(uploaders_path) if want_uploader else None
+
+        if want_program:
+            updated = apply_lens_hotkey(hotkeys, executable_path, action_args)
+            console.print(
+                ("Updated" if updated else "Added")
+                + " [bold green]Ctrl + O[/bold green]: run lens_scan on the capture."
+            )
+        if want_uploader:
+            assert uploaders is not None and uploader_item is not None
+            index = register_uploader(uploaders, uploader_item)
+            clash = hotkey_conflicts(
+                hotkeys, UPLOADER_HOTKEY, UPLOADER_HOTKEY_DESCRIPTION
+            )
+            updated = apply_uploader_hotkey(hotkeys, index)
+            console.print(
+                ("Updated" if updated else "Added")
+                + " [bold green]Ctrl + Shift + O[/bold green]: send the capture "
+                "to the daemon."
+            )
+            if clash:
+                console.print(
+                    "[yellow]Ctrl + Shift + O is also bound to: "
+                    f"{escape(', '.join(clash))}. Change one of them in ShareX."
+                    "[/yellow]"
+                )
+
+        for path in needed:
+            backup = backup_hotkeys_config(path)
+            console.print(f"Backup: [cyan]{escape(str(backup))}[/cyan]")
+        atomic_write_text(str(hotkeys_path), json.dumps(hotkeys, indent=2))
+        if want_uploader:
+            atomic_write_text(str(uploaders_path), json.dumps(uploaders, indent=2))
+        saved = True
+        console.print("\n[bold green]Success![/bold green] ShareX configured.")
+        if mode == "both":
+            console.print(
+                "Ctrl + Shift + O is the fast one; Ctrl + O keeps working even if "
+                "the daemon is down."
+            )
+    except Exception as e:
+        console.print(
+            f"[bold red]Error updating ShareX config:[/bold red] {escape(str(e))}"
+        )
+
+    if saved or was_running:
+        _restart_sharex(interactive=saved)
+    return saved
+
+
+def setup_sharex_config(target_lang: Optional[str] = None) -> bool:
+    """Program mode only; kept for callers of the previous API."""
+    return setup_sharex("program", target_lang)
 
 
 def setup_sharex_uploader(
     target_lang: Optional[str] = None, port: Optional[int] = None
 ) -> bool:
-    """Write the .sxcu file and make sure the persistent daemon is up.
-
-    Does not touch ShareX's own configuration: importing the file (a double
-    click) is ShareX's documented way to add an uploader, and it asks first.
-    """
-    from .. import client, runtime
-    from ..daemon import ensure_service_config
-
-    try:
-        service = ensure_service_config(port)
-        config = build_uploader_config(service["port"], service["token"], target_lang)
-    except (ValueError, OSError) as e:
-        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
-        return False
-
-    path = uploader_output_path()
-    try:
-        # It holds the token, so: this user only (POSIX; on Windows the folder's
-        # own ACL is what applies).
-        from . import config_manager
-
-        config_manager.atomic_write_text(str(path), json.dumps(config, indent=2))
-        if sys.platform != "win32":
-            os.chmod(path, 0o600)
-    except OSError as e:
-        console.print(
-            f"[bold red]Error writing {escape(str(path))}:[/bold red] {escape(str(e))}"
-        )
-        return False
-
-    console.print(f"Custom uploader written: [cyan]{escape(str(path))}[/cyan]")
-    console.print(
-        "\n[bold]Next:[/bold]\n"
-        "  1. Double-click that file. ShareX asks to add the uploader and to set "
-        "it as the image destination - say yes.\n"
-        "  2. In ShareX: After capture -> make sure [cyan]Upload image to host[/cyan] "
-        "is on, and under After upload -> [cyan]Copy URL to clipboard[/cyan].\n"
-        "  3. Capture a region. The recognised text lands on the clipboard.\n"
-        "\nThe file contains your daemon token; do not share it.\n"
-        "The daemon must be running on port "
-        f"{service['port']}: run [cyan]lens_scan --install-service[/cyan] to start "
-        "it at every login."
-    )
-
-    # Bring it up now, as the persistent flavour, so step 3 works at once.
-    info = client.live_daemon()
-    if info is None or info.get("managed") != "service":
-        if info is not None:
-            client.shutdown(info)
-        client.start_daemon()
-        if client.wait_for_daemon() is None:
-            console.print(
-                "[yellow]The daemon is not answering yet; see "
-                f"{escape(os.path.join(runtime.data_dir(), runtime.LOG_FILE))}.[/yellow]"
-            )
-    return True
+    """Uploader mode only; kept for callers of the previous API."""
+    return setup_sharex("uploader", target_lang, port)

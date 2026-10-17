@@ -43,7 +43,7 @@ from ..utils.config_manager import (
 )
 from ..utils.general import is_image_file_supported, is_url
 from ..utils.sharex import copy_to_clipboard
-from ..utils.sharex_setup import setup_sharex_config, setup_sharex_uploader
+from ..utils.sharex_setup import setup_sharex, setup_sharex_config
 
 logger = logging.getLogger(__name__)
 
@@ -651,11 +651,12 @@ def build_parser(
     )
     g.add_argument(
         "--mode",
-        choices=["program", "uploader"],
+        choices=["program", "uploader", "both"],
         default="program",
-        help="With --setup-sharex: program = ShareX runs lens_scan per capture "
-        "(default); uploader = write a ShareX custom uploader (.sxcu) that "
-        "posts to the daemon, so no process is started per capture.",
+        help="With --setup-sharex: program = Ctrl+O runs lens_scan per capture "
+        "(default, works with nothing running); uploader = Ctrl+Shift+O posts the "
+        "capture straight to an always-on daemon, no process per capture; both = "
+        "both hotkeys. uploader/both install the daemon as a login service.",
     )
     setting(
         g,
@@ -1229,10 +1230,10 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_OK
     if args.setup_sharex:
         lang = getattr(args, "target_lang", None)
-        if args.mode == "uploader":
-            ok = setup_sharex_uploader(lang, getattr(args, "daemon_port", None))
-        else:
+        if args.mode == "program":
             ok = setup_sharex_config(lang)
+        else:
+            ok = setup_sharex(args.mode, lang, getattr(args, "daemon_port", None))
         return EXIT_OK if ok else EXIT_FAILED
     if args.daemon_status or args.daemon_start or args.daemon_stop:
         from .. import client
