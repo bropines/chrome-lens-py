@@ -33,7 +33,7 @@
 | **pip** | `pip install "chrome-lens-py[clipboard]"` | Свой Python 3.9 или новее. Extra включает `--sharex`. |
 | **Docker** | `docker run -d -p 127.0.0.1:8765:8765 -e LENS_TOKEN=change-me ghcr.io/bropines/chrome-lens-py` | Запускает HTTP-сервер. `LENS_TOKEN` обязателен. |
 
-Проверить установку: `lens_scan --version` покажет, какая именно копия запускается. Контрольные суммы, аттестации, фиксация версии и остальное: [docs/install.md](docs/install.md).
+Проверить установку: `lens_scan --version` покажет, какая именно копия запускается. Контрольные суммы, аттестации, фиксация версии и остальное: [docs/install.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/install.md).
 
 ## 🚀 Быстрый старт
 
@@ -72,12 +72,12 @@ asyncio.run(main())
 
 | Страница | Что внутри |
 |---|---|
-| [docs/cli.md](docs/cli.md) | Все опции, форматы вывода, коды возврата, файл конфигурации, переменные `LENS_*` и их приоритет. |
-| [docs/api.md](docs/api.md) | `LensAPI`: конструктор, `process_image`, `process_region`, поля результата, исключения, примеры. |
-| [docs/rendering.md](docs/rendering.md) | Рисование перевода на картинке: вертикальный текст, режимы стирания, обводка, режим манги, шрифты. |
-| [docs/daemon.md](docs/daemon.md) | Быстрый режим и «тёплый» демон, сервис при входе в систему, HTTP API, модель безопасности. |
-| [docs/install.md](docs/install.md) | Все способы установки, контрольные суммы и происхождение сборки, фиксация версии, portable-сборка, Docker. |
-| [docs/sharex.md](docs/sharex.md) | Настройка ShareX: два хоткея, режим аплоадера, ручная настройка, решение проблем. |
+| [docs/cli.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/cli.md) | Все опции, форматы вывода, коды возврата, файл конфигурации, переменные `LENS_*` и их приоритет. |
+| [docs/api.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/api.md) | `LensAPI`: конструктор, `process_image`, `process_region`, поля результата, исключения, примеры. |
+| [docs/rendering.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/rendering.md) | Рисование перевода на картинке: вертикальный текст, режимы стирания, обводка, режим манги, шрифты. |
+| [docs/daemon.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/daemon.md) | Быстрый режим и «тёплый» демон, сервис при входе в систему, HTTP API, модель безопасности. |
+| [docs/install.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/install.md) | Все способы установки, контрольные суммы и происхождение сборки, фиксация версии, portable-сборка, Docker. |
+| [docs/sharex.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/sharex.md) | Настройка ShareX: два хоткея, режим аплоадера, ручная настройка, решение проблем. |
 | [CHANGELOG.md](CHANGELOG.md) | Что менялось в каждом релизе. |
 
 ## ❤️ Поддержка и благодарности

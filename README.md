@@ -33,7 +33,7 @@ An asynchronous Python library and a command-line tool (`lens_scan`) for Google 
 | **pip** | `pip install "chrome-lens-py[clipboard]"` | Your own Python, 3.9 or newer. The extra enables `--sharex`. |
 | **Docker** | `docker run -d -p 127.0.0.1:8765:8765 -e LENS_TOKEN=change-me ghcr.io/bropines/chrome-lens-py` | Runs the HTTP server. `LENS_TOKEN` is required. |
 
-Check it with `lens_scan --version`: it prints which copy runs. Checksums, attestations, version pinning and more: [docs/install.md](docs/install.md).
+Check it with `lens_scan --version`: it prints which copy runs. Checksums, attestations, version pinning and more: [docs/install.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/install.md).
 
 ## 🚀 Quick start
 
@@ -70,12 +70,12 @@ Result data goes to stdout and everything else to stderr, so `lens_scan img.png 
 
 | Page | What is in it |
 |---|---|
-| [docs/cli.md](docs/cli.md) | Every option, output formats, exit codes, config file, `LENS_*` variables and their precedence. |
-| [docs/api.md](docs/api.md) | `LensAPI`: constructor, `process_image`, `process_region`, result fields, exceptions, examples. |
-| [docs/rendering.md](docs/rendering.md) | Drawing the translation onto the image: vertical text, erase modes, outline, manga mode, fonts. |
-| [docs/daemon.md](docs/daemon.md) | Fast mode and the warm daemon, the login service, the HTTP API, the security model. |
-| [docs/install.md](docs/install.md) | All install methods, checksums and provenance, pinning a version, the portable build, Docker. |
-| [docs/sharex.md](docs/sharex.md) | ShareX setup: the two hotkeys, uploader mode, manual setup, troubleshooting. |
+| [docs/cli.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/cli.md) | Every option, output formats, exit codes, config file, `LENS_*` variables and their precedence. |
+| [docs/api.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/api.md) | `LensAPI`: constructor, `process_image`, `process_region`, result fields, exceptions, examples. |
+| [docs/rendering.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/rendering.md) | Drawing the translation onto the image: vertical text, erase modes, outline, manga mode, fonts. |
+| [docs/daemon.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/daemon.md) | Fast mode and the warm daemon, the login service, the HTTP API, the security model. |
+| [docs/install.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/install.md) | All install methods, checksums and provenance, pinning a version, the portable build, Docker. |
+| [docs/sharex.md](https://github.com/bropines/chrome-lens-py/blob/main/docs/sharex.md) | ShareX setup: the two hotkeys, uploader mode, manual setup, troubleshooting. |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release. |
 
 ## ❤️ Support & Acknowledgments

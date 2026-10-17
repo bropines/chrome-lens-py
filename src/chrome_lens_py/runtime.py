@@ -42,7 +42,7 @@ _IS_WINDOWS = sys.platform == "win32"
 
 # Environment the client forwards to the daemon: settings (LENS_*) and a few
 # harmless knobs that change how output is rendered or where the config lives.
-# Proxy variables are *not* forwarded - see the README ("Daemon / fast mode").
+# Proxy variables are *not* forwarded - see docs/daemon.md.
 ENV_PREFIX = "LENS_"
 FORWARDED_ENV = ("NO_COLOR", "FORCE_COLOR", "COLORTERM", "TERM", "XDG_CONFIG_HOME")
 
