@@ -3,6 +3,6 @@
 # protobuf runtime floor in pyproject.toml (1.81.1 -> libprotoc 33.5 -> 6.33.5).
 # Raising grpcio-tools means raising that floor too; tests/test_protos.py fails
 # until the two agree.
-grpcio-tools==1.81.1
+grpcio-tools==1.85.0
 black==26.5.1
 isort==9.0.1
