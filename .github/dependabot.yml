@@ -9,17 +9,31 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci"
+
+  # One pip entry, not two. A pip entry for `/` already finds every
+  # requirements file below it, scripts/requirements-protos.txt included, so a
+  # second entry for `/scripts` opened a duplicate pull request for every
+  # single bump - and both edited the same file, so merging either one left the
+  # other conflicting.
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
-    commit-message:
-      prefix: "build"
-  # scripts/requirements-protos.txt. Bumping grpcio-tools changes the protobuf
-  # gencode version; tests/test_protos.py fails until pyproject.toml follows.
-  - package-ecosystem: pip
-    directory: /scripts
-    schedule:
-      interval: weekly
+    groups:
+      # The formatters and linters arrive together: they are checked by running
+      # them, and three pull requests a week for them is noise. Runtime
+      # dependencies stay ungrouped, so a bump to httpx, Pillow or protobuf is
+      # a pull request of its own that gets read.
+      dev-tools:
+        patterns: ["black", "isort", "flake8", "mypy", "pytest*"]
+    ignore:
+      # Not a tooling update: the protoc inside grpcio-tools decides the
+      # gencode version of the checked-in protobuf modules, and everything
+      # after 1.81.1 emits gencode that needs a protobuf 7.x runtime - which
+      # has no wheel for Python 3.9, a version this package still supports.
+      # Bumping it means dropping Python 3.9, raising the protobuf floor in
+      # pyproject.toml and regenerating the modules, in one deliberate change.
+      # Remove this entry the day 3.9 goes.
+      - dependency-name: grpcio-tools
     commit-message:
       prefix: "build"

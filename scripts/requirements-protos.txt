@@ -3,6 +3,13 @@
 # protobuf runtime floor in pyproject.toml (1.81.1 -> libprotoc 33.5 -> 6.33.5).
 # Raising grpcio-tools means raising that floor too; tests/test_protos.py fails
 # until the two agree.
+#
+# 1.81.1 is the last release on libprotoc 33.5, and that is why it is still
+# here. Every later one (1.82 and up) bundles libprotoc 34/35, whose gencode
+# demands a protobuf 7.x runtime - and every protobuf 7.x wheel requires Python
+# 3.10, while this package supports 3.9. So bumping it is not a tooling update
+# but a decision to drop Python 3.9, and it is taken deliberately, not by a
+# dependency bot (see .github/dependabot.yml).
 grpcio-tools==1.81.1
-black==26.5.1
-isort==9.0.1
+black==26.10.1
+isort==9.0.2
