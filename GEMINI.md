@@ -4,7 +4,7 @@
 `chrome-lens-py` is a powerful, asynchronous Python library and command-line tool designed to interact directly with Google Lens via its reverse-engineered Protobuf endpoint (`v1/crupload`). This project enables advanced Optical Character Recognition (OCR), logical text segmentation (ideal for comics/manga), translation, and precise coordinate extraction for recognized text.
 
 ### Key Technologies
-- **Python 3.8+**: Core language.
+- **Python 3.10+**: Core language.
 - **Asyncio & HTTPX**: For high-performance, asynchronous networking.
 - **Protobuf (betterproto)**: For structured communication with Google's internal APIs.
 - **Pillow (PIL)**: For image manipulation and processing.

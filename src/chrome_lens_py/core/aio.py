@@ -9,14 +9,13 @@ T = TypeVar("T")
 class LoopLocal(Generic[T]):
     """An asyncio primitive created lazily, once per running event loop.
 
-    On Python 3.9 a Lock or Semaphore binds to the event loop current at
-    construction. LensAPI is routinely built outside any loop - at module
-    level, or before ``asyncio.run`` - and the primitive then belongs to a loop
-    that is never run, so the first ``async with`` fails with "attached to a
-    different loop" (or, with no current loop at all, "There is no current
-    event loop"). Creating it on first use inside the running loop avoids both,
-    and a second ``asyncio.run`` with the same object gets a fresh primitive
-    instead of a dead one.
+    A Lock or Semaphore binds itself to one event loop the first time it has to
+    make a caller wait, and raises "is bound to a different event loop" if it
+    is awaited from another one afterwards. LensAPI is routinely built outside
+    any loop - at module level, or before ``asyncio.run`` - and a second
+    ``asyncio.run`` with the same object would then hit a primitive belonging
+    to a loop that has already closed. Creating it on first use inside the
+    running loop gives each loop a live primitive of its own.
     """
 
     __slots__ = ("_factory", "_loop", "_value")

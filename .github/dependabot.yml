@@ -26,14 +26,5 @@ updates:
       # a pull request of its own that gets read.
       dev-tools:
         patterns: ["black", "isort", "flake8", "mypy", "pytest*"]
-    ignore:
-      # Not a tooling update: the protoc inside grpcio-tools decides the
-      # gencode version of the checked-in protobuf modules, and everything
-      # after 1.81.1 emits gencode that needs a protobuf 7.x runtime - which
-      # has no wheel for Python 3.9, a version this package still supports.
-      # Bumping it means dropping Python 3.9, raising the protobuf floor in
-      # pyproject.toml and regenerating the modules, in one deliberate change.
-      # Remove this entry the day 3.9 goes.
-      - dependency-name: grpcio-tools
     commit-message:
       prefix: "build"

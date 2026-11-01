@@ -7,6 +7,39 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-01
+
+### Breaking Changes
+
+- **Python 3.10 or newer is required.** Python 3.9 reached end of life in
+  October 2025, and holding it had a price that finally came due: the protoc
+  that generates the checked-in protobuf modules is frozen at libprotoc 33.5,
+  because every later one emits gencode that needs a protobuf 7.x runtime -
+  and no protobuf 7.x wheel exists for 3.9 (they are all `cp310-abi3`). So the
+  choice was a package stuck on an old compiler or a supported Python; this
+  release takes the second.
+
+  Only `pip install chrome-lens-py` is affected, and only on 3.9. Homebrew,
+  Scoop, the uv installers and the standalone builds all bring their own
+  interpreter and need nothing from you. If you are on 3.9, pip will keep
+  resolving to 3.8.2 rather than installing something that cannot run.
+
+### Changed
+
+- The protobuf modules are regenerated with libprotoc 35.1 (gencode 7.35.1,
+  from chromium@ae78d63de097), and the runtime floor moves to
+  `protobuf >= 7.35.1`. `grpcio-tools` in `scripts/requirements-protos.txt` is
+  no longer held back at 1.81.1, and Dependabot is allowed to propose bumps to
+  it again.
+- The test matrix runs 3.10 through 3.14.
+
+### Bug Fixes
+
+- A console window that `lens_scan update` opens for itself waits before
+  closing, so you can read what the installer said. It used to vanish the
+  moment the command finished, which on a failure was the only place the
+  reason was printed.
+
 ## [3.8.2] - 2026-10-17
 
 ### Bug Fixes
@@ -293,7 +326,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...v3.8.2
 [3.8.1]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/bropines/chrome-lens-py/compare/v3.7.1...v3.8.0

@@ -23,7 +23,7 @@ irm https://raw.githubusercontent.com/bropines/chrome-lens-py/main/scripts/insta
 brew install bropines/tap/lens-scan
 ```
 
-**Если Python 3.9+ уже есть**
+**Если Python 3.10+ уже есть**
 
 ```bash
 pip install "chrome-lens-py[clipboard]"

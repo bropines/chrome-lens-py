@@ -23,7 +23,7 @@
 | [uv](#uv) | no, uv fetches one | `install-uv.ps1` / `install-uv.sh` | `lens_scan update` |
 | [Standalone](#standalone-build) | no | `install.ps1` / `install.sh` | `lens_scan update` |
 | [Scoop](#scoop) (Windows) | no | `scoop install lens-scan` | `lens_scan update` |
-| [pip](#pip) | yes, your own (3.9+) | `pip install chrome-lens-py` | `lens_scan update` |
+| [pip](#pip) | yes, your own (3.10+) | `pip install chrome-lens-py` | `lens_scan update` |
 | [Docker](#docker) | no | `docker run ... ghcr.io/bropines/chrome-lens-py` | `docker pull`; `lens_scan update` says so |
 
 `lens_scan update` works out which of these installed the copy you are running and runs that one's own upgrade; see [Updating](#updating).

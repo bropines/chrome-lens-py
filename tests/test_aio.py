@@ -1,10 +1,9 @@
 """LensAPI must survive being built outside an event loop.
 
-On Python 3.9 an asyncio Lock/Semaphore binds to the loop current at
-construction, so `api = LensAPI()` at module level followed by
-`asyncio.run(...)` failed - and a second `asyncio.run` with the same object
-failed again. These run on every supported version, but 3.9 is where they
-would bite.
+An asyncio Lock/Semaphore binds to one event loop as soon as it makes a caller
+wait, so `api = LensAPI()` at module level followed by two `asyncio.run(...)`
+calls used to fail on the second with "is bound to a different event loop".
+LoopLocal is what keeps that working; these tests are what keep LoopLocal.
 """
 
 import asyncio
