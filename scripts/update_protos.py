@@ -54,6 +54,12 @@ EXCLUDED = {
         "package; compiling it would mean vendoring unrelated Chromium "
         "protos under their full import paths. The client never uses it."
     ),
+    "search_communication.proto": (
+        "imports input_type.proto (third_party/omnibox_proto, package omnibox) "
+        "since chromium@d717a509 - the same directory aim_communication.proto "
+        "reaches into, and excluded for the same reason. Nothing imports it "
+        "and the client never uses it."
+    ),
 }
 
 # Imports that protoc resolves from its own bundled include directory.
