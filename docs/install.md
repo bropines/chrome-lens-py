@@ -183,7 +183,9 @@ Three kinds of copy are not updated for you, because there is nothing safe to ru
 
 `--check` compares the version you have with the newest release on PyPI and changes nothing. PyPI answers for every channel, since uv, pip, Homebrew, Scoop and the install scripts are all published from the same release. `--json` does the same and prints the result for a script (it never updates). Run without either, `lens_scan update` on a copy that is already current reinstalls it, and says so first.
 
-A running [daemon](daemon.md) holds the files being replaced, so it is stopped before the update. If the [login service](daemon.md#running-it-as-a-login-service) owns it, the service is restarted afterwards; if it was just the on-demand daemon, it is started again. If the update command fails, the daemon is started again as it was.
+A running [daemon](daemon.md) holds the files being replaced, so it is stopped before the update. If the [login service](daemon.md#running-it-as-a-login-service) owns it, the service is restarted afterwards; if it was just the on-demand daemon, it is started again. That restart is done by the newly installed `lens_scan`, in a process of its own, not by the one running the update: that one is still the old version in memory, and would start the daemon the old way and wait for the old version number. If the update command fails, the daemon is still started again, with whatever is on disk.
+
+On Windows, uv's `lens_scan.exe` is the program running the update, and uv's last step is to write a new one over it, which Windows refuses for a running executable. So it is renamed out of the way first (Windows does allow that), put back if the update leaves nothing in its place, and the leftover `lens_scan.exe.<pid>.old` beside it is deleted by the next update. Before 4.0.1 this step failed with "os error 32" even though every package had already been replaced; the update had gone through, and `lens_scan service restart` finishes it.
 
 ## Verifying a download
 
