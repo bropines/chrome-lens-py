@@ -259,6 +259,14 @@ def print_status(report: dict) -> None:
     if sharex is not None and sharex.get("supported"):
         if sharex.get("error"):
             _row("sharex", f"could not be read: {sharex['error']}")
+        elif sharex.get("broken"):
+            # Listed by ShareX, so it looks set up, and does nothing when
+            # pressed - which only status can tell you.
+            _row(
+                "sharex",
+                f"BROKEN  {', '.join(sharex['broken'])} capture nothing; ShareX "
+                "reset their task  (`lens_scan sharex --mode both` repairs it)",
+            )
         elif sharex.get("configured"):
             bound = [
                 f"{key} ({what})"
@@ -303,6 +311,10 @@ def cmd_status(rest) -> int:
     if daemon["state"] == "unresponsive":
         return EXIT_FAIL
     if service["installed"] and daemon["state"] != "running":
+        return EXIT_FAIL
+    # A hotkey that is set up and does nothing is a failure of something the
+    # user configured, the same kind as a service with no daemon.
+    if (report.get("sharex") or {}).get("broken"):
         return EXIT_FAIL
     return EXIT_OK
 

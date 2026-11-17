@@ -147,6 +147,13 @@ def apply_lens_hotkey(
                 prog["Path"] = executable_path
                 prog["Args"] = action_args
                 prog["IsActive"] = True
+                # Re-running setup has to repair the capture too, not only the
+                # program: after ShareX 22 reset RectangleLight to "None", this
+                # update path refreshed the path and arguments of a hotkey that
+                # still captured nothing. A job someone chose on purpose
+                # (RectangleTransparent, ActiveWindow, ...) is left alone.
+                if task.get("Job") in _DEAD_JOBS:
+                    task["Job"] = CAPTURE_JOB
                 config["Hotkeys"] = hotkeys
                 return True
 
@@ -155,7 +162,7 @@ def apply_lens_hotkey(
             "HotkeyInfo": {"Hotkey": PROGRAM_HOTKEY, "Win": False},
             "TaskSettings": {
                 "Description": "Google Lens OCR (chrome-lens-py)",
-                "Job": "RectangleLight",
+                "Job": CAPTURE_JOB,
                 "UseDefaultAfterCaptureJob": False,
                 "AfterCaptureJob": "SaveImageToFile, PerformActions",
                 "UseDefaultActions": False,
@@ -259,6 +266,17 @@ def build_uploader_config(
 
 PROGRAM_HOTKEY = "O, Control"
 UPLOADER_HOTKEY = "O, Shift, Control"
+
+# The capture both hotkeys start with. RectangleRegion is in every ShareX
+# release; RectangleLight, which these hotkeys used to name, was removed in
+# ShareX 22.0 and has not come back (22.4 has RectangleRegion and
+# RectangleTransparent). ShareX does not complain about a job it no longer
+# knows: it loads it as "None" and saves that back, so the hotkey is still
+# listed - as "Not selected" - and does nothing at all.
+CAPTURE_JOB = "RectangleRegion"
+# What a hotkey of ours holding one of these does: nothing. "RectangleLight"
+# counts because on ShareX 22+ it is about to become "None" on the next load.
+_DEAD_JOBS = (None, "", "None", "RectangleLight")
 UPLOADER_NAME = "Google Lens OCR (chrome-lens-py)"
 UPLOADER_HOTKEY_DESCRIPTION = "Google Lens OCR via the daemon (chrome-lens-py)"
 MODES = ("program", "uploader", "both")
@@ -291,7 +309,7 @@ def uploader_hotkey(index: int) -> Dict[str, Any]:
         "HotkeyInfo": {"Hotkey": UPLOADER_HOTKEY, "Win": False},
         "TaskSettings": {
             "Description": UPLOADER_HOTKEY_DESCRIPTION,
-            "Job": "RectangleLight",
+            "Job": CAPTURE_JOB,
             "UseDefaultAfterCaptureJob": False,
             "AfterCaptureJob": "UploadImageToHost",
             "UseDefaultAfterUploadJob": False,
@@ -368,6 +386,10 @@ def describe() -> Dict[str, Any]:
         "program_args": None,
         "program_path": None,
         "uploader_hotkey": None,
+        # Ours, but capturing nothing - see CAPTURE_JOB. Listed rather than
+        # folded into "configured", because a hotkey ShareX still shows and
+        # never runs is exactly what `status` is for.
+        "broken": [],
     }
     try:
         sharex_dir = get_documents_path() / "ShareX"
@@ -381,13 +403,18 @@ def describe() -> Dict[str, Any]:
             continue
         info = hotkey.get("HotkeyInfo") or {}
         task = hotkey.get("TaskSettings") or {}
+        ours = False
         for program in task.get("ExternalPrograms") or []:
             if isinstance(program, dict) and program.get("Name") == "lens":
                 state["program_hotkey"] = info.get("Hotkey")
                 state["program_args"] = program.get("Args")
                 state["program_path"] = program.get("Path")
+                ours = True
         if task.get("Description") == UPLOADER_HOTKEY_DESCRIPTION:
             state["uploader_hotkey"] = info.get("Hotkey")
+            ours = True
+        if ours and task.get("Job") in _DEAD_JOBS:
+            state["broken"].append(info.get("Hotkey"))
     state["configured"] = bool(state["program_hotkey"] or state["uploader_hotkey"])
     return state
 

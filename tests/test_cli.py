@@ -539,6 +539,54 @@ def test_apply_lens_hotkey_adds_then_updates():
     assert program["Path"] == "C:/b/lens_scan.exe" and program["Args"] == "-t ru Y"
 
 
+def test_hotkeys_start_a_capture_every_sharex_release_knows():
+    # RectangleLight was removed in ShareX 22.0. ShareX loads a job it does not
+    # know as "None" and saves that back: the hotkey stays listed, as "Not
+    # selected", and pressing it does nothing.
+    config = {"Hotkeys": []}
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    assert config["Hotkeys"][0]["TaskSettings"]["Job"] == "RectangleRegion"
+    assert sharex_setup.uploader_hotkey(3)["TaskSettings"]["Job"] == "RectangleRegion"
+
+
+@pytest.mark.parametrize("dead", ["None", "RectangleLight", "", None])
+def test_running_setup_again_repairs_a_hotkey_sharex_reset(dead):
+    # The update path used to refresh the program's path and arguments only,
+    # so re-running setup left a "None" job capturing nothing.
+    config = {"Hotkeys": []}
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    config["Hotkeys"][0]["TaskSettings"]["Job"] = dead
+
+    assert sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X") is True
+    assert config["Hotkeys"][0]["TaskSettings"]["Job"] == "RectangleRegion"
+
+
+def test_running_setup_again_keeps_a_capture_the_user_chose():
+    config = {"Hotkeys": []}
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    config["Hotkeys"][0]["TaskSettings"]["Job"] = "RectangleTransparent"
+
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    assert config["Hotkeys"][0]["TaskSettings"]["Job"] == "RectangleTransparent"
+
+
+def test_describe_names_a_hotkey_that_captures_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sharex_setup.sys, "platform", "win32")
+    monkeypatch.setattr(sharex_setup, "get_documents_path", lambda: tmp_path)
+    sharex_dir = tmp_path / "ShareX"
+    sharex_dir.mkdir()
+    config = {"Hotkeys": []}
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    sharex_setup.apply_uploader_hotkey(config, 0)
+    # What ShareX 22 leaves of a RectangleLight hotkey.
+    config["Hotkeys"][0]["TaskSettings"]["Job"] = "None"
+    (sharex_dir / "HotkeysConfig.json").write_text(json.dumps(config), encoding="utf-8")
+
+    state = sharex_setup.describe()
+    assert state["configured"] is True
+    assert state["broken"] == [sharex_setup.PROGRAM_HOTKEY]
+
+
 def test_setup_sharex_backs_up_and_writes_atomically(tmp_path, monkeypatch):
     sharex_dir = tmp_path / "ShareX"
     sharex_dir.mkdir()

@@ -7,6 +7,24 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- **The ShareX hotkeys work on ShareX 22.** Both started a `RectangleLight`
+  capture, which ShareX removed in 22.0. ShareX does not complain about a job
+  it no longer knows: it loads it as "None" and saves that back, so after the
+  update Ctrl + O stayed listed - as "Not selected" - and did nothing, and the
+  same happened to Ctrl + Shift + O. They now use `RectangleRegion`, which
+  every ShareX release has; verified by letting ShareX 22.4 load the config
+  and save it again.
+
+  **Run `lens_scan sharex --mode both` once** to repair hotkeys that ShareX
+  has already reset. Until now re-running setup could not: it refreshed the
+  program's path and arguments and left the dead job in place. It repairs the
+  job now, leaving a capture you chose yourself alone.
+- `lens_scan status` reports a hotkey ShareX has reset as **BROKEN**, says how
+  to repair it, and exits 1. It used to say "configured" about a hotkey that
+  did nothing.
+
 ## [4.0.1] - 2026-11-17
 
 ### Bug Fixes

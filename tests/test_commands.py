@@ -176,6 +176,27 @@ def test_status_is_a_health_check_not_just_a_report(monkeypatch, capsys):
     assert manage.route(["status"]) == ("exit", manage.EXIT_OK)
 
 
+def test_status_fails_on_a_sharex_hotkey_that_captures_nothing(monkeypatch, capsys):
+    # ShareX 22 turned the RectangleLight job into "None": the hotkey is still
+    # listed and does nothing. "configured" was the wrong thing to say.
+    monkeypatch.setattr(client, "daemon_report", running)
+    monkeypatch.setattr(
+        manage,
+        "sharex_info",
+        lambda: {
+            "supported": True,
+            "configured": True,
+            "program_hotkey": "O, Control",
+            "uploader_hotkey": None,
+            "broken": ["O, Control"],
+        },
+    )
+    assert manage.route(["status"]) == ("exit", manage.EXIT_FAIL)
+    out = capsys.readouterr().out
+    assert "BROKEN" in out and "O, Control" in out
+    assert "lens_scan sharex" in out  # and says how to repair it
+
+
 def test_status_json_says_everything_the_screen_does(monkeypatch, capsys):
     monkeypatch.setattr(client, "daemon_report", lambda: running(managed="service"))
     assert manage.route(["status", "--json"]) == ("exit", manage.EXIT_OK)
