@@ -570,6 +570,28 @@ def test_running_setup_again_keeps_a_capture_the_user_chose():
     assert config["Hotkeys"][0]["TaskSettings"]["Job"] == "RectangleTransparent"
 
 
+def test_running_setup_again_keeps_the_keys_the_user_rebound():
+    # Both hotkeys are found by what they do, not by their keys, so a binding
+    # changed in ShareX has to survive a re-run. The uploader's entry is
+    # rebuilt on update and used to come back as Ctrl + Shift + O.
+    config = {"Hotkeys": []}
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    sharex_setup.apply_uploader_hotkey(config, 0)
+    config["Hotkeys"][0]["HotkeyInfo"]["Hotkey"] = "L, Alt"
+    config["Hotkeys"][1]["HotkeyInfo"]["Hotkey"] = "L, Shift, Alt"
+    config["Hotkeys"][1]["TaskSettings"]["Job"] = "None"  # and ShareX reset it
+
+    sharex_setup.apply_lens_hotkey(config, "C:/lens_scan.exe", "X")
+    sharex_setup.apply_uploader_hotkey(config, 2)
+
+    program, uploader = config["Hotkeys"]
+    assert program["HotkeyInfo"]["Hotkey"] == "L, Alt"
+    assert uploader["HotkeyInfo"]["Hotkey"] == "L, Shift, Alt"
+    # The rest is still refreshed: the repaired job and the new uploader index.
+    assert uploader["TaskSettings"]["Job"] == "RectangleRegion"
+    assert uploader["TaskSettings"]["CustomUploaderIndex"] == 2
+
+
 def test_describe_names_a_hotkey_that_captures_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(sharex_setup.sys, "platform", "win32")
     monkeypatch.setattr(sharex_setup, "get_documents_path", lambda: tmp_path)

@@ -7,6 +7,12 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Re-running `lens_scan sharex` keeps the keys you bound the uploader hotkey
+  to in ShareX. Its entry was rebuilt whole on every run, so a rebinding came
+  back as Ctrl + Shift + O; the program hotkey already kept its keys.
+
 ## [4.0.2] - 2026-11-17
 
 ### Bug Fixes

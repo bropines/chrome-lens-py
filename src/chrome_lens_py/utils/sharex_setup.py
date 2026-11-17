@@ -334,6 +334,14 @@ def apply_uploader_hotkey(config: Dict[str, Any], index: int) -> bool:
     for i, hk in enumerate(hotkeys):
         task = hk.get("TaskSettings", {}) if isinstance(hk, dict) else {}
         if task.get("Description") == UPLOADER_HOTKEY_DESCRIPTION:
+            # The keys are the user's once the hotkey exists: rebinding it in
+            # ShareX and then re-running setup used to put Ctrl + Shift + O
+            # back, because the entry was replaced whole. The program hotkey's
+            # update never touched its keys; now neither does this one.
+            if isinstance(hk.get("HotkeyInfo"), dict) and hk["HotkeyInfo"].get(
+                "Hotkey"
+            ):
+                fresh["HotkeyInfo"] = hk["HotkeyInfo"]
             hotkeys[i] = fresh
             config["Hotkeys"] = hotkeys
             return True
