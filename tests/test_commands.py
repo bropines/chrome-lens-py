@@ -722,7 +722,9 @@ def test_an_update_command_sees_everything_printed_before_it(monkeypatch):
 
 
 def test_a_uv_install_on_windows_names_its_launcher(monkeypatch, tmp_path):
-    monkeypatch.setattr(update.sys, "platform", "win32")
+    # Not sys.platform: that is the real sys module, and patching it sends the
+    # standard library down Windows-only paths on Linux and macOS.
+    monkeypatch.setattr(update, "_windows", lambda: True)
     monkeypatch.setattr(
         update.sys,
         "executable",

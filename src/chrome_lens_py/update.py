@@ -201,7 +201,7 @@ def detect() -> Install:
             # uv's launcher on Windows waits for the Python it started, so the
             # lens_scan.exe that ran `lens_scan update` is open for the whole
             # update - and uv's last step is to copy a fresh one over it.
-            entrypoint=_uv_entrypoint() if sys.platform == "win32" else None,
+            entrypoint=_uv_entrypoint() if _windows() else None,
         )
 
     if "pipx" in everywhere:
@@ -263,6 +263,16 @@ def _uv_requirement() -> Tuple[str, bool]:
     requirement = PACKAGE + (f"[{','.join(names)}]" if names else "")
     pinned = bool(re.search(r'specifier\s*=\s*"\s*[=~<>!]', entry))
     return requirement, pinned
+
+
+def _windows() -> bool:
+    """Its own function so a test can say "Windows" without patching ``sys``.
+
+    Setting ``sys.platform`` in a test changes it for everything, and the
+    standard library then takes Windows-only paths on Linux - ``shutil.which``
+    reaches for ``_winapi`` and fails.
+    """
+    return sys.platform == "win32"
 
 
 def _uv_entrypoint() -> Optional[str]:
