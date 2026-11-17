@@ -7,6 +7,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-11-17
+
 ### Bug Fixes
 
 - **The ShareX hotkeys work on ShareX 22.** Both started a `RectangleLight`
@@ -385,7 +387,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.1...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.2...HEAD
+[4.0.2]: https://github.com/bropines/chrome-lens-py/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/bropines/chrome-lens-py/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...v3.8.2
