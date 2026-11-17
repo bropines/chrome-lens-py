@@ -362,13 +362,13 @@ def lens_scan_command(*args: str) -> Optional[List[str]]:
 
     from . import runtime
 
+    on_path = shutil.which("lens_scan")
     if runtime.is_compiled():
-        exe = shutil.which("lens_scan") or sys.executable
-        return [exe, *args] if exe else None
+        frozen = on_path or sys.executable
+        return [frozen, *args] if frozen else None
     if sys.executable and os.path.isfile(sys.executable):
         return [sys.executable, "-m", "chrome_lens_py", *args]
-    exe = shutil.which("lens_scan")
-    return [exe, *args] if exe else None
+    return [on_path, *args] if on_path else None
 
 
 def _is_portable(exe: str, package: str) -> bool:
