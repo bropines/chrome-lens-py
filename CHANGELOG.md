@@ -7,6 +7,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-11-17
+
 ### Bug Fixes
 
 - **`lens_scan update` works on a uv install on Windows.** uv's launcher waits
@@ -35,6 +37,16 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
   failed with "No module named pip".
 - What `update` prints before handing over to uv, brew or pip comes out
   before their output when stdout is a pipe or a log file, not after it.
+
+### Changed
+
+- The protobuf modules are regenerated from chromium@0889dbff0b08, and
+  `search_communication.proto` is excluded. Since chromium@d717a509 it imports
+  `input_type.proto` from `third_party/omnibox_proto`, the directory
+  `aim_communication.proto` is already excluded for; nothing imports it and
+  the client never used it. The weekly regeneration had failed on that import
+  since 2026-11-15 rather than ship a module with a dangling one. Nothing else
+  in the directory changed since 4.0.0.
 
 ## [4.0.0] - 2026-11-01
 
@@ -355,7 +367,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/bropines/chrome-lens-py/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/bropines/chrome-lens-py/compare/v3.8.1...v3.8.2
 [3.8.1]: https://github.com/bropines/chrome-lens-py/compare/v3.8.0...v3.8.1
