@@ -38,6 +38,10 @@ class Install(NamedTuple):
     then says what to do instead. ``fresh_shell`` marks a command that
     replaces the very files it is running from, which Windows will not allow
     while they are open: those are handed to a new console window.
+
+    ``entrypoint`` is a launcher the update will rewrite that may be the very
+    program running this update - uv's ``lens_scan.exe`` on Windows. It is
+    moved out of the way first; see ``move_aside``.
     """
 
     kind: str
@@ -45,6 +49,7 @@ class Install(NamedTuple):
     command: Optional[List[str]] = None
     hint: str = ""
     fresh_shell: bool = False
+    entrypoint: Optional[str] = None
 
 
 # --------------------------------------------------------------- detection
@@ -161,7 +166,12 @@ def detect() -> Install:
             command=_run_in("scoop", "update", _scoop_app(everywhere)),
         )
 
-    if "uv" in everywhere and "tools" in everywhere:
+    # uv's receipt beside the environment is the authoritative sign; the path
+    # is only a fallback. Matching `uv/tools` alone missed every install with
+    # its own UV_TOOL_DIR, which then fell through to pip - and a uv
+    # environment has no pip, so the update failed with "No module named pip".
+    uv_receipt = os.path.isfile(os.path.join(sys.prefix, "uv-receipt.toml"))
+    if uv_receipt or ("uv" in everywhere and "tools" in everywhere):
         requirement, pinned = _uv_requirement()
         if pinned:
             # `uv tool upgrade` honours the version the tool was installed
@@ -188,6 +198,10 @@ def detect() -> Install:
             # works from inside the tool itself on Windows. It also makes
             # `update` repair an install that is merely damaged.
             command=_run_in("uv", "tool", "upgrade", "--reinstall", PACKAGE),
+            # uv's launcher on Windows waits for the Python it started, so the
+            # lens_scan.exe that ran `lens_scan update` is open for the whole
+            # update - and uv's last step is to copy a fresh one over it.
+            entrypoint=_uv_entrypoint() if sys.platform == "win32" else None,
         )
 
     if "pipx" in everywhere:
@@ -249,6 +263,102 @@ def _uv_requirement() -> Tuple[str, bool]:
     requirement = PACKAGE + (f"[{','.join(names)}]" if names else "")
     pinned = bool(re.search(r'specifier\s*=\s*"\s*[=~<>!]', entry))
     return requirement, pinned
+
+
+def _uv_entrypoint() -> Optional[str]:
+    """Where uv puts the ``lens_scan`` launcher, from the tool's receipt.
+
+    The receipt records it as ``install-path``, so this is the exact file uv
+    will try to overwrite rather than whichever ``lens_scan`` PATH finds first.
+    """
+    try:
+        with open(os.path.join(sys.prefix, "uv-receipt.toml"), encoding="utf-8") as f:
+            receipt = f.read()
+    except OSError:
+        return None
+    for entry in re.findall(r"\{[^}]*\}", receipt):
+        if re.search(r'name\s*=\s*"lens_scan"', entry):
+            found = re.search(r'install-path\s*=\s*"([^"]+)"', entry)
+            if found:
+                return os.path.normpath(found.group(1))
+    return None
+
+
+def move_aside(path: Optional[str]) -> Optional[str]:
+    """Rename a launcher that may be running, so an update can write a new one.
+
+    Windows refuses to overwrite or delete a running executable but does allow
+    renaming it: the running process keeps its file under the new name, and
+    the old name is free for the installer. Without this, `lens_scan update`
+    on a uv install replaced every package and then failed on its last step,
+    "failed to copy file ... lens_scan.exe ... os error 32", because the
+    launcher it was copying over was the one running the update.
+
+    Returns where the file went, for ``restore``. The renamed copy cannot be
+    deleted while it runs, so it is left beside the new one and swept up by the
+    next update; Windows does not run ``lens_scan.exe.1234.old`` by its name.
+    """
+    if not path or not os.path.isfile(path):
+        return None
+    folder, name = os.path.split(path)
+    # Leftovers from earlier updates: whichever are no longer running delete
+    # fine, the rest wait for next time.
+    try:
+        for stale in os.listdir(folder):
+            if stale.startswith(name + ".") and stale.endswith(".old"):
+                try:
+                    os.remove(os.path.join(folder, stale))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    moved = f"{path}.{os.getpid()}.old"
+    try:
+        os.replace(path, moved)
+    except OSError:
+        return None
+    return moved
+
+
+def restore(path: Optional[str], moved: Optional[str]) -> None:
+    """Put a launcher back if the update did not leave a new one in its place.
+
+    Without this a failed update would also take ``lens_scan`` off PATH.
+    """
+    if not path or not moved or os.path.exists(path):
+        return
+    try:
+        os.replace(moved, path)
+    except OSError:
+        pass
+
+
+def lens_scan_command(*args: str) -> Optional[List[str]]:
+    """The ``lens_scan`` that is installed *now*, for running after an update.
+
+    Not this process: the code it loaded is the version that was just
+    replaced. Starting the daemon from here would start it with the old
+    version's idea of how a daemon is started, and then wait for one that
+    announces the old version number - which, after an update, never comes.
+
+    A frozen build (Homebrew's, the standalone ones) is its own executable,
+    and after an upgrade the one on PATH is the new one while
+    ``sys.executable`` may still be the old version's. A Python install keeps
+    its interpreter across an update - uv's ``--reinstall`` and pip both
+    replace the packages, not the interpreter - so it is asked to run the
+    package from disk.
+    """
+    import shutil
+
+    from . import runtime
+
+    if runtime.is_compiled():
+        exe = shutil.which("lens_scan") or sys.executable
+        return [exe, *args] if exe else None
+    if sys.executable and os.path.isfile(sys.executable):
+        return [sys.executable, "-m", "chrome_lens_py", *args]
+    exe = shutil.which("lens_scan")
+    return [exe, *args] if exe else None
 
 
 def _is_portable(exe: str, package: str) -> bool:
@@ -339,6 +449,14 @@ def run(command: Sequence[str]) -> int:
     """Run an update command with its output on our own streams."""
     import subprocess
 
+    # The child writes straight to the same file descriptors, so anything we
+    # printed and Python is still holding would come out after it. A console
+    # flushes per line and hides this; a pipe or a log file does not.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (AttributeError, OSError, ValueError):
+            pass
     try:
         return subprocess.call(list(command))
     except OSError as e:

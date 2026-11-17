@@ -7,6 +7,35 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- **`lens_scan update` works on a uv install on Windows.** uv's launcher waits
+  for the Python it starts, so the `lens_scan.exe` that ran the update was open
+  for the whole of it - and uv's last step is to copy a fresh one over it. Every
+  package was replaced and then the update failed anyway: "failed to copy file
+  ... lens_scan.exe ... os error 32". Windows will not overwrite a running
+  executable but will rename one, so the launcher is now moved aside first,
+  put back if the update leaves nothing in its place, and the leftover is
+  swept up by the next update.
+
+  Updating *from* 4.0.0 still runs 4.0.0's own updater, which has this bug. If
+  you see that error going to 4.0.1, the update did go through; run
+  `uv tool upgrade --reinstall chrome-lens-py` from a plain shell instead, or
+  simply `lens_scan service restart` afterwards.
+- **No more "did not start" about a daemon that had started.** The daemon was
+  put back from inside the update process, which is still the old version -
+  so it waited for a daemon announcing the old version number, which after an
+  update never comes. It is now started by the newly installed `lens_scan`, in
+  a process of its own: the new version starts its daemon its own way and
+  waits for its own number. This also runs after a failed update, since the
+  daemon was stopped either way.
+- A uv tool is recognised by uv's receipt beside its environment, not by
+  `uv/tools` in its path. An install with its own `UV_TOOL_DIR` used to be
+  taken for a pip install, and a uv environment has no pip, so the update
+  failed with "No module named pip".
+- What `update` prints before handing over to uv, brew or pip comes out
+  before their output when stdout is a pipe or a log file, not after it.
+
 ## [4.0.0] - 2026-11-01
 
 ### Breaking Changes

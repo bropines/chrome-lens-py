@@ -542,12 +542,6 @@ def cmd_update(rest) -> int:
     report = client.daemon_report()
     was_running = report["state"] == "running"
     was_service = report.get("managed") == "service"
-    if was_service:
-        # Imported *before* the update replaces the file it would be read from:
-        # an installer swapping site-packages under a running interpreter would
-        # otherwise leave this process importing the new version of one module
-        # into the old version of the rest.
-        from .utils import service
     if was_running:
         client.daemon_stop()
 
@@ -557,16 +551,28 @@ def cmd_update(rest) -> int:
         _out("it stays open when it is done.")
         return EXIT_OK if update.run_detached(install.command) else EXIT_FAIL
 
-    code = update.run(install.command)
+    moved = update.move_aside(install.entrypoint)
+    try:
+        code = update.run(install.command)
+    finally:
+        update.restore(install.entrypoint, moved)
+
+    # Put the daemon back with the code that is on disk now, in a process of
+    # its own. This process is still the old version, so it would start the
+    # daemon the old version's way and then wait for one announcing the old
+    # version number - which after an update never answers, and is why 4.0.0
+    # and earlier reported "did not start" about a daemon that had. Done even
+    # when the update failed: the daemon was stopped here, and whatever is on
+    # disk is what the next `lens_scan` would run anyway.
+    if was_running:
+        action = ("service", "restart") if was_service else ("daemon", "start")
+        again = update.lens_scan_command(*action)
+        if again is None or update.run(again) != 0:
+            _out(f"Start it again with `lens_scan {' '.join(action)}`.")
+
     if code != 0:
         _out(f"The update command failed ({code}).")
-        if was_running:
-            client.daemon_start()
         return EXIT_FAIL
-    if was_service:
-        service.control("restart")
-    elif was_running:
-        client.daemon_start()
     _out()
     _out("Updated. `lens_scan version` shows what is running now.")
     return EXIT_OK

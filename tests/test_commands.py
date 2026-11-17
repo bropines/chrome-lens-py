@@ -496,43 +496,276 @@ def test_check_reports_and_changes_nothing(monkeypatch, capsys):
 
 
 def test_an_update_stops_the_daemon_and_puts_the_service_back(monkeypatch, capsys):
-    from chrome_lens_py.utils import service
-
-    order = []
+    ran = []
     monkeypatch.setattr(update, "latest", lambda: "9.9.9")
     monkeypatch.setattr(
         update, "detect", lambda: update.Install("pip", "pip", ["pip", "x"])
     )
+    monkeypatch.setattr(update, "run", lambda cmd: ran.append(list(cmd)) or 0)
     monkeypatch.setattr(
-        update, "run", lambda cmd: order.append(("run", list(cmd))) or 0
+        update, "lens_scan_command", lambda *args: ["new-lens-scan", *args]
     )
     monkeypatch.setattr(client, "daemon_report", lambda: running(managed="service"))
-    monkeypatch.setattr(client, "daemon_stop", lambda: order.append(("stop",)) or 0)
-    monkeypatch.setattr(
-        service, "control", lambda action: order.append((action,)) or True
-    )
+    monkeypatch.setattr(client, "daemon_stop", lambda: ran.append(["stop"]) or 0)
 
     assert manage.route(["update"]) == ("exit", manage.EXIT_OK)
-    assert order == [("stop",), ("run", ["pip", "x"]), ("restart",)]
+    # The service comes back through the *new* lens_scan, in a process of its
+    # own - not through this one, which is still the version being replaced.
+    assert ran == [["stop"], ["pip", "x"], ["new-lens-scan", "service", "restart"]]
     assert "Updated." in capsys.readouterr().out
 
 
-def test_a_failed_update_brings_the_daemon_back_and_fails(monkeypatch, capsys):
-    order = []
+def test_the_restart_never_goes_through_this_process(monkeypatch):
+    """This process is the old version: it would wait forever for its own number.
+
+    4.0.0 and earlier restarted in-process, then waited for a daemon announcing
+    the old version - which after an update never comes - and so reported "did
+    not start" about a daemon that had started fine.
+    """
+    from chrome_lens_py.utils import service
+
     monkeypatch.setattr(update, "latest", lambda: "9.9.9")
     monkeypatch.setattr(
         update, "detect", lambda: update.Install("pip", "pip", ["pip", "x"])
     )
-    monkeypatch.setattr(update, "run", lambda cmd: 1)
-    monkeypatch.setattr(client, "daemon_report", running)
-    monkeypatch.setattr(client, "daemon_stop", lambda: order.append("stop") or 0)
+    monkeypatch.setattr(update, "run", lambda cmd: 0)
+    monkeypatch.setattr(update, "lens_scan_command", lambda *a: ["x", *a])
+    monkeypatch.setattr(client, "daemon_report", lambda: running(managed="service"))
+    monkeypatch.setattr(client, "daemon_stop", lambda: 0)
     monkeypatch.setattr(
-        client, "daemon_start", lambda idle=0: order.append("start") or 0
+        service, "control", lambda action: pytest.fail("restarted in-process")
+    )
+    monkeypatch.setattr(
+        client, "daemon_start", lambda idle=0: pytest.fail("started in-process")
     )
 
+    assert manage.route(["update"]) == ("exit", manage.EXIT_OK)
+
+
+def test_a_failed_update_brings_the_daemon_back_and_fails(monkeypatch, capsys):
+    ran = []
+    monkeypatch.setattr(update, "latest", lambda: "9.9.9")
+    monkeypatch.setattr(
+        update, "detect", lambda: update.Install("pip", "pip", ["pip", "x"])
+    )
+    monkeypatch.setattr(
+        update,
+        "run",
+        lambda cmd: ran.append(list(cmd)) or (1 if cmd == ["pip", "x"] else 0),
+    )
+    monkeypatch.setattr(
+        update, "lens_scan_command", lambda *args: ["new-lens-scan", *args]
+    )
+    monkeypatch.setattr(client, "daemon_report", running)
+    monkeypatch.setattr(client, "daemon_stop", lambda: ran.append(["stop"]) or 0)
+
     assert manage.route(["update"]) == ("exit", manage.EXIT_FAIL)
-    assert order == ["stop", "start"]
+    # Stopped here, so started again here - with whatever is on disk now.
+    assert ran == [["stop"], ["pip", "x"], ["new-lens-scan", "daemon", "start"]]
     assert "failed" in capsys.readouterr().out
+
+
+def test_a_restart_that_cannot_run_says_how_to_do_it_by_hand(monkeypatch, capsys):
+    monkeypatch.setattr(update, "latest", lambda: "9.9.9")
+    monkeypatch.setattr(
+        update, "detect", lambda: update.Install("pip", "pip", ["pip", "x"])
+    )
+    monkeypatch.setattr(update, "run", lambda cmd: 0)
+    monkeypatch.setattr(update, "lens_scan_command", lambda *args: None)
+    monkeypatch.setattr(client, "daemon_report", lambda: running(managed="service"))
+    monkeypatch.setattr(client, "daemon_stop", lambda: 0)
+
+    assert manage.route(["update"]) == ("exit", manage.EXIT_OK)
+    assert "lens_scan service restart" in capsys.readouterr().out
+
+
+def test_nothing_is_restarted_that_was_not_running(monkeypatch):
+    ran = []
+    monkeypatch.setattr(update, "latest", lambda: "9.9.9")
+    monkeypatch.setattr(
+        update, "detect", lambda: update.Install("pip", "pip", ["pip", "x"])
+    )
+    monkeypatch.setattr(update, "run", lambda cmd: ran.append(list(cmd)) or 0)
+    monkeypatch.setattr(client, "daemon_report", stopped)
+
+    assert manage.route(["update"]) == ("exit", manage.EXIT_OK)
+    assert ran == [["pip", "x"]]
+
+
+def test_the_running_launcher_is_moved_aside_for_the_update(
+    monkeypatch, tmp_path, capsys
+):
+    """The `lens_scan.exe` that runs `lens_scan update` is what uv copies over.
+
+    uv's Windows launcher waits for the Python it started, so it is open for the
+    whole update and uv's last step failed with os error 32. Renaming a running
+    executable is allowed where overwriting it is not.
+    """
+    shim = tmp_path / "lens_scan.exe"
+    shim.write_bytes(b"old launcher")
+    seen = {}
+
+    def fake_uv(cmd):
+        # What the installer finds: the name is free, so it writes a new one.
+        seen["free"] = not shim.exists()
+        shim.write_bytes(b"new launcher")
+        return 0
+
+    monkeypatch.setattr(update, "latest", lambda: "9.9.9")
+    monkeypatch.setattr(
+        update,
+        "detect",
+        lambda: update.Install("uv", "uv tool", ["uv", "x"], entrypoint=str(shim)),
+    )
+    monkeypatch.setattr(update, "run", fake_uv)
+    monkeypatch.setattr(client, "daemon_report", stopped)
+
+    assert manage.route(["update"]) == ("exit", manage.EXIT_OK)
+    assert seen["free"], "the launcher was still in the way"
+    assert shim.read_bytes() == b"new launcher"
+    # The old one stays until it stops running; the next update sweeps it up.
+    leftovers = list(tmp_path.glob("lens_scan.exe.*.old"))
+    assert [f.read_bytes() for f in leftovers] == [b"old launcher"]
+
+
+def test_a_failed_update_puts_the_launcher_back(monkeypatch, tmp_path):
+    # Otherwise a failure would also take lens_scan off PATH.
+    shim = tmp_path / "lens_scan.exe"
+    shim.write_bytes(b"old launcher")
+    monkeypatch.setattr(update, "latest", lambda: "9.9.9")
+    monkeypatch.setattr(
+        update,
+        "detect",
+        lambda: update.Install("uv", "uv tool", ["uv", "x"], entrypoint=str(shim)),
+    )
+    monkeypatch.setattr(update, "run", lambda cmd: 2)
+    monkeypatch.setattr(client, "daemon_report", stopped)
+
+    assert manage.route(["update"]) == ("exit", manage.EXIT_FAIL)
+    assert shim.read_bytes() == b"old launcher"
+    assert not list(tmp_path.glob("*.old"))
+
+
+def test_moving_aside_sweeps_up_earlier_leftovers(tmp_path):
+    shim = tmp_path / "lens_scan.exe"
+    shim.write_bytes(b"current")
+    stale = tmp_path / "lens_scan.exe.111.old"
+    stale.write_bytes(b"from a previous update")
+    unrelated = tmp_path / "other.exe.222.old"
+    unrelated.write_bytes(b"not ours")
+
+    moved = update.move_aside(str(shim))
+
+    assert moved and moved.endswith(".old") and not shim.exists()
+    assert not stale.exists()
+    assert unrelated.exists(), "only lens_scan's own leftovers are touched"
+
+
+def test_moving_aside_nothing_is_a_no_op(tmp_path):
+    assert update.move_aside(None) is None
+    assert update.move_aside(str(tmp_path / "missing.exe")) is None
+    update.restore(None, None)  # and putting nothing back does nothing
+
+
+def test_the_launcher_path_comes_from_uvs_receipt(monkeypatch, tmp_path):
+    monkeypatch.setattr(update.sys, "prefix", str(tmp_path))
+    (tmp_path / "uv-receipt.toml").write_text(
+        "[tool]\n"
+        'requirements = [{ name = "chrome-lens-py", extras = ["clipboard"] }]\n'
+        "entrypoints = [\n"
+        '    { name = "lens_scan", install-path = "C:/Users/u/.local/bin/lens_scan.exe",'
+        ' from = "chrome-lens-py" },\n'
+        "]\n",
+        encoding="utf-8",
+    )
+    assert update._uv_entrypoint() == os.path.normpath(
+        "C:/Users/u/.local/bin/lens_scan.exe"
+    )
+
+    (tmp_path / "uv-receipt.toml").unlink()
+    assert update._uv_entrypoint() is None
+
+
+def test_a_uv_tool_is_recognised_by_its_receipt_wherever_it_lives(
+    monkeypatch, tmp_path
+):
+    # UV_TOOL_DIR can put the environment anywhere. Matching `uv/tools` in the
+    # path missed those, and they fell through to pip - which a uv environment
+    # does not have, so the update died on "No module named pip".
+    prefix = tmp_path / "my-tools" / "chrome-lens-py"
+    prefix.mkdir(parents=True)
+    write_receipt(prefix, 'extras = ["clipboard"]')
+    monkeypatch.setattr(update.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update.sys, "executable", str(prefix / "Scripts" / "python.exe")
+    )
+    monkeypatch.setattr(update, "_git_checkout", lambda package: False)
+
+    found = update.detect()
+    assert found.kind == "uv", found
+    assert "tool upgrade --reinstall" in update.quote(found.command)
+
+
+def test_an_update_command_sees_everything_printed_before_it(monkeypatch):
+    # The child shares our stdout; unflushed lines would land after its output.
+    import io
+    import subprocess
+
+    buffered = io.StringIO()
+    flushed = []
+    buffered.flush = lambda: flushed.append(True)
+    monkeypatch.setattr(update.sys, "stdout", buffered)
+    monkeypatch.setattr(subprocess, "call", lambda cmd: 0)
+
+    assert update.run(["true"]) == 0
+    assert flushed, "stdout was not flushed before the child ran"
+
+
+def test_a_uv_install_on_windows_names_its_launcher(monkeypatch, tmp_path):
+    monkeypatch.setattr(update.sys, "platform", "win32")
+    monkeypatch.setattr(
+        update.sys,
+        "executable",
+        r"C:\Users\u\AppData\Roaming\uv\tools\chrome-lens-py\Scripts\python.exe",
+    )
+    monkeypatch.setattr(update, "_git_checkout", lambda package: False)
+    monkeypatch.setattr(update, "_uv_entrypoint", lambda: r"C:\bin\lens_scan.exe")
+    monkeypatch.setattr(update, "_uv_requirement", lambda: ("chrome-lens-py", False))
+
+    found = update.detect()
+    assert found.kind == "uv" and found.entrypoint == r"C:\bin\lens_scan.exe"
+
+
+def test_lens_scan_after_an_update_runs_the_package_from_disk(monkeypatch, tmp_path):
+    from chrome_lens_py import runtime
+
+    python = tmp_path / "python.exe"
+    python.write_bytes(b"")
+    monkeypatch.setattr(runtime, "is_compiled", lambda: False)
+    monkeypatch.setattr(update.sys, "executable", str(python))
+    assert update.lens_scan_command("service", "restart") == [
+        str(python),
+        "-m",
+        "chrome_lens_py",
+        "service",
+        "restart",
+    ]
+
+
+def test_a_frozen_build_after_an_update_runs_the_one_on_path(monkeypatch):
+    # Homebrew's old version may still sit at sys.executable after an upgrade.
+    import shutil
+
+    from chrome_lens_py import runtime
+
+    monkeypatch.setattr(runtime, "is_compiled", lambda: True)
+    monkeypatch.setattr(update.sys, "executable", "/old/Cellar/lens_scan")
+    monkeypatch.setattr(shutil, "which", lambda name: "/opt/homebrew/bin/lens_scan")
+    assert update.lens_scan_command("daemon", "start") == [
+        "/opt/homebrew/bin/lens_scan",
+        "daemon",
+        "start",
+    ]
 
 
 def test_an_install_that_replaces_itself_is_handed_a_window_of_its_own(
