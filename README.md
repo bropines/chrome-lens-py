@@ -62,7 +62,8 @@ The result goes to stdout and everything else to stderr, so `lens_scan img.png >
 | `lens_scan update` | update this copy the way it was installed (uv, brew, Scoop, pip, installer) |
 | `lens_scan daemon status\|start\|stop\|restart\|logs` | the warm background process that makes a scan take ~0.4 s instead of ~3 s |
 | `lens_scan service install\|uninstall\|status\|logs` | keep that daemon running from login (what ShareX's fast hotkey needs) |
-| `lens_scan sharex [--mode both] [-t LANG]` | set up the ShareX hotkeys (Windows) |
+| `lens_scan search IMAGE [--ai QUESTION]` | search the web with an image: visual matches, products, AI Mode - opens in your browser |
+| `lens_scan sharex [--mode both] [-t LANG]` | set up the ShareX hotkeys (Windows); `--mode search` adds Ctrl+Alt+O for search |
 | `lens_scan config show` | every setting, its value, and which layer set it |
 | `lens_scan serve` | run the HTTP API in this terminal |
 

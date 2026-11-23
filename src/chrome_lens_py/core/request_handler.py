@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -535,8 +535,25 @@ class LensRequestHandler:
         assert response is not None
         return response
 
+    @staticmethod
+    def _sibling(endpoint: str, path: Optional[str]) -> str:
+        """The same API's `path` method, next to a crupload endpoint.
+
+        Lens's other methods live beside crupload under the same prefix
+        (``.../v1/crupload`` -> ``.../v1/gsessionid``), so a mirror configured
+        through LENS_ENDPOINT serves them too as long as it forwards the prefix.
+        """
+        if not path:
+            return endpoint
+        parts = urlsplit(endpoint)
+        folder = parts.path.rsplit("/", 1)[0]
+        return urlunsplit(parts._replace(path=f"{folder}/{path}", query=""))
+
     async def _send_once(
-        self, payload: bytes, session: Optional[LensSession]
+        self,
+        payload: bytes,
+        session: Optional[LensSession],
+        path: Optional[str] = None,
     ) -> httpx.Response:
         """One attempt: walk the endpoints, and within each the keys."""
         count = len(self.endpoints)
@@ -544,7 +561,7 @@ class LensRequestHandler:
         last_failure: Optional[httpx.TransportError] = None
         for step in range(count):
             index = (start + step) % count
-            url = self._url(self.endpoints[index], session)
+            url = self._url(self._sibling(self.endpoints[index], path), session)
             try:
                 response = await self._post_with_keys(url, payload)
             except httpx.TransportError as exc:
@@ -573,13 +590,19 @@ class LensRequestHandler:
         raise last_failure
 
     async def post_raw(
-        self, protobuf_payload: bytes, session: Optional[LensSession] = None
+        self,
+        protobuf_payload: bytes,
+        session: Optional[LensSession] = None,
+        path: Optional[str] = None,
     ) -> httpx.Response:
         """POST the payload under the retry policy and return the response.
 
         Transport failures raise LensConnectionError / LensTimeoutError. HTTP
         error statuses are *returned* (after retries on the retryable ones) so
         callers can read the body; use ``raise_for_response`` to convert.
+
+        ``path`` names another method beside crupload - ``"gsessionid"`` opens
+        a search session - and goes through the same keys, proxy and retries.
         """
         loop = asyncio.get_running_loop()
         started = loop.time()
@@ -595,7 +618,8 @@ class LensRequestHandler:
             pending: Optional[httpx.Response] = None
             try:
                 response = await asyncio.wait_for(
-                    self._send_once(protobuf_payload, session), timeout=remaining
+                    self._send_once(protobuf_payload, session, path),
+                    timeout=remaining,
                 )
             except asyncio.TimeoutError:
                 raise self._deadline_error(last_error) from None
@@ -659,6 +683,23 @@ class LensRequestHandler:
         body = await response.aread()
         raise_for_response(response, body)
         return response, body
+
+    async def exchange(
+        self,
+        protobuf_payload: bytes,
+        session: Optional[LensSession] = None,
+        path: Optional[str] = None,
+    ) -> bytes:
+        """POST and return the body, raising on an HTTP error.
+
+        Unlike ``send_request`` this leaves ``session.cluster_info`` alone: a
+        search session's ids come from ``gsessionid``, not from the objects
+        response, and must survive the upload.
+        """
+        response = await self.post_raw(protobuf_payload, session=session, path=path)
+        body = await response.aread()
+        raise_for_response(response, body)
+        return body
 
     @staticmethod
     def _parse_response(body: bytes) -> "LensOverlayServerResponse":

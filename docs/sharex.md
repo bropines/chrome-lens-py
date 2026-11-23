@@ -37,6 +37,21 @@ milliseconds instead of three seconds, with no extra setup. See
 [Fast mode](daemon.md#fast-mode) for how it works, how to turn it off
 (`--daemon off`) and what it measures.
 
+### A third one: search with the capture
+
+```bash
+lens_scan sharex --mode search        # or --mode all for all three
+```
+
+**Ctrl + Alt + O** runs [`lens_scan search`](cli.md#lens_scan-search) on the
+capture and opens Google's results for it in your browser: visual matches, exact
+matches, an AI overview, products a tab away - Chrome's "Search with Google Lens",
+for anything on the screen. A run adds only the hotkeys its mode names, so
+`--mode search` puts it next to the two OCR hotkeys without touching them.
+
+Every hotkey is found again by what it does, not by its keys: rebind any of them
+in ShareX and a later setup run keeps your keys.
+
 ---
 
 ## Recommended: Automated Setup (Windows)

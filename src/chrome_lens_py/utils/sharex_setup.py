@@ -279,7 +279,13 @@ CAPTURE_JOB = "RectangleRegion"
 _DEAD_JOBS = (None, "", "None", "RectangleLight")
 UPLOADER_NAME = "Google Lens OCR (chrome-lens-py)"
 UPLOADER_HOTKEY_DESCRIPTION = "Google Lens OCR via the daemon (chrome-lens-py)"
-MODES = ("program", "uploader", "both")
+SEARCH_HOTKEY = "O, Alt, Control"
+SEARCH_HOTKEY_DESCRIPTION = "Google Lens search (chrome-lens-py)"
+# The external program's name is how the search hotkey is found again, as
+# "lens" finds the OCR one - by what it does, not by its keys.
+SEARCH_PROGRAM_NAME = "lens-search"
+# "both" keeps meaning the two OCR hotkeys it always meant; "all" adds search.
+MODES = ("program", "uploader", "both", "search", "all")
 
 
 def register_uploader(uploaders: Dict[str, Any], item: Dict[str, Any]) -> int:
@@ -350,6 +356,58 @@ def apply_uploader_hotkey(config: Dict[str, Any], index: int) -> bool:
     return False
 
 
+def apply_search_hotkey(config: Dict[str, Any], executable_path: str) -> bool:
+    """Add or refresh the search hotkey. True if one was updated.
+
+    Like the OCR program hotkey, it is found by its external program, keeps the
+    keys the user may have rebound it to, and has a dead job repaired.
+    """
+    hotkeys = config.get("Hotkeys")
+    if not isinstance(hotkeys, list):
+        hotkeys = []
+    action_args = 'search "$input"'
+
+    for hk in hotkeys:
+        task = hk.get("TaskSettings", {}) if isinstance(hk, dict) else {}
+        for prog in task.get("ExternalPrograms") or []:
+            if isinstance(prog, dict) and prog.get("Name") == SEARCH_PROGRAM_NAME:
+                prog["Path"] = executable_path
+                prog["Args"] = action_args
+                prog["IsActive"] = True
+                if task.get("Job") in _DEAD_JOBS:
+                    task["Job"] = CAPTURE_JOB
+                config["Hotkeys"] = hotkeys
+                return True
+
+    hotkeys.append(
+        {
+            "HotkeyInfo": {"Hotkey": SEARCH_HOTKEY, "Win": False},
+            "TaskSettings": {
+                "Description": SEARCH_HOTKEY_DESCRIPTION,
+                "Job": CAPTURE_JOB,
+                "UseDefaultAfterCaptureJob": False,
+                "AfterCaptureJob": "SaveImageToFile, PerformActions",
+                "UseDefaultActions": False,
+                "ExternalPrograms": [
+                    {
+                        "IsActive": True,
+                        "Name": SEARCH_PROGRAM_NAME,
+                        "Path": executable_path,
+                        "Args": action_args,
+                        "OutputExtension": "",
+                        "Extensions": "",
+                        # The result is a browser tab; there is nothing to show.
+                        "HiddenWindow": True,
+                        "DeleteInputFile": False,
+                    }
+                ],
+            },
+        }
+    )
+    config["Hotkeys"] = hotkeys
+    return False
+
+
 def hotkey_conflicts(config: Dict[str, Any], hotkey: str, own: str) -> List[str]:
     """Descriptions of other hotkeys already bound to `hotkey`."""
     taken = []
@@ -361,10 +419,10 @@ def hotkey_conflicts(config: Dict[str, Any], hotkey: str, own: str) -> List[str]
         if info.get("Hotkey") != hotkey or task.get("Description") == own:
             continue
         if any(
-            isinstance(p, dict) and p.get("Name") == "lens"
+            isinstance(p, dict) and p.get("Name") in ("lens", SEARCH_PROGRAM_NAME)
             for p in task.get("ExternalPrograms") or []
         ):
-            continue  # our own program-mode hotkey
+            continue  # one of our own program hotkeys
         taken.append(task.get("Description") or task.get("Job") or "unnamed")
     return taken
 
@@ -394,6 +452,7 @@ def describe() -> Dict[str, Any]:
         "program_args": None,
         "program_path": None,
         "uploader_hotkey": None,
+        "search_hotkey": None,
         # Ours, but capturing nothing - see CAPTURE_JOB. Listed rather than
         # folded into "configured", because a hotkey ShareX still shows and
         # never runs is exactly what `status` is for.
@@ -418,12 +477,19 @@ def describe() -> Dict[str, Any]:
                 state["program_args"] = program.get("Args")
                 state["program_path"] = program.get("Path")
                 ours = True
+            elif (
+                isinstance(program, dict) and program.get("Name") == SEARCH_PROGRAM_NAME
+            ):
+                state["search_hotkey"] = info.get("Hotkey")
+                ours = True
         if task.get("Description") == UPLOADER_HOTKEY_DESCRIPTION:
             state["uploader_hotkey"] = info.get("Hotkey")
             ours = True
         if ours and task.get("Job") in _DEAD_JOBS:
             state["broken"].append(info.get("Hotkey"))
-    state["configured"] = bool(state["program_hotkey"] or state["uploader_hotkey"])
+    state["configured"] = bool(
+        state["program_hotkey"] or state["uploader_hotkey"] or state["search_hotkey"]
+    )
     return state
 
 
@@ -440,6 +506,12 @@ def setup_sharex(
               no process per capture, the fastest path. Installs that daemon as
               a login service (on Windows under a supervisor that restarts it).
     both      Both hotkeys - the fast one, and the one that always works.
+    search    Ctrl+Alt+O searches the web with the capture: visual matches,
+              products, an AI overview, in the default browser.
+    all       All three.
+
+    Each run adds or refreshes only the hotkeys its mode names and leaves the
+    others alone, so `--mode search` adds search next to an existing setup.
 
     Every file is backed up before it is touched and written atomically, with
     ShareX closed so it cannot overwrite the edit on its way out.
@@ -452,8 +524,9 @@ def setup_sharex(
     if mode not in MODES:
         console.print(f"[bold red]Error:[/bold red] unknown mode {escape(mode)!r}.")
         return False
-    want_program = mode in ("program", "both")
-    want_uploader = mode in ("uploader", "both")
+    want_program = mode in ("program", "both", "all")
+    want_uploader = mode in ("uploader", "both", "all")
+    want_search = mode in ("search", "all")
 
     try:
         action_args = build_action_args(target_lang)
@@ -475,7 +548,7 @@ def setup_sharex(
         return False
 
     executable_path = None
-    if want_program:
+    if want_program or want_search:
         executable_path = _find_lens_scan()
         if not executable_path:
             console.print(
@@ -539,6 +612,22 @@ def setup_sharex(
             if clash:
                 console.print(
                     "[yellow]Ctrl + Shift + O is also bound to: "
+                    f"{escape(', '.join(clash))}. Change one of them in ShareX."
+                    "[/yellow]"
+                )
+
+        if want_search:
+            assert executable_path is not None
+            clash = hotkey_conflicts(hotkeys, SEARCH_HOTKEY, SEARCH_HOTKEY_DESCRIPTION)
+            updated = apply_search_hotkey(hotkeys, executable_path)
+            console.print(
+                ("Updated" if updated else "Added")
+                + " [bold green]Ctrl + Alt + O[/bold green]: search the web with "
+                "the capture, in your browser."
+            )
+            if clash:
+                console.print(
+                    "[yellow]Ctrl + Alt + O is also bound to: "
                     f"{escape(', '.join(clash))}. Change one of them in ShareX."
                     "[/yellow]"
                 )

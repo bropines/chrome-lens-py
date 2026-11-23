@@ -62,7 +62,8 @@ lens_scan sharex --mode both -t ru               # ShareX: Ctrl+O и Ctrl+Shift+
 | `lens_scan update` | обновить эту копию тем же способом, которым она установлена (uv, brew, Scoop, pip, установщик) |
 | `lens_scan daemon status\|start\|stop\|restart\|logs` | «тёплый» фоновый процесс, с которым скан занимает ~0,4 с вместо ~3 с |
 | `lens_scan service install\|uninstall\|status\|logs` | держать этот демон запущенным со входа в систему (это нужно быстрому хоткею ShareX) |
-| `lens_scan sharex [--mode both] [-t LANG]` | настроить хоткеи ShareX (Windows) |
+| `lens_scan search КАРТИНКА [--ai ВОПРОС]` | поиск в интернете по картинке: похожие изображения, товары, AI Mode — открывается в браузере |
+| `lens_scan sharex [--mode both] [-t LANG]` | настроить хоткеи ShareX (Windows); `--mode search` добавляет Ctrl+Alt+O для поиска |
 | `lens_scan config show` | все настройки, их значения и то, какой слой их задал |
 | `lens_scan serve` | запустить HTTP API в этом терминале |
 

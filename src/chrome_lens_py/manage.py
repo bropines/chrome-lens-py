@@ -23,6 +23,7 @@ Two rules, the same as ``client.py``'s:
 """
 
 import json
+import math
 import os
 import sys
 
@@ -273,6 +274,7 @@ def print_status(report: dict) -> None:
                 for what, key in (
                     ("program", sharex.get("program_hotkey")),
                     ("uploader", sharex.get("uploader_hotkey")),
+                    ("search", sharex.get("search_hotkey")),
                 )
                 if key
             ]
@@ -644,6 +646,7 @@ Commands:
   daemon      the warm background process: status | start | stop | restart | logs
   service     keep it running from login: install | uninstall | status | logs
   sharex      set up the ShareX hotkeys (Windows)
+  search      search the web with an image: visual matches, products, AI Mode
   update      update lens_scan the way it was installed
   config      the settings in effect and where each one came from
   serve       run the HTTP API in this terminal
@@ -713,21 +716,49 @@ This is what ShareX's uploader hotkey needs: it posts the capture straight to
 a daemon that is already listening on a known port, so nothing has to start
 per screenshot. `lens_scan sharex --mode uploader` installs it for you.
 """,
-    "sharex": """lens_scan sharex [--mode program|uploader|both] [-t LANG] [--port N]
+    "sharex": """lens_scan sharex [--mode program|uploader|both|search|all] [-t LANG] [--port N]
 
-Sets up ShareX (Windows) to run Lens OCR on a region capture.
+Sets up ShareX (Windows) to run Lens on a region capture.
 
   program   Ctrl+O runs lens_scan on the capture. Works with nothing running,
             and uses the warm daemon whenever there is one. The default.
   uploader  Ctrl+Shift+O posts the capture straight to an always-on daemon:
             no process per capture, the fastest path. Installs the login
             service too.
-  both      both hotkeys - the fast one, and the one that always works.
+  both      both OCR hotkeys - the fast one, and the one that always works.
+  search    Ctrl+Alt+O searches the web with the capture - visual matches,
+            products, an AI overview - in your browser (`lens_scan search`).
+  all       all three.
 
-  -t LANG   make the hotkey translate into LANG as well as recognise.
+  -t LANG   make the OCR hotkeys translate into LANG as well as recognise.
+
+A run adds or refreshes only the hotkeys its mode names: `--mode search` adds
+search next to whatever you already have. Rebinding a hotkey in ShareX is safe;
+a later run keeps your keys.
 
 Every file is backed up next to itself before it is touched, and ShareX is
 closed first so it cannot overwrite the edit on its way out.
+""",
+    "search": """lens_scan search <image|url> [--region CX,CY,W,H] [--query WORDS | --ai QUESTION]
+                 [--hl LANG] [--no-open] [--json]
+
+Searches the web with an image, as Chrome's "Search with Google Lens" does:
+visual matches, exact matches and an AI overview, with products a tab away on
+the same page. Opens the results in your browser and prints the link.
+
+  --region CX,CY,W,H   only this part of the image (normalized 0..1, the same
+                       format as for scanning)
+  --query WORDS        add words to the picture ("this jacket, but in red")
+  --ai QUESTION        ask AI Mode about the picture instead
+  --hl LANG            the language of the results page
+  --no-open            print the link without opening a browser
+  --json               the link and the objects Lens found, as JSON; never
+                       opens a browser
+
+The results have to open in your own browser: a headless or brand-new one is
+shown Google's "unusual traffic" check instead. A link stays good for about
+half an hour. Runs here, not in the daemon, because it is this process that
+opens the browser.
 """,
     "update": """lens_scan update [--check] [--dry-run] [--json]
 
@@ -814,13 +845,70 @@ def cmd_sharex(rest):
     if positional:
         raise Usage(f"unexpected argument {positional[0]!r}", "sharex")
     mode = options.get("mode", "program")
-    if mode not in ("program", "uploader", "both"):
-        raise Usage(f"--mode must be program, uploader or both, not {mode!r}", "sharex")
+    from .utils.sharex_setup import MODES
+
+    if mode not in MODES:
+        raise Usage(f"--mode must be one of {', '.join(MODES)}, not {mode!r}", "sharex")
     lang = options.get("t") or options.get("translate")
     from .utils.sharex_setup import setup_sharex
 
     ok = setup_sharex(mode, lang, _int(options, "port"))
     return "exit", EXIT_OK if ok else EXIT_FAIL
+
+
+def _region(text):
+    """``CX,CY,W,H`` normalized 0..1, the format ``--region`` has for scanning."""
+    try:
+        values = tuple(float(part) for part in text.split(","))
+    except ValueError:
+        values = ()
+    if (
+        len(values) != 4
+        or not all(math.isfinite(v) for v in values)
+        or not (0 <= values[0] <= 1 and 0 <= values[1] <= 1)
+        or not (0 < values[2] <= 1 and 0 < values[3] <= 1)
+    ):
+        raise Usage(
+            "--region takes center_x,center_y,width,height, each 0..1 "
+            f"(width and height above 0), not {text!r}",
+            "search",
+        )
+    return values
+
+
+def cmd_search(rest):
+    positional, options = parse(
+        rest,
+        flags=("--json", "--no-open"),
+        values=("--region", "--query", "--ai", "--hl", "--config-file"),
+        topic="search",
+    )
+    if not positional:
+        raise Usage("search needs an image: a file or an http(s) URL", "search")
+    if len(positional) > 1:
+        raise Usage(f"unexpected argument {positional[1]!r}", "search")
+    if options.get("query") and options.get("ai"):
+        raise Usage(
+            "--query adds words to an image search and --ai asks AI Mode; "
+            "give one of them",
+            "search",
+        )
+    region = _region(options["region"]) if "region" in options else None
+
+    from .cli.search import run_search
+
+    return "exit", run_search(
+        positional[0],
+        region=region,
+        query=options.get("query"),
+        ai_question=options.get("ai"),
+        ui_language=options.get("hl"),
+        # --json is for something reading the answer, which wants the link,
+        # not a browser window appearing.
+        open_browser=not (options.get("no_open") or options.get("json")),
+        as_json=bool(options.get("json")),
+        config_file=options.get("config_file"),
+    )
 
 
 def _serve(rest):
@@ -835,6 +923,7 @@ COMMANDS = {
     "daemon": cmd_daemon,
     "service": cmd_service,
     "sharex": cmd_sharex,
+    "search": cmd_search,
     "update": cmd_update,
     "config": cmd_config,
     "serve": _serve,

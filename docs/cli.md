@@ -136,7 +136,8 @@ A first argument that names a command is always the command, even if a file of t
 | `lens_scan status [--json]` | One screen: the version and how this copy was installed, the daemon, the login service, the ShareX hotkeys, the clipboard extra, the config file path and the state directory. No network. Exits 0 unless a daemon is recorded but does not answer, or the login service is installed and no daemon is running. |
 | `lens_scan daemon status\|start\|stop\|restart\|logs` | The warm background daemon, see [daemon.md](daemon.md#controlling-the-daemon). `--json` on `status`, `--lines N` on `logs` (default 40), `--idle-timeout SEC` on `start` and `restart`. `status` exits 0 when the daemon runs and 1 when it does not, like `systemctl is-active`. |
 | `lens_scan service status\|install\|uninstall\|start\|stop\|restart\|logs` | The daemon as a login service, see [daemon.md](daemon.md#running-it-as-a-login-service). `--port N` on `install`, `--lines N` on `logs`, `--json` on `status`. |
-| `lens_scan sharex [--mode MODE] [-t LANG] [--port N]` | Wire `lens_scan` into ShareX (Windows), see [sharex.md](sharex.md). `--mode` is `program` (default, **Ctrl + O** runs `lens_scan`), `uploader` (**Ctrl + Shift + O** posts to the daemon) or `both`. `-t LANG` makes the hotkey translate. |
+| `lens_scan search IMAGE [options]` | Search the web with an image: visual matches, products, AI Mode, opened in your browser. See [below](#lens_scan-search). |
+| `lens_scan sharex [--mode MODE] [-t LANG] [--port N]` | Wire `lens_scan` into ShareX (Windows), see [sharex.md](sharex.md). `--mode` is `program` (default, **Ctrl + O** runs `lens_scan`), `uploader` (**Ctrl + Shift + O** posts to the daemon), `both`, `search` (**Ctrl + Alt + O** searches the web with the capture) or `all`. `-t LANG` makes the OCR hotkeys translate. |
 | `lens_scan update [--check] [--dry-run] [--json]` | Update this copy the way it was installed, see [below](#lens_scan-update). |
 | `lens_scan config show\|path [--json]` | `show` (the default) prints every setting, its value and which layer set it; `path` prints the config file's location. See [Configuration](#configuration). |
 | `lens_scan serve [options]` | Run the [HTTP API](daemon.md#http-api) in this terminal. Takes the options of the Server group above. |
@@ -148,9 +149,36 @@ lens_scan status
 lens_scan daemon restart
 lens_scan service install --port 9000
 lens_scan sharex --mode both -t en
+lens_scan search photo.jpg
 lens_scan update --check
 lens_scan config show --json
 ```
+
+### `lens_scan search`
+
+```bash
+lens_scan search photo.jpg                          # visual matches, in your browser
+lens_scan search photo.jpg --query "in red"         # the picture, plus words
+lens_scan search photo.jpg --ai "what plant is it?" # ask AI Mode about it
+lens_scan search shot.png --region 0.5,0.4,0.3,0.3  # just this part
+lens_scan search https://example.com/cat.jpg --no-open   # print the link only
+```
+
+What Chrome's "Search with Google Lens" does, from anywhere. Search results - visual matches, exact matches, the AI overview, products - are not part of Lens's response at all: they are Google's results page, addressed by two ids that name an upload. So `search` opens a search session, uploads the image into it, describes the selection, and prints the link to that page; by default it opens it too.
+
+| Option | |
+| :--- | :--- |
+| `--region CX,CY,W,H` | only this part of the image, normalized 0..1 - the same format `--region` has for scanning |
+| `--query WORDS` | add words to the picture: the page searches for both |
+| `--ai QUESTION` | ask AI Mode about the picture instead |
+| `--hl LANG` | the language of the results page |
+| `--no-open` | print the link without opening a browser |
+| `--json` | the link, the session and the objects Lens detected, as JSON; never opens a browser |
+| `--config-file FILE` | the settings to use (proxy, API key) instead of the default config |
+
+There is no shopping mode: Google's shopping tab, asked for directly, opens an empty page that never sees the picture. Products are a tab on the visual results page instead.
+
+Two things worth knowing. The page has to open in **your own** browser: a headless browser, a brand-new profile or an app's embedded web view is shown Google's "unusual traffic" check rather than results. And a link is good for about half an hour, which is how long the search session lives. `search` runs in your process, not in the daemon, because it is your process that opens the browser. In Python it is `LensAPI.search_image(...)`, or `open_image_search(...)` to search one upload several times.
 
 ### `lens_scan update`
 

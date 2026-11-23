@@ -31,6 +31,7 @@ from .core.image_processor import (
 )
 from .core.protobuf_builder import create_ocr_translate_request, create_region_request
 from .core.request_handler import LensRequestHandler, raise_for_response
+from .core.search import SEARCH_MODES, ImageSearch, Selection, UploadedImage
 from .core.text_renderer import render_translation_overlay
 from .exceptions import LensException, LensImageError
 from .utils.font_manager import FontType, get_default_system_font_path, get_font
@@ -846,6 +847,88 @@ class LensAPI:
                 raise
             except Exception as e:
                 raise LensException(f"Unexpected error in process_region: {e}") from e
+
+    async def open_image_search(
+        self, image: Any, ocr_language: Optional[str] = None
+    ) -> ImageSearch:
+        """Upload an image into a search session, for one or more searches.
+
+        Search results - visual matches, products, the AI Mode answer - are not
+        in Lens's response: they are Google's results page, addressed by ids
+        that name this upload. ``await search.search(...)`` returns that page's
+        URL, which has to be opened in the user's own browser (a headless or
+        fresh one is shown a reCAPTCHA instead).
+
+        ``search.objects`` lists what Lens detected in the picture, each with
+        an ``id`` and a normalized box; pass an id as ``Selection(object_id=...)``
+        to search for that thing alone, as tapping a dot in Chrome does.
+        """
+        async with self._semaphore.get():
+            if isinstance(image, Path):
+                image = str(image)
+            client = await self.request_handler.get_client()
+            original = await load_image(image, client=client)
+            encoded = await asyncio.to_thread(
+                encode_image_for_api, original, alpha_mode=self.alpha_mode
+            )
+            search = ImageSearch(
+                self.request_handler,
+                UploadedImage(
+                    data=encoded.data,
+                    width=encoded.width,
+                    height=encoded.height,
+                    # Chromium states it only for the WebP-with-alpha case.
+                    mime_type=(
+                        encoded.mime_type if encoded.mime_type != "image/jpeg" else None
+                    ),
+                ),
+                crop=lambda region: crop_region(original, region)[0],
+                ocr_language=ocr_language,
+                client_region=self.client_region,
+                client_time_zone=self.client_time_zone,
+            )
+            await search.start()
+            return search
+
+    async def search_image(
+        self,
+        image: Any,
+        region: Optional[Tuple[float, float, float, float]] = None,
+        object_id: Optional[str] = None,
+        mode: str = "visual",
+        query: Optional[str] = None,
+        ui_language: Optional[str] = None,
+        dark: Optional[bool] = None,
+        ocr_language: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Search the web with an image, or a region of it, and get the URL.
+
+        ``mode`` is ``"visual"`` (visual matches, exact matches and an AI
+        overview; products are a tab on that page) or ``"ai"`` (AI Mode, with
+        ``query`` as the question). ``query`` on a visual search adds words to
+        the picture. ``region`` is (center_x, center_y, width, height),
+        normalized 0..1, as for ``process_region``.
+
+        Returns ``{"url", "mode", "search_session_id", "objects"}``. Three
+        requests: a session, the upload, the selection. For several searches of
+        one picture, ``open_image_search`` uploads it once.
+        """
+        if mode not in SEARCH_MODES:
+            raise ValueError(f"mode must be one of {SEARCH_MODES}, not {mode!r}")
+        search = await self.open_image_search(image, ocr_language=ocr_language)
+        url = await search.search(
+            Selection(region=region, object_id=object_id),
+            mode=mode,
+            query=query,
+            ui_language=ui_language,
+            dark=dark,
+        )
+        return {
+            "url": url,
+            "mode": mode,
+            "search_session_id": search.search_session_id,
+            "objects": search.objects,
+        }
 
     async def call_raw_endpoint(
         self, protobuf_payload: bytes, new_session: bool = False

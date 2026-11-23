@@ -7,6 +7,32 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+### Features
+
+- **`lens_scan search`: search the web with an image.** Visual matches, exact
+  matches and an AI overview, with products a tab away - what Chrome's "Search
+  with Google Lens" does, from the command line and opened in your browser.
+  `--query WORDS` adds words to the picture, `--ai QUESTION` asks AI Mode about
+  it instead, `--region` searches one part, `--no-open` and `--json` give the
+  link without opening it.
+
+  Search results are not in Lens's response at all: they are Google's results
+  page, addressed by two ids that name an upload (`gsessionid` for the search
+  session, `vsrid` for the request). So the command opens a search session
+  (`/v1/gsessionid`), uploads into it, sends the selection, and builds the link
+  the way Chromium's `BuildLensSearchURL` does. The flow was worked out and
+  checked live in chrome-lens-userscript first. The page has to open in the
+  user's own browser - a headless or fresh one gets a reCAPTCHA - which is why
+  the command runs locally rather than in the daemon. There is no shopping mode:
+  Google's shopping tab, asked for directly, never sees the picture.
+- `LensAPI.search_image(...)` returns that link from Python, and
+  `LensAPI.open_image_search(...)` uploads once for several searches - by
+  region, by one of the objects Lens detected (`Selection(object_id=...)`, as
+  tapping a dot in Chrome does), with words, or in AI Mode.
+- **ShareX: Ctrl + Alt + O searches with the capture.** `lens_scan sharex
+  --mode search` adds it next to the OCR hotkeys; `--mode all` sets up all
+  three. `status` lists it.
+
 ### Bug Fixes
 
 - Re-running `lens_scan sharex` keeps the keys you bound the uploader hotkey
