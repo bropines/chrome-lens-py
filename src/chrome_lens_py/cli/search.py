@@ -92,6 +92,12 @@ def run_search(
     # The link on stdout, so `lens_scan search x.png --no-open` can feed
     # something else; everything about it on stderr.
     write_stdout(result["url"] + "\n")
+    if settings.google_cookies:
+        note(
+            "Signed in to your Google account."
+            if result.get("signed_in")
+            else "Google did not accept the sign-in; searched anonymously."
+        )
     if open_browser:
         if _open(result["url"]):
             note("Opened in your browser. The link stays good for about half an hour.")

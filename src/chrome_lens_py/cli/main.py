@@ -32,6 +32,7 @@ from rich.text import Text
 from .. import __version__, formats
 from ..api import LensAPI
 from ..constants import DEFAULT_CONFIG_FILENAME
+from ..core.identity import is_cookie_file
 from ..exceptions import LensConfigError, LensException, LensImageError
 from ..utils.config_manager import (
     SECRET_FIELDS,
@@ -596,6 +597,30 @@ def build_parser(
     )
     setting(
         g,
+        "--google-cookies",
+        metavar="FILE",
+        help="Sign requests in to your Google account, as desktop Chrome does: "
+        "a cookies.txt or JSON export of google.com cookies (must hold SAPISID). "
+        "A Cookie header string works too, but a file keeps it out of the "
+        "process list. If Google refuses, requests go on anonymously.",
+    )
+    setting(
+        g,
+        "--google-email",
+        metavar="EMAIL",
+        help="The signed-in account's e-mail. Looked up from the cookies if omitted.",
+    )
+    setting(
+        g,
+        "--google-auth-user",
+        type=int,
+        metavar="N",
+        help="Which account of the cookie jar to use"
+        + _default_text("google_auth_user")
+        + ".",
+    )
+    setting(
+        g,
         "--timeout",
         type=int,
         metavar="SECONDS",
@@ -835,6 +860,12 @@ def _api_kwargs(settings: Settings) -> Dict[str, Any]:
         max_concurrent=settings.concurrency,
         trust_env=settings.trust_env,
     )
+    if settings.google_cookies:
+        kwargs.update(
+            google_cookies=settings.google_cookies,
+            google_email=settings.google_email,
+            google_auth_user=settings.google_auth_user,
+        )
     # LensAPI grew no retry parameter yet. Pass ours only once it has one, so
     # --retries starts working the day core accepts `max_retries`.
     try:
@@ -1397,6 +1428,8 @@ async def cli_main(argv: Optional[Sequence[str]] = None) -> int:
 
     if settings.font_path:
         settings.font_path = real_path(settings.font_path)
+    if settings.google_cookies and is_cookie_file(settings.google_cookies):
+        settings.google_cookies = real_path(os.path.expanduser(settings.google_cookies))
 
     if os.path.exists(config_file_to_load):
         logger.info("Using config file: %s", config_file_to_load)

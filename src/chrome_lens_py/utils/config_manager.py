@@ -38,7 +38,7 @@ MAX_CONCURRENCY = 30
 LOGGING_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 # Fields whose value must not be echoed into logs.
-SECRET_FIELDS = frozenset({"api_key", "proxy"})
+SECRET_FIELDS = frozenset({"api_key", "proxy", "google_cookies", "google_email"})
 # Never written back by --update-config: a key typed once on a command line
 # should not end up lying around in a file nobody remembers editing.
 NEVER_PERSISTED = frozenset({"api_key"})
@@ -57,6 +57,12 @@ class Settings:
     concurrency: int = 5
     # False = ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (the --no-env-proxy flag).
     trust_env: bool = True
+    # Sign requests in to a Google account: a cookies file (cookies.txt or a
+    # JSON export) or a Cookie header. See core/identity.py.
+    google_cookies: Optional[str] = None
+    # The account's e-mail; looked up from the cookies when unset.
+    google_email: Optional[str] = None
+    google_auth_user: int = 0
     font_path: Optional[str] = None
     font_size: Optional[int] = None
     logging_level: str = "WARNING"
@@ -215,6 +221,8 @@ def _validate(settings: Settings) -> None:
         raise bad("manga_box_growth", "must be greater than 0")
     if settings.daemon_idle_timeout < 0:
         raise bad("daemon_idle_timeout", "must not be negative (0 = never)")
+    if settings.google_auth_user < 0:
+        raise bad("google_auth_user", "must not be negative")
     if not 0 <= settings.daemon_port <= 65535:
         raise bad("daemon_port", "must be between 0 and 65535")
 

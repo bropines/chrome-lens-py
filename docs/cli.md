@@ -19,6 +19,7 @@ lens_scan <command> [options]
 - [Output formats](#output-formats)
 - [Examples](#examples)
 - [Commands](#commands)
+- [Signing in to a Google account](#signing-in-to-a-google-account)
 - [The old flags](#the-old-flags)
 - [Exit codes and streams](#exit-codes-and-streams)
 - [Configuration](#configuration)
@@ -70,6 +71,9 @@ Defaults are in the description. Options marked "setting" can also be set in the
 | `--api-key KEY` | | Google Cloud API key. Prefer `LENS_API_KEY`: a flag lands in your shell history. Setting. |
 | `--proxy URL` | | Proxy, for example `http://user:pass@host:port` or `socks5://127.0.0.1:9050`. Setting. |
 | `--no-env-proxy` | | Ignore `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` and connect directly. Setting (`trust_env`, inverted). |
+| `--google-cookies FILE` | | Sign requests in to your Google account, as desktop Chrome does. See [Signing in](#signing-in-to-a-google-account). Setting. |
+| `--google-email EMAIL` | | The account's e-mail, which the signature includes. Looked up from the cookies if omitted. Setting. |
+| `--google-auth-user N` | | Which account of the cookie jar to use (default `0`). Setting. |
 | `--timeout SEC` | | Request timeout in seconds (default `60`). Setting. |
 | `--retries N` | | Retries after a network error or a retryable HTTP status (default `2`). Setting. |
 | `--concurrency N` | | Maximum concurrent requests (default `5`, at most `30`; a warning above `20`). Setting. |
@@ -202,6 +206,22 @@ The newest version comes from PyPI's JSON API. Every channel is published from o
 
 A running daemon is stopped first because it holds the files being replaced, and started again afterwards: through the login service if that is what owned it. Run on a copy that is already the newest, `update` still runs the installer, since reinstalling is a reasonable thing to want; it says so first. `--check` and `--json` exit 1 if pypi.org could not be reached.
 
+## Signing in to a Google account
+
+Off by default: requests are anonymous, as they always were. Desktop Chrome can sign Lens requests with your google.com cookie session instead (its *Identity Delegation* mode), and so can `lens_scan`:
+
+```bash
+lens_scan image.png --google-cookies ~/google-cookies.txt
+```
+
+or `"google_cookies": "~/google-cookies.txt"` in the config file, which also covers `lens_scan search`, the daemon and ShareX. The file is a `cookies.txt` (Netscape format) or JSON export of your `google.com` cookies, from any cookie-export browser extension, and must include `SAPISID`. It is re-read when it changes, so a running daemon picks up fresh cookies. A Cookie header string works in place of the path, but it then shows up in the process list and your shell history.
+
+What changes on the wire, mirroring Chrome: requests go to `lensfrontend-pa.clients6.google.com` instead of `lensfrontend-pa.googleapis.com`, carrying your cookies and an `Authorization: SAPISIDHASH` header, which is a hash over your e-mail, the time, `SAPISID` and the origin. The e-mail is read from `accounts.google.com/ListAccounts` with the same cookies, or taken from `--google-email`. If Google refuses a signed request (401 or 403), it goes again anonymously, a warning says so, and the rest of the run stays anonymous. A search that is refused halfway starts over anonymously, because its session ids are only good on the host that issued them. `lens_scan search` tells you which way it went.
+
+These cookies are your whole Google account. They are sent to Google's Lens and accounts hosts only, never to an endpoint set through `LENS_ENDPOINT`. They never appear in logs or in `config show`. Keep the file private.
+
+From Python: `LensAPI(google_cookies=..., google_email=None, google_auth_user=0)`, where `google_cookies` is a path, a header string or a dict. `LensAPI.signed_in` and the `signed_in` key of `search_image`'s result say whether signing is in effect.
+
 ## The old flags
 
 These still work and are not going away: ShareX configurations, Startup shortcuts, LaunchAgents and systemd units on people's machines contain them. They are no longer the documented spelling.
@@ -236,7 +256,7 @@ Precedence, highest first: **a flag given explicitly > the config file > a `LENS
 
 The default config file is `config.json` in `$XDG_CONFIG_HOME/chrome-lens-py/`, or in `~/.config/chrome-lens-py/` if that variable is not set. This is the same rule on Linux, macOS and Windows (`C:\Users\<user>\.config\chrome-lens-py\config.json`). Use `--config-file` for another file. `lens_scan config path` prints where the default one is, whether or not it exists yet.
 
-When a setting seems not to work, `lens_scan config show` lists every setting with its value and the layer that decided it (`command line`, `config file <path>`, `env LENS_<NAME>` or `default`): usually the setting works and something above it is overriding it. `--json` gives the same as an object. To look at another file, pass `--config-file FILE` to it. The API key and the proxy URL, which may carry a password, are shown as `<hidden>`.
+When a setting seems not to work, `lens_scan config show` lists every setting with its value and the layer that decided it (`command line`, `config file <path>`, `env LENS_<NAME>` or `default`): usually the setting works and something above it is overriding it. `--json` gives the same as an object. To look at another file, pass `--config-file FILE` to it. The API key, the proxy URL (which may carry a password), the Google cookies and the Google e-mail are shown as `<hidden>`.
 
 Every key is optional. A file that is not a JSON object, or a value of the wrong type, stops the run with a message that names the key. Unknown keys are ignored with a warning, and `null` means "not set". Keys are case-insensitive and may use `-` for `_`.
 
@@ -245,6 +265,9 @@ Every key is optional. A file that is not a JSON object, or a value of the wrong
 | `api_key` | `LENS_API_KEY` | `--api-key` | built-in key |
 | `proxy` | `LENS_PROXY` | `--proxy` | none |
 | `trust_env` | `LENS_TRUST_ENV` | `--no-env-proxy` (inverted) | `true` |
+| `google_cookies` | `LENS_GOOGLE_COOKIES` | `--google-cookies` | none (anonymous) |
+| `google_email` | `LENS_GOOGLE_EMAIL` | `--google-email` | looked up |
+| `google_auth_user` | `LENS_GOOGLE_AUTH_USER` | `--google-auth-user` | `0` |
 | `client_region` | `LENS_CLIENT_REGION` | `--client-region` | `US` |
 | `client_time_zone` | `LENS_CLIENT_TIME_ZONE` | `--client-time-zone` | `America/New_York` |
 | `timeout` | `LENS_TIMEOUT` | `--timeout` | `60` |

@@ -53,6 +53,15 @@ class LensAuthError(LensAPIError):
     """The server rejected the API key (401/403) and no fallback key worked."""
 
 
+class LensIdentityRejected(LensAuthError):
+    """Google refused the signed-in request partway through a session.
+
+    The first request of a session falls back to an anonymous one by itself.
+    A later one cannot: the session's ids were issued to the signed host, so
+    the caller has to start over, and that new session runs anonymously.
+    """
+
+
 class LensTimeoutError(LensAPIError):
     """A request exceeded its read timeout or the overall per-request deadline."""
 

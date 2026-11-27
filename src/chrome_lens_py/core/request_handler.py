@@ -51,6 +51,7 @@ from ..exceptions import (
     LensAuthError,
     LensConfigError,
     LensConnectionError,
+    LensIdentityRejected,
     LensProtobufError,
     LensRateLimitError,
     LensTimeoutError,
@@ -60,6 +61,14 @@ from ..utils.lens_betterproto import (
     LensOverlayServerResponse,
 )
 from .aio import LoopLocal
+from .identity import (
+    LIST_ACCOUNTS_URL,
+    REFUSAL_STATUS_CODES,
+    GoogleIdentity,
+    decode_body,
+    email_from_list_accounts,
+    signed_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +231,9 @@ class LensSession:
     sequence_id: int = 0
     image_sequence_id: int = 0
     cluster_info: Optional["LensOverlayClusterInfo"] = None
+    # Which host the session lives on: None until its first request is
+    # answered, then True (signed in) or False. Its ids are only good there.
+    signed: Optional[bool] = None
     _lock: LoopLocal[asyncio.Lock] = field(
         default_factory=lambda: LoopLocal(asyncio.Lock), repr=False
     )
@@ -262,6 +274,7 @@ class LensRequestHandler:
         deadline: Optional[float] = None,
         endpoints: Optional[Union[str, Sequence[str]]] = None,
         direct_fallback: bool = False,
+        identity: Optional[GoogleIdentity] = None,
     ):
         keys = [api_key] if isinstance(api_key, str) else list(api_key)
         self.api_keys: List[str] = list(dict.fromkeys(k for k in keys if k))
@@ -334,6 +347,13 @@ class LensRequestHandler:
 
         # Kept so callers written against the old single-session handler work.
         self.default_session = LensSession()
+
+        # Signed-in requests (core/identity.py). Once Google refuses them, the
+        # handler stays anonymous: Chrome too retries without auth and moves on.
+        self.identity = identity
+        self._email: Optional[str] = identity.email if identity else None
+        self._email_lock = LoopLocal(asyncio.Lock)
+        self.identity_refused: Optional[str] = None
 
     # ----------------------------------------------------------------- clients
 
@@ -483,10 +503,16 @@ class LensRequestHandler:
     # ---------------------------------------------------------------- the send
 
     async def _post_once(
-        self, url: str, payload: bytes, api_key: str
+        self,
+        url: str,
+        payload: bytes,
+        api_key: str,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> httpx.Response:
         """One POST, with the optional direct retry around an unreachable env proxy."""
         headers = self._headers(api_key)
+        if extra_headers:
+            headers.update(extra_headers)
         if self._prefer_direct:
             client = await self._get_direct_client()
             return await client.post(url, content=payload, headers=headers)
@@ -549,6 +575,130 @@ class LensRequestHandler:
         folder = parts.path.rsplit("/", 1)[0]
         return urlunsplit(parts._replace(path=f"{folder}/{path}", query=""))
 
+    # ---------------------------------------------------------------- signing
+
+    @property
+    def signed_in(self) -> bool:
+        """Will the next new session be signed in?"""
+        return self.identity is not None and self.identity_refused is None
+
+    def _refuse(self, reason: str) -> None:
+        if self.identity_refused is None:
+            logger.warning(
+                "Google did not accept the signed-in request (%s); continuing "
+                "anonymously for the rest of this process.",
+                reason,
+            )
+        self.identity_refused = reason
+
+    async def _account_email(self) -> Optional[str]:
+        """The account's e-mail, asked of ListAccounts once when not given."""
+        if self._email:
+            return self._email
+        assert self.identity is not None
+        async with self._email_lock.get():
+            if self._email or self.identity_refused:
+                return self._email
+            try:
+                client = await self.get_client()
+                response = await client.get(
+                    LIST_ACCOUNTS_URL,
+                    headers={
+                        "Cookie": self.identity.cookie_header(),
+                        "User-Agent": DEFAULT_HEADERS["User-Agent"],
+                    },
+                )
+                email = (
+                    email_from_list_accounts(response.text)
+                    if response.status_code == 200
+                    else None
+                )
+            except httpx.HTTPError as exc:
+                logger.debug("ListAccounts failed: %s", type(exc).__name__)
+                email = None
+            if not email:
+                self._refuse(
+                    "could not learn the account's e-mail from the cookies; "
+                    "pass it as google_email"
+                )
+                return None
+            self._email = email
+            return email
+
+    async def _signing(
+        self, url: str, session: Optional[LensSession]
+    ) -> Optional[Tuple[str, Dict[str, str]]]:
+        """The signed URL and headers for this request, or None to go anonymous."""
+        if session is not None and session.signed is False:
+            return None
+        target = signed_url(url) if self.identity is not None else None
+        email = await self._account_email() if target and self.signed_in else None
+        if target and email and self.identity is not None:
+            return target, self.identity.headers(email)
+        if session is not None and session.signed:
+            # A signed session cannot carry on anonymously: its ids belong to
+            # the other host. Reset it so the caller's retry starts fresh.
+            self._reset(session)
+            raise LensIdentityRejected(
+                "The signed-in session can no longer be used "
+                f"({self.identity_refused or 'signing unavailable'}); "
+                "start a new one."
+            )
+        return None
+
+    @staticmethod
+    def _reset(session: LensSession) -> None:
+        session.cluster_info = None
+        session.signed = None
+
+    @staticmethod
+    async def _unwrap(response: httpx.Response) -> httpx.Response:
+        """The same response with clients6's base64 wrapping taken off."""
+        body = decode_body(await response.aread())
+        headers = [
+            (name, value)
+            for name, value in response.headers.multi_items()
+            if name.lower() not in ("content-encoding", "content-length")
+        ]
+        return httpx.Response(
+            response.status_code,
+            headers=headers,
+            content=body,
+            request=response.request,
+        )
+
+    async def _post_signed_or_not(
+        self, base_url: str, payload: bytes, session: Optional[LensSession]
+    ) -> httpx.Response:
+        """Signed when possible; a refused first request goes again anonymously."""
+        signing = await self._signing(base_url, session)
+        if signing is not None:
+            url, headers = signing
+            response = await self._post_once(
+                self._url(url, session), payload, self.api_key, headers
+            )
+            response = await self._unwrap(response)
+            if response.status_code not in REFUSAL_STATUS_CODES:
+                if session is not None and response.status_code < 400:
+                    session.signed = True
+                return response
+            self._refuse(f"HTTP {response.status_code}")
+            if session is not None and session.signed:
+                self._reset(session)
+                raise LensIdentityRejected(
+                    "Google refused the signed-in session "
+                    f"(HTTP {response.status_code}); start a new one.",
+                    status_code=response.status_code,
+                )
+        response = await self._post_with_keys(self._url(base_url, session), payload)
+        if (
+            session is not None
+            and session.signed is None
+            and response.status_code < 400
+        ):
+            session.signed = False
+        return response
+
     async def _send_once(
         self,
         payload: bytes,
@@ -561,9 +711,9 @@ class LensRequestHandler:
         last_failure: Optional[httpx.TransportError] = None
         for step in range(count):
             index = (start + step) % count
-            url = self._url(self._sibling(self.endpoints[index], path), session)
+            base_url = self._sibling(self.endpoints[index], path)
             try:
-                response = await self._post_with_keys(url, payload)
+                response = await self._post_signed_or_not(base_url, payload, session)
             except httpx.TransportError as exc:
                 if isinstance(exc, httpx.UnsupportedProtocol):
                     raise LensConnectionError(

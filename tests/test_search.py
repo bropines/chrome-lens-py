@@ -145,9 +145,9 @@ class FakeHandler:
     async def exchange(
         self, payload: bytes, session: Any = None, path: Optional[str] = None
     ) -> bytes:
-        server_id = (
-            session.cluster_info.server_session_id if session is not None else None
-        )
+        # The session is made before gsessionid answers, so it has no ids yet.
+        info = session.cluster_info if session is not None else None
+        server_id = info.server_session_id if info is not None else None
         self.calls.append((path, server_id, payload))
         if path == "gsessionid":
             reply = LensOverlayServerClusterInfoResponse()

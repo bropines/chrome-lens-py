@@ -9,6 +9,24 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ### Features
 
+- **Signing in to a Google account, as desktop Chrome does** (opt-in:
+  `--google-cookies FILE`, the `google_cookies` setting, or
+  `LensAPI(google_cookies=...)`). Chrome's Identity Delegation signs Lens
+  requests with the google.com cookie session: they go to
+  `lensfrontend-pa.clients6.google.com` with the cookies, `Origin`,
+  `X-Goog-AuthUser`, `X-Goog-Encode-Response-If-Executable: base64` (clients6
+  refuses requests without it, and answers in base64, which is unwrapped) and
+  `Authorization: SAPISIDHASH <ts>_<sha1>_e` over the e-mail, time, `SAPISID`
+  and origin. The e-mail is looked up from the cookies through
+  `accounts.google.com/ListAccounts` unless `--google-email` gives it. A
+  refused request (401/403) goes again anonymously and the process stays
+  anonymous, as Chrome does; a search refused halfway starts over in an
+  anonymous session, since its ids are only good on the host that issued them.
+  The cookies file may be a cookies.txt, a JSON export or a header line, and is
+  re-read when it changes. The cookies never go to a `LENS_ENDPOINT` mirror and
+  never reach logs or `config show`. Worked out with the lens-kmp port, which
+  confirmed live that clients6 answers signed `gsessionid` requests.
+
 - **`lens_scan search`: search the web with an image.** Visual matches, exact
   matches and an AI overview, with products a tab away - what Chrome's "Search
   with Google Lens" does, from the command line and opened in your browser.

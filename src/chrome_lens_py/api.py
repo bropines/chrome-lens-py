@@ -21,6 +21,7 @@ from .constants import (
     DEFAULT_OCR_LANG,
 )
 from .core.aio import LoopLocal
+from .core.identity import GoogleIdentity, resolve_identity
 from .core.image_processor import (
     crop_region,
     draw_overlay_on_image,
@@ -73,6 +74,11 @@ class LensAPI:
         endpoints: Optional[Union[str, Sequence[str]]] = None,
         direct_fallback: bool = False,
         alpha_mode: str = DEFAULT_ALPHA_MODE,
+        google_cookies: Optional[
+            Union[str, Path, Dict[str, str], GoogleIdentity]
+        ] = None,
+        google_email: Optional[str] = None,
+        google_auth_user: int = 0,
     ):
         """
         Resilience options (all optional):
@@ -101,6 +107,21 @@ class LensAPI:
                         PNG reads back empty. "flatten" = JPEG on white;
                         "contrast" = JPEG on white or black, whichever the
                         content stands out against.
+
+        Signing in (all optional; see core/identity.py):
+
+        google_cookies  sign requests with a google.com cookie session, as
+                        desktop Chrome does: a dict, a Cookie header string, or
+                        the path of a cookies.txt / JSON export (re-read when
+                        it changes). It must hold SAPISID. Requests then go to
+                        lensfrontend-pa.clients6.google.com; if Google refuses
+                        them (401/403) they go again anonymously, a warning is
+                        logged and signed_in turns False. Only Google's own
+                        host is ever sent the cookies, never a LENS_ENDPOINT
+                        mirror.
+        google_email    the account's address, which the signature includes.
+                        Omitted, it is looked up with the same cookies.
+        google_auth_user which signed-in account of the jar (X-Goog-AuthUser).
         """
         self.request_handler = LensRequestHandler(
             api_key=api_key,
@@ -114,6 +135,7 @@ class LensAPI:
             deadline=deadline,
             endpoints=endpoints,
             direct_fallback=direct_fallback,
+            identity=resolve_identity(google_cookies, google_email, google_auth_user),
         )
         if alpha_mode not in ("webp", "flatten", "contrast"):
             raise ValueError(f"Unknown alpha_mode {alpha_mode!r}")
@@ -909,7 +931,8 @@ class LensAPI:
         the picture. ``region`` is (center_x, center_y, width, height),
         normalized 0..1, as for ``process_region``.
 
-        Returns ``{"url", "mode", "search_session_id", "objects"}``. Three
+        Returns ``{"url", "mode", "search_session_id", "objects",
+        "signed_in"}``. Three
         requests: a session, the upload, the selection. For several searches of
         one picture, ``open_image_search`` uploads it once.
         """
@@ -928,7 +951,13 @@ class LensAPI:
             "mode": mode,
             "search_session_id": search.search_session_id,
             "objects": search.objects,
+            "signed_in": search.signed_in,
         }
+
+    @property
+    def signed_in(self) -> bool:
+        """Whether requests are being signed in (cookies given, not refused)."""
+        return self.request_handler.signed_in
 
     async def call_raw_endpoint(
         self, protobuf_payload: bytes, new_session: bool = False

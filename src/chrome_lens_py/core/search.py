@@ -30,7 +30,7 @@ from ..constants import (
     DEFAULT_CLIENT_TIME_ZONE,
     DEFAULT_OCR_LANG,
 )
-from ..exceptions import LensAPIError, LensProtobufError
+from ..exceptions import LensAPIError, LensIdentityRejected, LensProtobufError
 from ..utils.lens_betterproto import (
     CoordinateType,
     LensOverlayClusterInfo,
@@ -289,6 +289,11 @@ class ImageSearch:
     def search_session_id(self) -> str:
         return self._search_session_id
 
+    @property
+    def signed_in(self) -> bool:
+        """Whether the session was opened signed in to a Google account."""
+        return bool(self._session is not None and self._session.signed)
+
     def _next_id(self, analytics_id: bytes) -> _RequestId:
         self._sequence += 1
         return _RequestId(
@@ -312,8 +317,12 @@ class ImageSearch:
     async def _open_session(self) -> None:
         from .request_handler import LensSession
 
+        # Made first and passed along, so the session is pinned to whichever
+        # host answers: signed in, or anonymous after a refusal.
+        session = LensSession()
+        self._session = None
         body = await self._handler.exchange(
-            create_cluster_info_request(), path=CLUSTER_INFO_PATH
+            create_cluster_info_request(), session, path=CLUSTER_INFO_PATH
         )
         response = LensOverlayServerClusterInfoResponse()
         try:
@@ -334,7 +343,6 @@ class ImageSearch:
         if response.HasField("routing_info"):
             info.routing_info.CopyFrom(response.routing_info)
 
-        session = LensSession()
         session.cluster_info = info
         self._session = session
         self._search_session_id = response.search_session_id
@@ -342,6 +350,15 @@ class ImageSearch:
 
     async def start(self) -> None:
         """Open a session and upload the picture into it."""
+        try:
+            await self._start()
+        except LensIdentityRejected:
+            # Signed in at gsessionid, refused at the upload. The handler is
+            # anonymous from here on, so a second go opens an anonymous session.
+            self._session = None
+            await self._start()
+
+    async def _start(self) -> None:
         await self._open_session()
         self._uuid = random.randint(0, (1 << 63) - 1)
         self._context_id = random.randint(0, (1 << 63) - 1)
@@ -443,6 +460,28 @@ class ImageSearch:
                 self._crop, clamp_region(selection.region)
             )
 
+        try:
+            return await self._search(
+                selection, mode, words, crop_bytes, ui_language, dark
+            )
+        except LensIdentityRejected:
+            # The signed session went bad between the upload and now: upload
+            # again into an anonymous one and ask once more.
+            self._session = None
+            await self.start()
+            return await self._search(
+                selection, mode, words, crop_bytes, ui_language, dark
+            )
+
+    async def _search(
+        self,
+        selection: Selection,
+        mode: str,
+        words: str,
+        crop_bytes: Optional[bytes],
+        ui_language: Optional[str],
+        dark: Optional[bool],
+    ) -> str:
         analytics_id = random.randbytes(16)
         interaction_ids = self._next_id(analytics_id)
         body = await self._handler.exchange(
