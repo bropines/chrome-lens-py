@@ -7,6 +7,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-11-27
+
 ### Features
 
 - **Signing in to a Google account, as desktop Chrome does** (opt-in:
@@ -441,7 +443,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
 - Measure the install options and recommend uv first.
 - Record what the frozen binary actually costs.
 
-[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.0.2...HEAD
+[Unreleased]: https://github.com/bropines/chrome-lens-py/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/bropines/chrome-lens-py/compare/v4.0.2...v4.1.0
 [4.0.2]: https://github.com/bropines/chrome-lens-py/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/bropines/chrome-lens-py/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/bropines/chrome-lens-py/compare/v3.8.2...v4.0.0
