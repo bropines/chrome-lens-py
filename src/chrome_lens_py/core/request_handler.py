@@ -674,6 +674,9 @@ class LensRequestHandler:
         signing = await self._signing(base_url, session)
         if signing is not None:
             url, headers = signing
+            # The URL actually used: logging the anonymous one made signed
+            # requests look anonymous while debugging lens-kmp.
+            logger.debug("Signed request to %s.", url.split("?", 1)[0])
             response = await self._post_once(
                 self._url(url, session), payload, self.api_key, headers
             )
@@ -880,8 +883,9 @@ class LensRequestHandler:
             session.uuid = request_uuid_used
 
         logger.info(
-            "Sending request to %s (UUID: %s, SeqID: %s) with payload size: %d bytes.",
+            "Sending request to %s%s (UUID: %s, SeqID: %s) with payload size: %d bytes.",
             self.endpoint,
+            " (signed in, on the clients6 host)" if self.signed_in else "",
             session.uuid,
             session.sequence_id,
             len(protobuf_payload),

@@ -62,6 +62,15 @@ def sapisid_hash(
     return f"SAPISIDHASH {ts}_{digest}_e"
 
 
+# The cookie the hash is over. A jar from an embedded browser's sign-in can
+# lack the plain one; Google sets the partitioned twins to the same value.
+SAPISID_NAMES = ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID")
+
+
+def sapisid_of(jar: Mapping[str, str]) -> Optional[str]:
+    return next((jar[name] for name in SAPISID_NAMES if jar.get(name)), None)
+
+
 def _google_domain(domain: str) -> bool:
     """Cookies a browser would send to clients6.google.com."""
     domain = domain.strip().lstrip(".").lower()
@@ -165,7 +174,7 @@ class GoogleIdentity:
             )
         if self.auth_user < 0:
             raise LensConfigError("google_auth_user must be >= 0.")
-        if not self._jar.get("SAPISID"):
+        if not sapisid_of(self._jar):
             raise LensConfigError(
                 "The Google cookies have no SAPISID, which signing needs. Export "
                 "the cookies of google.com while signed in."
@@ -192,7 +201,7 @@ class GoogleIdentity:
                 "Cannot re-read the Google cookies file; keeping the old ones."
             )
             return
-        if not force and not jar.get("SAPISID"):
+        if not force and not sapisid_of(jar):
             logger.warning(
                 "The Google cookies file lost its SAPISID; keeping the old one."
             )
@@ -216,7 +225,9 @@ class GoogleIdentity:
             "Origin": self.origin,
             "X-Goog-AuthUser": str(self.auth_user),
             "X-Goog-Encode-Response-If-Executable": "base64",
-            "Authorization": sapisid_hash(email, jar["SAPISID"], self.origin, now),
+            "Authorization": sapisid_hash(
+                email, sapisid_of(jar) or "", self.origin, now
+            ),
         }
 
 

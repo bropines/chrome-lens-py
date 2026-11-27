@@ -79,6 +79,16 @@ def test_cookies_are_read_from_a_json_export():
     assert identity.parse_cookies(text) == {"SAPISID": "sap"}
 
 
+def test_a_partitioned_twin_stands_in_for_a_missing_sapisid():
+    # Embedded-browser sign-ins can lack the plain cookie (seen in lens-kmp).
+    for name in ("__Secure-3PAPISID", "__Secure-1PAPISID"):
+        ident = identity.GoogleIdentity({"SID": "x", name: "AbCdEf/123"})
+        headers = ident.headers("user@example.com", now=1700000000)
+        assert headers["Authorization"] == (
+            "SAPISIDHASH 1700000000_63f76c6071122477af7276366dbbfc60e05b8200_e"
+        )
+
+
 def test_signing_needs_a_sapisid():
     with pytest.raises(LensConfigError, match="SAPISID"):
         identity.GoogleIdentity({"SID": "x"})
