@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -47,6 +48,10 @@ LIST_ACCOUNTS_URL = (
     "https://accounts.google.com/ListAccounts"
     "?gpsia=1&source=ChromiumBrowser&json=standard"
 )
+# The account widget of Google's pages. ListAccounts needs accounts.google.com's
+# own cookies and answers a google.com-only jar with no address; this names the
+# account from google.com cookies alone (measured live by lens-kmp).
+ACCOUNT_WIDGET_URL = "https://ogs.google.com/u/0/widget/account?hl=en"
 # What Google answers a signed request it will not honour with.
 REFUSAL_STATUS_CODES = frozenset({401, 403})
 
@@ -262,6 +267,29 @@ def signed_url(url: str) -> Optional[str]:
     return urlunsplit(parts._replace(netloc=SIGNED_HOST))
 
 
+_EMAIL = re.compile(
+    r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
+)
+
+
+def _account_address(candidate: str) -> bool:
+    """Not one of Google's own addresses, or a placeholder, that pages carry."""
+    domain = candidate.rsplit("@", 1)[-1].lower()
+    return not (
+        domain in ("google.com", "example.com") or domain.endswith(".google.com")
+    )
+
+
+def email_from_page(body: str) -> Optional[str]:
+    """The first account-like address in an HTML or script page."""
+    for escaped in ("\\u0040", "\\x40", "&#64;", "&#x40;"):
+        body = body.replace(escaped, "@")
+    return next(
+        (m.group(0) for m in _EMAIL.finditer(body) if _account_address(m.group(0))),
+        None,
+    )
+
+
 def email_from_list_accounts(body: str) -> Optional[str]:
     """The first signed-in account's address in a ListAccounts reply.
 
@@ -275,7 +303,7 @@ def email_from_list_accounts(body: str) -> Optional[str]:
 
     def first(node: Any) -> Optional[str]:
         if isinstance(node, str):
-            return node if "@" in node and " " not in node else None
+            return node if _EMAIL.fullmatch(node) and _account_address(node) else None
         if isinstance(node, list):
             for item in node:
                 found = first(item)
@@ -304,6 +332,7 @@ def resolve_identity(
 __all__: Tuple[str, ...] = (
     "ANONYMOUS_HOST",
     "GoogleIdentity",
+    "ACCOUNT_WIDGET_URL",
     "LIST_ACCOUNTS_URL",
     "ORIGIN",
     "REFUSAL_STATUS_CODES",
@@ -311,6 +340,7 @@ __all__: Tuple[str, ...] = (
     "decode_body",
     "is_cookie_file",
     "email_from_list_accounts",
+    "email_from_page",
     "parse_cookies",
     "resolve_identity",
     "sapisid_hash",

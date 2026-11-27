@@ -17,8 +17,9 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
   `X-Goog-AuthUser`, `X-Goog-Encode-Response-If-Executable: base64` (clients6
   refuses requests without it, and answers in base64, which is unwrapped) and
   `Authorization: SAPISIDHASH <ts>_<sha1>_e` over the e-mail, time, `SAPISID`
-  and origin. The e-mail is looked up from the cookies through
-  `accounts.google.com/ListAccounts` unless `--google-email` gives it. A
+  and origin. Unless `--google-email` gives it, the e-mail is looked up from
+  the cookies through `accounts.google.com/ListAccounts`, then the
+  `ogs.google.com` account widget, which works from google.com cookies alone. A
   refused request (401/403) goes again anonymously and the process stays
   anonymous, as Chrome does; a search refused halfway starts over in an
   anonymous session, since its ids are only good on the host that issued them.

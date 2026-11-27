@@ -20,7 +20,7 @@ from chrome_lens_py.utils.protobufs.lens_overlay_server_pb2 import (
 COOKIES = {"SID": "sid-value", "SAPISID": "AbCdEf/123", "HSID": "h"}
 ANON = "https://lensfrontend-pa.googleapis.com/v1/crupload"
 SIGNED = "https://lensfrontend-pa.clients6.google.com/v1/crupload"
-ACCOUNTS = '["gaia.l.a.r",[["gaia.l.a",1,"Jo Doe","jo@example.com","https://x",1,1,0]]]'
+ACCOUNTS = '["gaia.l.a.r",[["gaia.l.a",1,"Jo Doe","jo@example.org","https://x",1,1,0]]]'
 
 
 # ------------------------------------------------------------------ the hash
@@ -136,8 +136,17 @@ def test_a_base64_reply_is_unwrapped_and_anything_else_kept():
     assert identity.decode_body(b"<html>Error 400</html>") == b"<html>Error 400</html>"
 
 
+def test_a_page_names_the_account_but_not_googles_own_addresses():
+    page = (
+        '<a href="mailto:support@google.com">help</a> noreply@accounts.google.com '
+        'user@example.com <div data-email="jo\\u0040example.org">Jo</div>'
+    )
+    assert identity.email_from_page(page) == "jo@example.org"
+    assert identity.email_from_page("<html>no one here</html>") is None
+
+
 def test_the_email_is_the_first_account_listed():
-    assert identity.email_from_list_accounts(ACCOUNTS) == "jo@example.com"
+    assert identity.email_from_list_accounts(ACCOUNTS) == "jo@example.org"
     assert identity.email_from_list_accounts('["gaia.l.a.r",[]]') is None
     assert identity.email_from_list_accounts("not json") is None
 
@@ -148,16 +157,29 @@ def test_the_email_is_the_first_account_listed():
 class Recorder:
     """An in-memory Google: records requests, answers by host."""
 
-    def __init__(self, signed_status: int = 200, accounts_status: int = 200):
+    def __init__(
+        self,
+        signed_status: int = 200,
+        accounts_status: int = 200,
+        accounts_body: str = ACCOUNTS,
+        widget_status: int = 200,
+    ):
         self.requests: List[httpx.Request] = []
         self.signed_status = signed_status
         self.accounts_status = accounts_status
+        self.accounts_body = accounts_body
+        self.widget_status = widget_status
         self.body = b"\x08\x01payload"
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         if request.url.host == "accounts.google.com":
-            return httpx.Response(self.accounts_status, text=ACCOUNTS)
+            return httpx.Response(self.accounts_status, text=self.accounts_body)
+        if request.url.host == "ogs.google.com":
+            return httpx.Response(
+                self.widget_status,
+                text="<div>Google Account</div><div>jo@example.org</div>",
+            )
         if request.url.host == identity.SIGNED_HOST:
             if self.signed_status != 200:
                 return httpx.Response(self.signed_status, text="denied")
@@ -257,17 +279,37 @@ async def test_the_email_is_looked_up_once_when_not_given():
     assert "SAPISID=AbCdEf/123" in lookup.headers["cookie"]
     # The hash is over the looked-up address.
     ts = google.requests[1].headers["authorization"].split()[1].split("_")[0]
-    expected = identity.sapisid_hash("jo@example.com", "AbCdEf/123", now=int(ts))
+    expected = identity.sapisid_hash("jo@example.org", "AbCdEf/123", now=int(ts))
     assert google.requests[1].headers["authorization"] == expected
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_without_an_email_requests_go_anonymously():
-    google = Recorder(accounts_status=401)
+async def test_a_google_com_only_jar_is_named_by_the_account_widget():
+    # ListAccounts answers 200 with no address without accounts.google.com's
+    # own cookies (seen live in lens-kmp).
+    google = Recorder(accounts_body='["gaia.l.a.r",[]]')
     handler = handler_for(google, identity=identity.GoogleIdentity(COOKIES))
     await handler.exchange(b"x", LensSession())
-    assert google.hosts() == ["accounts.google.com", identity.ANONYMOUS_HOST]
+    assert google.hosts() == [
+        "accounts.google.com",
+        "ogs.google.com",
+        identity.SIGNED_HOST,
+    ]
+    assert google.requests[1].headers["origin"] == "https://www.google.com"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_without_an_email_requests_go_anonymously():
+    google = Recorder(accounts_status=401, widget_status=401)
+    handler = handler_for(google, identity=identity.GoogleIdentity(COOKIES))
+    await handler.exchange(b"x", LensSession())
+    assert google.hosts() == [
+        "accounts.google.com",
+        "ogs.google.com",
+        identity.ANONYMOUS_HOST,
+    ]
     assert "google_email" in (handler.identity_refused or "")
     await handler.aclose()
 

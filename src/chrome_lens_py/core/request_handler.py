@@ -62,11 +62,13 @@ from ..utils.lens_betterproto import (
 )
 from .aio import LoopLocal
 from .identity import (
+    ACCOUNT_WIDGET_URL,
     LIST_ACCOUNTS_URL,
     REFUSAL_STATUS_CODES,
     GoogleIdentity,
     decode_body,
     email_from_list_accounts,
+    email_from_page,
     signed_url,
 )
 
@@ -592,30 +594,41 @@ class LensRequestHandler:
         self.identity_refused = reason
 
     async def _account_email(self) -> Optional[str]:
-        """The account's e-mail, asked of ListAccounts once when not given."""
+        """The account's e-mail, looked up once from the cookies when not given.
+
+        ListAccounts first, as Chrome does; it needs accounts.google.com's own
+        cookies, so the account widget comes second for a google.com-only jar.
+        """
         if self._email:
             return self._email
         assert self.identity is not None
         async with self._email_lock.get():
             if self._email or self.identity_refused:
                 return self._email
-            try:
-                client = await self.get_client()
-                response = await client.get(
-                    LIST_ACCOUNTS_URL,
-                    headers={
-                        "Cookie": self.identity.cookie_header(),
-                        "User-Agent": DEFAULT_HEADERS["User-Agent"],
-                    },
-                )
-                email = (
-                    email_from_list_accounts(response.text)
-                    if response.status_code == 200
-                    else None
-                )
-            except httpx.HTTPError as exc:
-                logger.debug("ListAccounts failed: %s", type(exc).__name__)
-                email = None
+            headers = {
+                "Cookie": self.identity.cookie_header(),
+                "User-Agent": DEFAULT_HEADERS["User-Agent"],
+                "Origin": self.identity.origin,
+            }
+            email = None
+            client = await self.get_client()
+            for url, read in (
+                (LIST_ACCOUNTS_URL, email_from_list_accounts),
+                (ACCOUNT_WIDGET_URL, email_from_page),
+            ):
+                try:
+                    response = await client.get(url, headers=headers)
+                except httpx.HTTPError as exc:
+                    logger.debug(
+                        "E-mail lookup at %s failed: %s",
+                        urlsplit(url).hostname,
+                        type(exc).__name__,
+                    )
+                    continue
+                if response.status_code == 200:
+                    email = read(response.text)
+                if email:
+                    break
             if not email:
                 self._refuse(
                     "could not learn the account's e-mail from the cookies; "
