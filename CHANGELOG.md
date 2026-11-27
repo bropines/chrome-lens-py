@@ -28,7 +28,8 @@ conventional commits with [git-cliff](https://git-cliff.org) (see `cliff.toml`).
   never reach logs or `config show`. `__Secure-3PAPISID` or
   `__Secure-1PAPISID` stands in for a missing `SAPISID`. Worked out with the
   lens-kmp port, which confirmed live on a real account that clients6 accepts
-  signed `gsessionid`, search uploads, interactions and plain scans.
+  signed `gsessionid`, search uploads, interactions and plain scans, and that
+  they appear in the account's My Activity as Google Lens searches.
 
 - **`lens_scan search`: search the web with an image.** Visual matches, exact
   matches and an AI overview, with products a tab away - what Chrome's "Search
